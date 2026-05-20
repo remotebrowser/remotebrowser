@@ -1,0 +1,13 @@
+<html gg-domain="walmart">
+  <head>
+    <title>Walmart Sign In - Verify Phone Only</title>
+  </head>
+  <body>
+    <h1 gg-match="h1.f3">Verify it's you</h1>
+    <p
+      gg-match="//div[@data-testid='identity-generic-choice-options']//div[contains(normalize-space(.), 'We')]"
+    ></p>
+    <p><span gg-match="span[data-qm-mask='true']"></span></p>
+    <div gg-autoclick gg-match="//button[contains(text(), 'Send code')]"></div>
+  </body>
+</html>

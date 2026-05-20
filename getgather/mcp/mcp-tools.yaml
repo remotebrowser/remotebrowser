@@ -580,6 +580,14 @@
     - function_name: get_wishlists
       description: Get wishlists of wayfair.
 
+- id: walmart
+  name: Walmart MCP
+  custom: true
+  module: walmart
+  tools:
+    - function_name: get_order_history
+      description: Get order history from a user's Walmart account.
+
 - id: youtube
   name: YouTube MCP
   custom: true
