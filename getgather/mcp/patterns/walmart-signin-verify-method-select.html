@@ -1,0 +1,21 @@
+<html gg-domain="walmart" gg-priority="1">
+  <head>
+    <title>Walmart Sign In - Verify It's You</title>
+  </head>
+  <body>
+    <h1 gg-match="h1.f3">Verify it's you</h1>
+    <p>Please choose a verification method</p>
+    <button name="otp" value="otp" gg-optional gg-match="input[name='otp'][type='radio']">
+      Send me a verification code
+    </button>
+    <button
+      name="otpEmail"
+      value="otpEmail"
+      gg-optional
+      gg-match="input[name='otpEmail'][type='radio']"
+    >
+      Email me a verification code
+    </button>
+    <button type="submit" gg-match="//button[contains(text(), 'Send code')]">Send code</button>
+  </body>
+</html>
