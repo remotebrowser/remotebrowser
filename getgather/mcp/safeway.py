@@ -1,15 +1,13 @@
-import asyncio
 from typing import Any, cast
 
 import zendriver as zd
 from loguru import logger
 
-from getgather.browser import retry_with_navigation, safe_close_page, zen_navigate_with_retry
+from getgather.browser import retry_with_navigation, zen_navigate_with_retry
 from getgather.mcp.dpage import (
     remote_zen_dpage_with_action,
 )
 from getgather.mcp.registry import MCPTool
-from getgather.zen_actions import parse_response_json
 
 safeway_mcp = MCPTool.registry["safeway"]
 
