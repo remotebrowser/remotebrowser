@@ -87,6 +87,7 @@ async def _get_order_history_action(tab: zd.Tab, _: zd.Browser, page_cursor: str
 @walmart_mcp.tool
 async def get_order_history(page_cursor: str = "") -> dict[str, Any]:
     """Get order history from a user's Walmart account. Pass next_cursor from a previous response to fetch the next page."""
+
     async def action(tab: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
         return await _get_order_history_action(tab, browser, page_cursor)
 
