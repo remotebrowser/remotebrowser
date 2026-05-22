@@ -1,34 +1,114 @@
+import json
 from typing import Any, cast
 
 import zendriver as zd
 
+from getgather.browser import retry_with_navigation, zen_navigate_with_retry
 from getgather.mcp.dpage import remote_zen_dpage_with_action
 from getgather.mcp.registry import MCPTool
 
 walmart_mcp = MCPTool.registry["walmart"]
 
 
-async def _get_order_history_action(tab: zd.Tab, _: zd.Browser) -> dict[str, Any]:
-    result = await tab.evaluate(
-        """
-        (() => {
-            const el = document.getElementById('__NEXT_DATA__');
-            if (!el) throw new Error('__NEXT_DATA__ not found');
-            const data = JSON.parse(el.textContent);
-            const purchaseHistory = data?.props?.pageProps?.phRedesignInitialData?.data?.purchaseHistory;
-            if (!purchaseHistory) throw new Error('purchaseHistory not found in __NEXT_DATA__');
-            return purchaseHistory;
-        })()
-        """,
-        await_promise=False,
+async def _get_order_history(tab: zd.Tab, page_cursor: str) -> dict[str, Any]:
+    async def fetch_orders() -> dict[str, Any]:
+        await zen_navigate_with_retry(tab, "https://www.walmart.com/account", wait_for_ready=False)
+        result = await tab.evaluate(
+            f"""
+            (async () => {{
+                const btn = await new Promise((resolve, reject) => {{
+                    const deadline = Date.now() + 10000;
+                    const poll = () => {{
+                        const el = document.querySelector('button[name="viewPurchaseHistory"]');
+                        if (el) return resolve(el);
+                        if (Date.now() >= deadline) return reject(new Error('viewPurchaseHistory button not found'));
+                        setTimeout(poll, 200);
+                    }};
+                    poll();
+                }});
+
+                const httpRequest = await new Promise((resolve, reject) => {{
+                    const originalFetch = window.fetch;
+                    const restore = () => {{ window.fetch = originalFetch; }};
+                    const timer = setTimeout(() => {{
+                        restore();
+                        reject(new Error('Timed out waiting for PurchaseHistoryV3'));
+                    }}, 10000);
+
+                    window.fetch = async function (...args) {{
+                        if (typeof args[0] === 'string' && args[0].includes('/PurchaseHistoryV3')) {{
+                            restore();
+                            clearTimeout(timer);
+                            const rawHeaders = (args[1] || {{}}).headers || {{}};
+                            const headers = rawHeaders instanceof Headers
+                                ? Object.fromEntries(rawHeaders.entries())
+                                : rawHeaders;
+                            resolve({{ url: args[0], headers }});
+                        }}
+                        return originalFetch.apply(this, args);
+                    }};
+
+                    btn.click();
+                }});
+
+                const baseUrl = httpRequest.url.split('?')[0];
+                const headers = httpRequest.headers;
+
+                const variables = encodeURIComponent(JSON.stringify({{
+                    input: {{
+                        cursor: {json.dumps(page_cursor)},
+                        search: '',
+                        filterIds: [],
+                        limit: 20,
+                        type: null,
+                        minTimestamp: null,
+                        maxTimestamp: null,
+                        filters: {{ minTimestamp: null, maxTimestamp: null, filterIds: [] }},
+                        enabledFeatures: [],
+                        eligibleFeatures: {{ isEbtEligible: false, enablePhFiltersEnhancement: true }}
+                    }},
+                    platform: 'WEB',
+                    enableIsWcpOrder: false
+                }}));
+
+                const res = await fetch(`${{baseUrl}}?variables=${{variables}}`, {{
+                    method: 'GET',
+                    credentials: 'include',
+                    headers
+                }});
+                if (!res.ok) {{
+                    const text = await res.text();
+                    throw new Error(`HTTP error! status: ${{res.status}} - ${{text}}`);
+                }}
+                const data = await res.json();
+                const purchaseHistory = data?.data?.purchaseHistory;
+                if (!purchaseHistory) throw new Error('purchaseHistory not found in response');
+                return purchaseHistory;
+            }})()
+            """,
+            await_promise=True,
+        )
+        return {"order_history": cast(dict[str, Any], result)}
+
+    return await retry_with_navigation(
+        tab=tab,
+        operation=fetch_orders,
+        navigation_url="https://www.walmart.com/account",
+        max_retries=3,
+        exceptions=(Exception,),
+        re_raise_on_max_retries=True,
+        operation_name="get_order_history",
     )
-    return {"order_history": cast(dict[str, Any], result)}
 
 
 @walmart_mcp.tool
-async def get_order_history() -> dict[str, Any]:
-    """Get order history from a user's Walmart account."""
+async def get_order_history(page_cursor: str = "") -> dict[str, Any]:
+    """Get order history from a user's Walmart account. Pass next_cursor from a previous response to fetch the next page."""
+
+    async def action(tab: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
+        return await _get_order_history(tab, page_cursor)
+
     return await remote_zen_dpage_with_action(
-        "https://www.walmart.com/orders",
-        _get_order_history_action,
+        "https://www.walmart.com/account",
+        action,
     )
