@@ -47,13 +47,6 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy Tailscale binaries
-COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscaled /usr/local/bin/tailscaled
-COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscale /usr/local/bin/tailscale
-
-# Create Tailscale directories
-RUN mkdir -p /var/run/tailscale /var/cache/tailscale /var/lib/tailscale
-
 WORKDIR /app
 
 COPY --from=builder /app/.venv /opt/venv
@@ -73,7 +66,6 @@ EXPOSE ${PORT}
 
 RUN useradd -m -s /bin/bash getgather && \
     chown -R getgather:getgather /app && \
-    chown -R getgather:getgather /var/run/tailscale /var/cache/tailscale /var/lib/tailscale && \
     usermod -aG sudo getgather && \
     echo 'getgather ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
