@@ -1,0 +1,14 @@
+<html gg-domain="walmart">
+  <head>
+    <title>Walmart Sign In - Choose Sign In Method</title>
+  </head>
+  <body>
+    <h1 gg-match="h1.f3">Welcome back!</h1>
+    <div gg-match="[data-testid='identity-phone-email-header']"></div>
+    <div gg-match="input[name='otp'][type='radio']"></div>
+    <div gg-autoclick gg-match="input[name='otpEmail'][type='radio']"></div>
+    <div gg-match="input[name='password'][type='radio']"></div>
+    <div type="submit" gg-optional gg-match="button#withpassword-sign-in-button">Sign in</div>
+    <div gg-optional gg-autoclick gg-match="//button[contains(text(), 'Request code')]"></div>
+  </body>
+</html>
