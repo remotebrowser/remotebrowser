@@ -4,6 +4,9 @@
   </head>
   <body>
     <h1 gg-match="h1.f3">Enter verification code</h1>
+    <p gg-optional gg-match="[data-testid='verifyotpform-description'] span[data-qm-mask='true']">
+      Please enter the 6-digit verification code
+    </p>
     <input
       autofocus
       name="otp"
@@ -11,8 +14,6 @@
       placeholder="6-digit verification code"
       gg-match="input#input-verificationCode"
     />
-    <button type="submit" gg-match="button[type='submit'][form='verifyitsyou-otp-form']">
-      Sign in
-    </button>
+    <button type="submit" gg-match="button[type='submit'][form$='-otp-form']">Sign in</button>
   </body>
 </html>
