@@ -1,5 +1,4 @@
 from typing import Any, cast
-
 import zendriver as zd
 from loguru import logger
 
@@ -73,7 +72,36 @@ async def get_orders_from_api(tab: zd.Tab, page_number: int = 1) -> dict[str, An
                         const error_text = await res.text();
                         throw new Error(`HTTP error! status: ${{res.status}} - ${{error_text}}`);
                     }}
-                    return await res.json();
+                    const ordersData = await res.json();
+                    const orders = ordersData.orders || [];
+                    const orderResults = [];
+                    await Promise.all(orders.map(async (order) => {{
+                        if (!order.orderNumber) return;
+                        try {{
+                            const detailRes = await fetch(
+                                `https://www.safeway.com/order-account/api/order/${{order.orderNumber}}`,
+                                {{
+                                    method: 'GET',
+                                    credentials: 'include',
+                                    headers
+                                }}
+                            );
+                            if (!detailRes.ok) {{
+                                const error_text = await detailRes.text();
+                                console.warn(
+                                    `Order detail fetch failed for ${{order.orderNumber}}: `
+                                    + `${{detailRes.status}} - ${{error_text}}`
+                                );
+                                return;
+                            }}
+                            orderResults.push(await detailRes.json());
+                        }} catch (e) {{
+                            console.warn(
+                                `Order detail fetch failed for ${{order.orderNumber}}: ${{e}}`
+                            );
+                        }}
+                    }}));
+                    return orderResults;
 
                 }})()
             """,
