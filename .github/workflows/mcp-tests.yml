@@ -1,37 +1,30 @@
 name: MCP Tests
 
 on:
-  pull_request:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   mcp-pytest:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    name: MCP Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
+      - name: Prepare the browser container image
+        run: podman pull ghcr.io/remotebrowser/chromium-live
+
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Run Chrome Fleet
-        uses: ./.github/actions/run-chromefleet
-        timeout-minutes: 5
 
       - name: Prepare back-end environment
         uses: ./.github/actions/prepare-backend
 
-      - name: Build MCP container
-        run: |
-          docker container rm -f getgather 2>/dev/null || true
-          docker build --network=host -t getgather .
+      - run: uvx hatch build
 
-      - name: Run MCP container
-        run: |
-          docker run --network host --name getgather -d \
-            -e CHROMEFLEET_URL="http://localhost:8300" \
-            getgather
-        timeout-minutes: 3
+      - name: Launch Remote Browser
+        run: uvx ./dist/*.whl &
 
       - name: Run the health check validation
         run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
@@ -51,7 +44,3 @@ jobs:
           GOODREADS_PASSWORD: ${{ secrets.GOODREADS_PASSWORD }}
           WAYFAIR_EMAIL: ${{ secrets.WAYFAIR_EMAIL }}
           WAYFAIR_PASSWORD: ${{ secrets.WAYFAIR_PASSWORD }}
-
-      - name: Dump getgather container logs
-        if: always()
-        run: docker logs getgather || true
