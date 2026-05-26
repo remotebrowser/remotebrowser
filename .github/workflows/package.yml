@@ -36,18 +36,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Chrome Fleet
-        uses: ./.github/actions/run-chromefleet
-        timeout-minutes: 5
-
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: remotebrowser-mcp-linux-x86_64
 
       - run: chmod +x remotebrowser-mcp && ./remotebrowser-mcp &
-        env:
-          CHROMEFLEET_URL: http://localhost:8300
 
       - name: Run the health check validation
         run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
