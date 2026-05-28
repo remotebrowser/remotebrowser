@@ -1,6 +1,6 @@
 <html gg-domain="walmart" gg-priority="0">
   <head>
-    <title>Walmart sign in method</title>
+    <title gg-match="h1.f3">Walmart - Choose verification method</title>
   </head>
   <body>
     <div gg-match="[data-testid='auth-choice-title']"></div>
@@ -52,7 +52,7 @@
       id="wm-submit"
       type="submit"
       disabled
-      gg-match="//button[@data-dca-id='B:4F99F19264' or @data-dca-id='B:5E93688740']"
+      gg-match="//button[contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code')]"
     >
       Choose a method above
     </button>
@@ -89,6 +89,13 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
+        // Hide radio-wrapper rows whose radio was removed by distill
+        document.querySelectorAll(".radio-wrapper").forEach((wrapper) => {
+          if (!wrapper.querySelector("input[type='radio']")) {
+            wrapper.style.display = "none";
+          }
+        });
+
         document.addEventListener("change", (e) => {
           console.log(">> e.target.name", e.target.name);
           if (e.target.name === "signin-method") {
