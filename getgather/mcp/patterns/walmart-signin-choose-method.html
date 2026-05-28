@@ -1,4 +1,4 @@
-<html gg-domain="walmart" gg-priority="0">
+<html gg-domain="walmart">
   <head>
     <title gg-match="h1.f3">Walmart - Choose verification method</title>
   </head>
@@ -36,6 +36,7 @@
       <div class="radio-wrapper">
         <input
           gg-optional
+          gg-reflow
           type="radio"
           name="signin-method"
           id="wm-method-password"
@@ -59,7 +60,7 @@
       id="wm-submit"
       type="submit"
       disabled
-      gg-match="//button[contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code')]"
+      gg-match="//button[contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code') or contains(text(), 'Continue')]"
     >
       Choose a method above
     </button>
@@ -72,6 +73,7 @@
         });
 
         const submit = document.getElementById("wm-submit");
+        const defaultSubmitText = submit ? submit.textContent.trim() : "";
         const passwordInput = document.getElementById("wm-password-input");
         // Hide the password wrapper (including eye toggle) until password method is selected.
         // We hide the wrapper (not the input) so the renderer's eye-toggle wrapping is preserved.
@@ -94,7 +96,7 @@
               passwordWrapper.style.display = "none";
               passwordInput.value = "";
             }
-            submit.textContent = "Request code";
+            submit.textContent = defaultSubmitText || "Request code";
             submit.disabled = false;
           }
         }
