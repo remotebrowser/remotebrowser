@@ -11,42 +11,41 @@ env:
 
 jobs:
   test-local-container:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run Chrome Fleet
-        uses: ./.github/actions/run-chromefleet
-        timeout-minutes: 5
+      - name: Start Podman socket
+        run: |
+          sudo systemctl enable --now podman.socket
+          sudo chmod 755 /run/podman
+          sudo chmod 666 /run/podman/podman.sock
 
-      - run: docker build -t getgather .
-
-      - run: docker run -d --network host --name getgather -e CHROMEFLEET_URL getgather
+      - name: Verify Podman socket
         env:
-          CHROMEFLEET_URL: http://localhost:8300
-        timeout-minutes: 3
+          CONTAINER_HOST: unix:///run/podman/podman.sock
+        run: podman --remote run --rm quay.io/podman/hello
 
-      - name: Run the health check validation
-        run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
+      - name: Pull Chromium container image
+        env:
+          CONTAINER_HOST: unix:///run/podman/podman.sock
+        run: podman --remote pull ghcr.io/remotebrowser/chromium-live
 
-      - name: Run the extended health check validation
-        run: while ! curl -s 'http://localhost:23456/extended-health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
-
-      - name: Get the container logs
-        run: docker logs --details getgather
-        if: always()
-
-      - name: Show Chrome Fleet logs
-        run: cat chromefleet.log
-        if: always()
+      - uses: remotebrowser/shared-github-actions/container-health-check@v1
+        with:
+          image-name: getgather
+          health-checks: |
+            {"url": "http://localhost:23456/health"}
+            {"url": "http://localhost:23456/extended-health"}
+          health-timeout-seconds: 180
+          extra-config: |-
+            --network host
+            -e CONTAINER_HOST=unix:///run/podman/podman.sock
+            -v /run/podman/podman.sock:/run/podman/podman.sock
 
   build-and-publish:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: test-local-container
     timeout-minutes: 45
     permissions:
@@ -79,36 +78,39 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
   test-published-container:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build-and-publish
     timeout-minutes: 5
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run Chrome Fleet
-        uses: ./.github/actions/run-chromefleet
-        timeout-minutes: 5
+      - name: Start Podman socket
+        run: |
+          sudo systemctl enable --now podman.socket
+          sudo chmod 755 /run/podman
+          sudo chmod 666 /run/podman/podman.sock
 
-      - name: Run the container
-        run: docker run -d --rm --network host --name getgather -e CHROMEFLEET_URL ${{ env.REGISTRY }}/${{ env.IMAGE_NAME
-          }}:latest
+      - name: Verify Podman socket
         env:
-          CHROMEFLEET_URL: http://localhost:8300
+          CONTAINER_HOST: unix:///run/podman/podman.sock
+        run: podman --remote run --rm quay.io/podman/hello
 
-      - name: Run the health check validation
-        run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
+      - name: Pull Chromium container image
+        env:
+          CONTAINER_HOST: unix:///run/podman/podman.sock
+        run: podman --remote pull ghcr.io/remotebrowser/chromium-live
 
-      - name: Run the extended health check validation
-        run: while ! curl -s 'http://localhost:23456/extended-health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
+      - name: Pull published container image
+        run: podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      - name: Get the container logs
-        run: docker logs --details getgather
-        if: always()
-
-      - name: Show Chrome Fleet logs
-        run: cat chromefleet.log
-        if: always()
+      - uses: remotebrowser/shared-github-actions/container-health-check@v1
+        with:
+          image-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          health-checks: |
+            {"url": "http://localhost:23456/health"}
+            {"url": "http://localhost:23456/extended-health"}
+          health-timeout-seconds: 180
+          extra-config: |-
+            --network host
+            -e CONTAINER_HOST=unix:///run/podman/podman.sock
+            -v /run/podman/podman.sock:/run/podman/podman.sock
