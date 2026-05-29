@@ -8,7 +8,7 @@ from typing import Any, cast
 import zendriver as zd
 from loguru import logger
 
-from getgather.browser import get_url, page_query_selector
+from getgather.browser import get_url, page_query_selector, zen_navigate_with_retry
 from getgather.mcp.dpage import (
     remote_zen_dpage_mcp_tool,
     remote_zen_dpage_with_action,
@@ -135,29 +135,79 @@ async def _get_browsing_history(country: AmazonCountry) -> dict[str, Any]:
 
         logger.info(f"Navigating to {current_url}")
 
-        browsing_history_api_url = None
-        request_headers = None
-        async with page.expect_response(".*browsing-history/.*") as response:
-            logger.info("Waiting for browsing-history API response")
-            await page.send(zd.cdp.page.reload())
-            logger.info("Page reloaded, waiting for browsing-history API response")
-            response_value = await response.value
-            browsing_history_api_url = response_value.response.url
-            logger.info(f"Found browsing history API URL: {browsing_history_api_url}")
-            request_value = await response.request
-            request_headers = request_value.headers
-            logger.debug(
-                f"Request headers captured: {len(request_headers) if request_headers else 0} headers"
-            )
+        await zen_navigate_with_retry(page, country.browsing_history_url, wait_for_ready=False)
+        logger.info("Intercepting XHR and extracting browsing history data")
 
+        captured = cast(
+            dict[str, Any],
+            await page.evaluate(
+                """
+                (async () => {
+                    const httpRequest = await new Promise((resolve, reject) => {
+                        const timer = setTimeout(
+                            () => reject(new Error('XHR intercept timeout after 15s')), 15000
+                        );
+                        const originalOpen = XMLHttpRequest.prototype.open;
+                        const originalSend = XMLHttpRequest.prototype.send;
+                        const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+                        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                            this._interceptMethod = method;
+                            this._interceptUrl = url;
+                            this._interceptHeaders = {};
+                            return originalOpen.call(this, method, url, ...rest);
+                        };
+
+                        XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+                            if (!this._interceptHeaders) this._interceptHeaders = {};
+                            this._interceptHeaders[name] = value;
+                            return originalSetRequestHeader.call(this, name, value);
+                        };
+
+                        XMLHttpRequest.prototype.send = function(body) {
+                            const url = String(this._interceptUrl || '');
+                            if (url.includes('browsing-history')) {
+                                clearTimeout(timer);
+                                XMLHttpRequest.prototype.open = originalOpen;
+                                XMLHttpRequest.prototype.send = originalSend;
+                                XMLHttpRequest.prototype.setRequestHeader = originalSetRequestHeader;
+                                resolve([url, { headers: this._interceptHeaders }]);
+                            }
+                            return originalSend.call(this, body);
+                        };
+                    });
+
+                    const rawAttribute = await new Promise((resolve) => {
+                        const check = () => {
+                            const el = document.querySelector('div[data-client-recs-list]');
+                            if (el) {
+                                resolve(el.getAttribute('data-client-recs-list'));
+                            } else {
+                                setTimeout(check, 100);
+                            }
+                        };
+                        setTimeout(check, 500);
+                    });
+
+                    return {
+                        url: httpRequest[0],
+                        headers: httpRequest[1].headers,
+                        rawAttribute
+                    };
+                })()
+                """,
+                True,
+            ),
+        )
+
+        browsing_history_api_url = cast(str, captured["url"])
+        request_headers = cast(dict[str, Any], captured["headers"])
+        raw_attribute = captured.get("rawAttribute")
+        logger.info(f"Found browsing history API URL: {browsing_history_api_url}")
+        logger.debug(
+            f"Request headers captured: {len(request_headers) if request_headers else 0} headers"
+        )
         logger.info("Extracting browsing history IDs from data-client-recs-list attribute")
-
-        raw_attribute = await page.evaluate("""
-            (() => {{
-                const element = document.querySelector('div[data-client-recs-list]');
-                return element ? element.getAttribute('data-client-recs-list') : null;
-            }})()
-        """)
         logger.info(
             f"Raw attribute value: {raw_attribute[:200] if raw_attribute and len(str(raw_attribute)) > 200 else raw_attribute}"
         )
