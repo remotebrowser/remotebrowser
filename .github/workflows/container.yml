@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  container:
+  built-in:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -40,3 +40,42 @@ jobs:
             --network host
             -e CONTAINER_HOST=unix:///run/podman/podman.sock
             -v /run/podman/podman.sock:/run/podman/podman.sock
+
+  external:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Prepare the browser container image
+        run: podman pull ghcr.io/remotebrowser/chromium-live
+
+      - uses: actions/checkout@v6
+
+      - name: Prepare back-end environment
+        uses: ./.github/actions/prepare-backend
+
+      - run: uvx hatch build
+
+      - name: Launch a simulated remote Chrome Fleet at port 8300
+        run: uvx ./dist/*.whl &
+        env:
+          PORT: 8300
+
+      - name: Run the health check validation
+        run: while ! curl -s 'http://localhost:8300/health' | grep 'OK'; do sleep 1; done
+        timeout-minutes: 3
+
+      - name: Run the extended health check validation
+        run: while ! curl -s 'http://localhost:8300/extended-health' | grep 'OK'; do sleep 1; done
+        timeout-minutes: 3
+
+      - uses: remotebrowser/shared-github-actions/container-health-check@v1
+        with:
+          image-name: getgather
+          health-checks: |
+            {"url": "http://localhost:23456/health"}
+            {"url": "http://localhost:23456/extended-health"}
+          health-timeout-seconds: 180
+          extra-config: |-
+            --network host
+            -e CHROMEFLEET_URL=http://localhost:8300
+            -e CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS=120
