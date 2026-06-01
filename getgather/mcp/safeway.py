@@ -145,11 +145,12 @@ async def get_in_store_purchases_from_api(tab: zd.Tab, page_number: int = 1) -> 
     async def fetch_orders() -> dict[str, Any]:
         orders = None
 
+        await zen_navigate_with_retry(
+            tab, "https://www.safeway.com/order-account/orders", wait_for_ready=False
+        )
         orders = await tab.evaluate(
             f"""
                 (async () => {{
-                    const ordersUrl = 'https://www.safeway.com/order-account/orders';
-                    window.location.href = ordersUrl;
 
                     const clickInStoreTab = () => {{
                         const items = document.querySelectorAll(
