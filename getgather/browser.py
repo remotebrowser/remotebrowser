@@ -249,6 +249,11 @@ def _setup_cdp_url(browser_id: str) -> str:
     return f"{cdp_base}/cdp/{browser_id}"
 
 
+async def get_remote_browser_cdp_url(browser_id: str) -> str:
+    await _call_chromefleet_api("GET", browser_id, timeout=2.0, retries=0)
+    return _setup_cdp_url(browser_id)
+
+
 async def get_remote_browser(browser_id: str) -> zd.Browser | None:
     logger.debug(f"Finding the ChromeFleet browser: {browser_id}")
     try:
