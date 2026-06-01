@@ -1,0 +1,23 @@
+<html gg-domain="costco">
+  <head>
+    <title>Costco Sign In</title>
+  </head>
+  <body>
+    <input
+      autofocus
+      name="email"
+      type="email"
+      placeholder="Email"
+      gg-match="form#localAccountForm input#signInName"
+    />
+    <input
+      name="password"
+      type="password"
+      placeholder="Password"
+      gg-match="form#localAccountForm input#password"
+    />
+    <button type="submit" gg-match="form#localAccountForm button#next:not([disabled])">
+      Sign In
+    </button>
+  </body>
+</html>
