@@ -3,6 +3,7 @@
     <title>Walmart Sign In - Email or Phone</title>
   </head>
   <body>
+    <span class="error-box" gg-optional gg-match="div[data-testid='dropdown'] section div span"></span>
     <input
       autofocus
       name="email"
@@ -10,7 +11,6 @@
       placeholder="Phone number or email (required)"
       gg-match="input[aria-label='Phone number or email (required)']"
     />
-    <span gg-optional gg-match="div[data-testid='dropdown'] section div span"></span>
     <button type="submit" gg-match="button#login-continue-button">Continue</button>
   </body>
 </html>

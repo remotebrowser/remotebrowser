@@ -95,18 +95,18 @@ def render_form(
         font-weight: 500;
         color: var(--gray-800);
       }}
-      
+
       .radio-wrapper {{
         display: flex;
         align-items: center;
         gap: 10px;
       }}
-      
+
       .vertical-radios {{
-        gap: 1rem; 
-        display: flex; 
-        flex-direction: column; 
-        margin-bottom: 1rem; 
+        gap: 1rem;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 1rem;
         margin-top: 1rem;
       }}
 
@@ -230,7 +230,7 @@ def render_form(
         flex-direction: column;
         gap: 1rem;
       }}
-      
+
     .content-wrapper
       :is(a, div, p, span, h1, h2, h3, h4, h5, h6):empty {{
       display: none;
@@ -246,7 +246,7 @@ def render_form(
           max-width: 100%;
         }}
       }}
-      
+
       /* Loading spinner styles */
       .spinner {{
         display: inline-block;
@@ -283,6 +283,20 @@ def render_form(
 
       form {{
         position: relative;
+      }}
+
+      .error-box {{
+        display: flex;
+        align-items: flex-start;
+        gap: 0.625rem;
+        padding: 0.875rem 1rem;
+        background: #fff5f5;
+        border: 1.5px solid #c0392b;
+        border-left-width: 4px;
+        border-radius: 8px;
+        color: #c0392b;
+        font-size: 0.9375rem;
+        line-height: 1.5;
       }}
     </style>
     <script>
