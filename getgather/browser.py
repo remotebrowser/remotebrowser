@@ -973,7 +973,10 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
             return null;
         }}
 
-        for (const action of actions) {{
+        for (const [index, action] of actions.entries()) {{
+            if (index > 0) {{
+                await sleep(300);
+            }}
             const key = action?.key;
             const kind = action?.kind;
             const selector = action?.selector;
