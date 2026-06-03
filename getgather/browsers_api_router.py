@@ -374,6 +374,13 @@ async def find_browser_id(page_id: str) -> str | None:
     return None
 
 
+CDP_TARGET_METHODS_STRIP_ID = (
+    "Target.attachToTarget",
+    "Target.closeTarget",
+    "Target.getTargetInfo",
+)
+
+
 def patch_cdp_target(message: str, browser_id: str) -> str:
     if "targetId" not in message:
         return message
@@ -391,7 +398,7 @@ def patch_cdp_target(message: str, browser_id: str) -> str:
                 if isinstance(target_info, dict) and "targetId" in target_info:
                     target_info["targetId"] = browser_id + "@" + str(target_info["targetId"])  # pyright: ignore[reportUnknownArgumentType]
                     return json.dumps(data)
-        elif data.get("method") == "Target.getTargetInfo":  # pyright: ignore[reportUnknownMemberType]
+        elif data.get("method") in CDP_TARGET_METHODS_STRIP_ID:  # pyright: ignore[reportUnknownMemberType]
             params = data.get("params")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
             if isinstance(params, dict) and "targetId" in params:
                 target_id = str(params["targetId"])  # pyright: ignore[reportUnknownArgumentType]
