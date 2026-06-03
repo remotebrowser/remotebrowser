@@ -27,7 +27,6 @@ from getgather.client_ip import client_ip_var
 from getgather.config import settings
 
 HTTP_METHOD = Literal["GET", "POST", "DELETE"]
-_INPUT_FOCUS_DELAY_MS = 250
 _ws_extra_headers_var: ContextVar[dict[str, str] | None] = ContextVar(
     "_ws_extra_headers_var", default=None
 )
@@ -624,8 +623,9 @@ class Element:
         logger.error("TODO: Element#check")
         await asyncio.sleep(0.25)
 
-    async def type_text(self, text: str) -> None:
-        await asyncio.sleep(_INPUT_FOCUS_DELAY_MS / 1000)
+    async def type_text(self, text: str, focus_delay_ms: int = 0) -> None:
+        if focus_delay_ms > 0:
+            await asyncio.sleep(focus_delay_ms / 1000)
         await self.element.clear_input_by_deleting()
         await asyncio.sleep(self.config.typing_clear_delay)
         await self.element.clear_input()
@@ -975,8 +975,9 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
         }}
 
         for (const [index, action] of actions.entries()) {{
-            if (index > 0) {{
-                await sleep(300);
+            const actionDelayMs = Number(action?.action_delay_ms) || 0;
+            if (index > 0 && actionDelayMs > 0) {{
+                await sleep(actionDelayMs);
             }}
             const key = action?.key;
             const kind = action?.kind;
@@ -1042,7 +1043,9 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
                     }};
 
                     element.focus();
-                    await sleep({_INPUT_FOCUS_DELAY_MS});
+                    if (actionDelayMs > 0) {{
+                        await sleep(actionDelayMs);
+                    }}
                     element.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));
 
                     setNativeValue(element, "");

@@ -362,6 +362,8 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
         options = {"title": title, "action": action}
         inputs = document.find_all("input")
         pending_actions: list[dict[str, str]] = []
+        body = document.find("body")
+        action_delay_ms = str(body.get("gg-action-delay", "0")) if isinstance(body, Tag) else "0"
 
         if match.distilled == current.distilled:
             logger.info(f"Still the same: {match.name}")
@@ -516,6 +518,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                             "kind": "set_value",
                             "selector": str(selector),
                             "value": str(value),
+                            "action_delay_ms": action_delay_ms,
                         })
                         del fields[name_str]
                     else:
@@ -543,6 +546,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                             "key": f"click:submit:{len(pending_actions)}",
                             "kind": "click",
                             "selector": str(submit_selector),
+                            "action_delay_ms": action_delay_ms,
                         })
                 should_submit = True
             else:
@@ -567,8 +571,9 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                 if results.get(key, False):
                     continue
 
-                if i > 0:
-                    await asyncio.sleep(0.3)
+                delay_ms = int(action.get("action_delay_ms") or 0)
+                if i > 0 and delay_ms > 0:
+                    await asyncio.sleep(delay_ms / 1000)
                 element = await page_query_selector(page, selector)
                 if not element:
                     continue
@@ -576,7 +581,9 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                     await element.click()
                 elif kind == "set_value":
                     value = action.get("value")
-                    await element.type_text(value if isinstance(value, str) else "")
+                    await element.type_text(
+                        value if isinstance(value, str) else "", focus_delay_ms=delay_ms
+                    )
 
             await asyncio.sleep(0.25)
 
