@@ -1,12 +1,23 @@
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import TypedDict, cast
 
 import zendriver as zd
 from loguru import logger
 from websockets.exceptions import ConnectionClosed
-from zendriver.core.browser import shutil
 
 from getgather.config import settings
+
+
+def remove_profile_dir(user_data_dir: Path) -> None:
+    """Remove a browser profile directory from disk."""
+    if not user_data_dir.exists():
+        return
+    try:
+        shutil.rmtree(user_data_dir)
+    except Exception as e:
+        logger.warning(f"Failed to remove profile dir {user_data_dir}: {e}")
 
 
 async def terminate_zendriver_browser(browser: zd.Browser):
@@ -20,28 +31,13 @@ async def terminate_zendriver_browser(browser: zd.Browser):
         )
     user_data_dir = settings.profiles_dir / browser_id
     logger.info(
-        f"Terminating Zendriver browser with user_data_dir: {user_data_dir}",
+        f"Terminating Zendriver browser and removing user_data_dir: {user_data_dir}",
         extra={"profile_id": browser_id},
     )
-    for directory in [
-        "Default/DawnGraphiteCache",
-        "Default/DawnWebGPUCache",
-        "Default/GPUCache",
-        "Default/Code Cache",
-        "Default/Cache",
-        "GraphiteDawnCache",
-        "GrShaderCache",
-        "ShaderCache",
-        "Subresource Filter",
-        "segmentation_platform",
-    ]:
-        path = user_data_dir / directory
-
-        if path.exists():
-            try:
-                shutil.rmtree(path)
-            except Exception as e:
-                logger.warning(f"Failed to remove {directory}: {e}")
+    # Profiles are never reopened after their browser is terminated
+    # (init_zendriver_browser only looks up in-memory browsers), so remove
+    # the whole profile dir instead of letting it accumulate on disk.
+    remove_profile_dir(user_data_dir)
 
 
 class BrowserInformation(TypedDict):
@@ -125,6 +121,47 @@ class BrowserManager:
                     logger.error(f"Failed to stop browser with signin ID {signin_id}: {e}")
                 finally:
                     self.remove_incognito_browser(signin_id)
+
+    def cleanup_orphaned_profiles(self):
+        """Remove on-disk profile dirs that no longer belong to an active browser.
+
+        Browser tracking is in-memory only, so profile dirs left behind by
+        crashes, restarts or failed browser starts are never seen by
+        cleanup_incognito_browsers and accumulate until the disk is full.
+        Sweep the profiles dir and remove anything that is not an active
+        browser and has not been modified within BROWSER_SESSION_AGE.
+        """
+        current_time = datetime.now()
+        max_session_age = timedelta(minutes=settings.BROWSER_SESSION_AGE)
+
+        active_ids = set(self._incognito_browsers.keys())
+        if self._zen_global_browser is not None:
+            global_browser_id = getattr(self._zen_global_browser, "id", None)
+            if global_browser_id is not None:
+                active_ids.add(cast(str, global_browser_id))
+
+        removed_count = 0
+        for profile_dir in settings.profiles_dir.iterdir():
+            if not profile_dir.is_dir() or profile_dir.name in active_ids:
+                continue
+            try:
+                last_modified = datetime.fromtimestamp(profile_dir.stat().st_mtime)
+            except OSError as e:
+                logger.warning(f"Failed to stat profile dir {profile_dir}: {e}")
+                continue
+            # Keep recently-modified dirs: they may belong to a browser that
+            # is still starting up and not yet registered in the manager.
+            if current_time - last_modified <= max_session_age:
+                continue
+            logger.info(
+                f"Removing orphaned profile dir {profile_dir}",
+                extra={"profile_id": profile_dir.name},
+            )
+            remove_profile_dir(profile_dir)
+            removed_count += 1
+
+        if removed_count:
+            logger.info(f"Removed {removed_count} orphaned browser profile dirs")
 
 
 browser_manager = BrowserManager()

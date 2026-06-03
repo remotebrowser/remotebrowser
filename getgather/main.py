@@ -51,6 +51,11 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"Error in cleanup_incognito_browsers: {e}", exc_info=True)
             try:
+                # Run in a thread: rmtree of large profile dirs can block for seconds
+                await asyncio.to_thread(browser_manager.cleanup_orphaned_profiles)
+            except Exception as e:
+                logger.error(f"Error in cleanup_orphaned_profiles: {e}", exc_info=True)
+            try:
                 await asyncio.wait_for(stop_event.wait(), timeout=5 * 60)
             except asyncio.TimeoutError:
                 pass  # Timeout = 5 minutes passed, continue loop

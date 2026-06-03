@@ -31,7 +31,11 @@ from getgather.browser.resource_blocker import (
 )
 from getgather.config import FRIENDLY_CHARS, settings
 from getgather.container_utils import check_x_server_available
-from getgather.mcp.browser import browser_manager
+from getgather.mcp.browser import (
+    browser_manager,
+    remove_profile_dir,
+    terminate_zendriver_browser,
+)
 from getgather.request_info import request_info
 
 
@@ -443,6 +447,8 @@ async def _create_zendriver_browser(id: str | None = None) -> zd.Browser:
         MAX_START_ATTEMPTS,
         extra={"profile_id": id},
     )
+    # Don't leave a partially-initialized profile dir behind
+    remove_profile_dir(user_data_dir)
     raise last_error or RuntimeError("Failed to start browser")
 
 
@@ -473,11 +479,12 @@ async def init_zendriver_browser(id: str | None = None) -> zd.Browser:
             return browser
         except Exception as e:
             logger.warning(f"Browser validation failed on attempt {attempt}: {e}")
-            if attempt < MAX_ATTEMPTS:
-                try:
-                    await browser.stop()
-                except Exception:
-                    pass
+            # Terminate (instead of just stop) so the profile dir is removed:
+            # each retry creates a fresh profile, this one is never reused.
+            try:
+                await terminate_zendriver_browser(browser)
+            except Exception:
+                pass
 
     logger.error(f"Failed to get a working browser after {MAX_ATTEMPTS} attempts!")
     raise RuntimeError(f"Failed to get a working Zendriver browser after {MAX_ATTEMPTS} attempts!")
