@@ -14,8 +14,11 @@ async def get_purchases() -> dict[str, Any]:
     """Get purchase history from a user's Target account."""
 
     async def get_purchases_action(_page: zd.Tab, _browser: zd.Browser) -> dict[str, Any]:
-        logger.info("🔧 Target get_purchases: stub — purchase history not yet implemented")
-        return {"target_purchases": [], "message": "Purchase history not yet implemented"}
+        logger.info("✅ Target get_purchases: signed in, reached order history page")
+        return {
+            "target_purchases": [],
+            "message": "Successfully signed in and reached order history page. Purchase history extraction not yet implemented.",
+        }
 
     return await remote_zen_dpage_with_action(
         "https://www.target.com/orders",
