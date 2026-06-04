@@ -362,8 +362,8 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
         options = {"title": title, "action": action}
         inputs = document.find_all("input")
         pending_actions: list[dict[str, str]] = []
-        body = document.find("body")
-        action_delay_ms = int(str(body.get("gg-action-delay") or 0)) if isinstance(body, Tag) else 0
+        html_element = document.find("html")
+        action_delay_ms = int(str(html_element.get("gg-action-delay") or 0)) if isinstance(html_element, Tag) else 0
         element_config = ElementConfig(action_delay_ms=action_delay_ms) if action_delay_ms > 0 else None
 
         if match.distilled == current.distilled:
