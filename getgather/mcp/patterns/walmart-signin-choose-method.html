@@ -61,7 +61,7 @@
       id="wm-submit"
       type="submit"
       disabled
-      gg-match="//button[contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code') or contains(text(), 'Continue')]"
+      gg-match="//button[(contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code') or contains(text(), 'Continue')) and not(@disabled)]"
     >
       Choose a method above
     </button>
