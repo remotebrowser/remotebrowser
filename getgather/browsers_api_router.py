@@ -415,6 +415,44 @@ async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse:
         await client.aclose()
 
 
+@router.post("/api/v1/browsers/{browser_id}/pages/{page_id}/navigate")
+@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/navigate")
+async def navigate_page(
+    browser_id: str,
+    page_id: str,
+    request: Request,
+    url: str | None = None,
+) -> JSONResponse:
+    target_url = url if url is not None else request.url.query
+    if not target_url:
+        raise HTTPException(status_code=400, detail="Missing 'url' query parameter")
+
+    page_id = strip_browser_id_from_target_id(page_id)
+    try:
+        client = await open_cdp(browser_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    try:
+        try:
+            page = await client.attach_to_page(page_id)
+        except PageNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
+        except Exception as e:
+            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to navigate page: {e}")
+
+        try:
+            await page.navigate(target_url)
+        except Exception as e:
+            logger.error(f"Error navigating page for {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to navigate page: {e}")
+
+        return JSONResponse({"status": "success"})
+    finally:
+        await client.aclose()
+
+
 @router.websocket("/cdp/{browser_id}")
 async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> None:
     logger.debug(f"[CDP] Entered cdp_browser_websocket_proxy for browser_id={browser_id}")

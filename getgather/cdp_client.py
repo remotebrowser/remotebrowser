@@ -140,6 +140,13 @@ class CDPPage:
         self._client = client
         self._session_id = session_id
 
+    async def navigate(self, url: str) -> dict[str, Any]:
+        return await self._client.send(
+            "Page.navigate",
+            {"url": url},
+            session_id=self._session_id,
+        )
+
     async def evaluate(self, expression: str, await_promise: bool = False) -> Any:
         result = await self._client.send(
             "Runtime.evaluate",
