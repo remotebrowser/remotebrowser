@@ -507,6 +507,7 @@ class ElementConfig:
     typing_clear_delay: float = 0.1
     typing_char_delay_min: float = 0.01
     typing_char_delay_max: float = 0.05
+    action_delay_ms: float = 0
 
 
 class Element:
@@ -568,6 +569,8 @@ class Element:
             return False
 
     async def click(self) -> None:
+        if self.config.action_delay_ms > 0:
+            await asyncio.sleep(self.config.action_delay_ms / 1000)
         if self.css_selector:
             await self.css_click()
         else:
@@ -624,6 +627,8 @@ class Element:
         await asyncio.sleep(0.25)
 
     async def type_text(self, text: str) -> None:
+        if self.config.action_delay_ms > 0:
+            await asyncio.sleep(self.config.action_delay_ms / 1000)
         await self.element.clear_input_by_deleting()
         await asyncio.sleep(self.config.typing_clear_delay)
         await self.element.clear_input()
@@ -972,7 +977,11 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
             return null;
         }}
 
-        for (const action of actions) {{
+        for (const [index, action] of actions.entries()) {{
+            const actionDelayMs = Number(action?.action_delay_ms) || 0;
+            if (index > 0 && actionDelayMs > 0) {{
+                await sleep(actionDelayMs);
+            }}
             const key = action?.key;
             const kind = action?.kind;
             const selector = action?.selector;
@@ -1037,6 +1046,9 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
                     }};
 
                     element.focus();
+                    if (actionDelayMs > 0) {{
+                        await sleep(actionDelayMs);
+                    }}
                     element.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));
 
                     setNativeValue(element, "");

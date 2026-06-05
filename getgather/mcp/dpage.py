@@ -362,6 +362,15 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
         options = {"title": title, "action": action}
         inputs = document.find_all("input")
         pending_actions: list[dict[str, str]] = []
+        html_element = document.find("html")
+        action_delay_ms = (
+            int(str(html_element.get("gg-action-delay") or 0))
+            if isinstance(html_element, Tag)
+            else 0
+        )
+        element_config = (
+            ElementConfig(action_delay_ms=action_delay_ms) if action_delay_ms > 0 else None
+        )
 
         if match.distilled == current.distilled:
             logger.info(f"Still the same: {match.name}")
@@ -516,6 +525,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                             "kind": "set_value",
                             "selector": str(selector),
                             "value": str(value),
+                            "action_delay_ms": str(action_delay_ms),
                         })
                         del fields[name_str]
                     else:
@@ -543,6 +553,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                             "key": f"click:submit:{len(pending_actions)}",
                             "kind": "click",
                             "selector": str(submit_selector),
+                            "action_delay_ms": str(action_delay_ms),
                         })
                 should_submit = True
             else:
@@ -554,7 +565,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
             results = action_results if isinstance(action_results, dict) else {}
 
             # Fallback for failed/unexecuted actions to preserve behavior.
-            for action in pending_actions:
+            for i, action in enumerate(pending_actions):
                 key = action.get("key")
                 kind = action.get("kind")
                 selector = action.get("selector")
@@ -567,7 +578,8 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                 if results.get(key, False):
                     continue
 
-                element = await page_query_selector(page, selector)
+                config = element_config if i > 0 else None
+                element = await page_query_selector(page, selector, config=config)
                 if not element:
                     continue
                 if kind == "click":
