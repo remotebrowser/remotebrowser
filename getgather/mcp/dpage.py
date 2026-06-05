@@ -1,7 +1,6 @@
 import asyncio
 import ipaddress
 import os
-import time
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Self
@@ -327,7 +326,6 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
     max = TIMEOUT // TICK
 
     current = Match(name="", priority=-1, distilled="")
-    pattern_first_seen: dict[str, float] = {}
 
     if settings.LOG_LEVEL == "DEBUG":
         await capture_page_artifacts(page, identifier=id, prefix="dpage_debug")
@@ -355,9 +353,6 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
             logger.info("No matched pattern found")
             continue
 
-        if match.name not in pattern_first_seen:
-            pattern_first_seen[match.name] = time.monotonic()
-
         distilled = match.distilled
         document = BeautifulSoup(distilled, "html.parser")
 
@@ -384,23 +379,6 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
             if max_reached and has_inputs:
                 logger.info("Still the same after timeout and need inputs, render the page...")
                 return HTMLResponse(render(str(document.find("body")), options))
-            # Fire delayed autoclicks if their delay has elapsed.
-            elapsed = time.monotonic() - pattern_first_seen[match.name]
-            for delayed_el in document.select("[gg-autoclick-delay]"):
-                delay_val = delayed_el.get("gg-autoclick-delay")
-                try:
-                    delay_secs = int(str(delay_val))
-                except (ValueError, TypeError):
-                    delay_secs = 0
-                if elapsed >= delay_secs:
-                    selector, _ = get_selector(str(delayed_el.get("gg-match", "")))
-                    if selector:
-                        logger.info(
-                            f"Delayed autoclick ({delay_secs}s elapsed={elapsed:.1f}s): {selector}"
-                        )
-                        target = await page_query_selector(page, selector)
-                        if target:
-                            await target.click()
             continue
 
         current = match
