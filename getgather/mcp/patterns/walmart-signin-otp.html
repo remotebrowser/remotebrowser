@@ -161,6 +161,8 @@
         if (e.target.value && inputs[i + 1]) inputs[i + 1].focus();
       });
     </script>
-    <button type="submit" gg-match="button[type='submit'][form$='-otp-form']">Sign in</button>
+    <button type="submit" gg-match="button[type='submit'][form$='-otp-form']:not([disabled])">
+      Sign in
+    </button>
   </body>
 </html>
