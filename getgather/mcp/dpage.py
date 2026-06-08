@@ -565,7 +565,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
             results = action_results if isinstance(action_results, dict) else {}
 
             # Fallback for failed/unexecuted actions to preserve behavior.
-            for i, action in enumerate(pending_actions):
+            for action in pending_actions:
                 key = action.get("key")
                 kind = action.get("kind")
                 selector = action.get("selector")
@@ -578,7 +578,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                 if results.get(key, False):
                     continue
 
-                config = element_config if i > 0 else None
+                config = element_config
                 element = await page_query_selector(page, selector, config=config)
                 if not element:
                     continue
