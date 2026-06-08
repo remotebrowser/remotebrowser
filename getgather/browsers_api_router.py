@@ -13,6 +13,7 @@ from loguru import logger
 from starlette.requests import HTTPConnection
 from websockets.exceptions import ConnectionClosed
 
+from getgather.browser import call_chromefleet_api
 from getgather.cdp_client import PageNotFoundError, open_cdp
 from getgather.config import settings
 from getgather.podman_browsers import (
@@ -31,6 +32,15 @@ from getgather.podman_browsers import (
 from getgather.zen_distill import convert, distill, load_distillation_patterns
 
 router = APIRouter()
+
+
+def _forward_headers(request: HTTPConnection, *names: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for name in names:
+        value = request.headers.get(name)
+        if value:
+            headers[name] = value
+    return headers
 
 
 async def get_cdp_websocket_url(browser_id: str) -> str:
@@ -206,8 +216,21 @@ async def websocket_proxy(client_ws: WebSocket, remote_url: str, browser_id: str
             await client_ws.close(code=4500, reason="Internal proxy error")
 
 
-@router.post("/api/v1/browsers/{browser_id}")
-async def create_browser(browser_id: str, request: HTTPConnection) -> dict[str, str | None]:
+@router.post("/api/v1/browsers/{browser_id}", response_model=None)
+async def create_browser(
+    browser_id: str, request: HTTPConnection
+) -> dict[str, str | None] | JSONResponse:
+    if settings.CHROMEFLEET_URL:
+        logger.info(f"Proxying create_browser({browser_id}) to external Chrome Fleet")
+        response = await call_chromefleet_api(
+            "POST",
+            browser_id,
+            headers=_forward_headers(request, "x-origin-ip"),
+        )
+        if response is None:
+            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
+        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
+
     logger.info(f"Starting browser {browser_id}...")
     container_name = f"chromium-{browser_id}"
     try:
@@ -222,8 +245,15 @@ async def create_browser(browser_id: str, request: HTTPConnection) -> dict[str, 
         raise HTTPException(status_code=500, detail=detail)
 
 
-@router.delete("/api/v1/browsers/{browser_id}")
-async def delete_browser(browser_id: str) -> dict[str, str]:
+@router.delete("/api/v1/browsers/{browser_id}", response_model=None)
+async def delete_browser(browser_id: str) -> dict[str, str] | JSONResponse:
+    if settings.CHROMEFLEET_URL:
+        logger.info(f"Proxying delete_browser({browser_id}) to external Chrome Fleet")
+        response = await call_chromefleet_api("DELETE", browser_id)
+        if response is None:
+            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
+        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
+
     logger.info(f"Stopping browser {browser_id}...")
     container_name = f"chromium-{browser_id}"
     if not await container_exists(container_name):
@@ -240,8 +270,21 @@ async def delete_browser(browser_id: str) -> dict[str, str]:
         raise HTTPException(status_code=500, detail=detail)
 
 
-@router.get("/api/v1/browsers/{browser_id}")
-async def get_browser(browser_id: str, request: Request) -> dict[str, float | str | None]:
+@router.get("/api/v1/browsers/{browser_id}", response_model=None)
+async def get_browser(
+    browser_id: str, request: Request
+) -> dict[str, float | str | None] | JSONResponse:
+    if settings.CHROMEFLEET_URL:
+        logger.info(f"Proxying get_browser({browser_id}) to external Chrome Fleet")
+        response = await call_chromefleet_api(
+            "GET",
+            browser_id,
+            headers=_forward_headers(request, "x-origin-ip"),
+        )
+        if response is None:
+            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
+        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
+
     logger.info(f"Querying browser {browser_id}...")
     container_name = f"chromium-{browser_id}"
     if not await container_is_running(container_name):
@@ -260,6 +303,13 @@ async def get_browser(browser_id: str, request: Request) -> dict[str, float | st
 
 @router.get("/api/v1/browsers")
 async def list_browsers() -> JSONResponse:
+    if settings.CHROMEFLEET_URL:
+        logger.info("Proxying list_browsers() to external Chrome Fleet")
+        response = await call_chromefleet_api("GET")
+        if response is None:
+            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
+        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
+
     logger.info("Enumerating all browsers...")
     try:
         containers = await list_containers()

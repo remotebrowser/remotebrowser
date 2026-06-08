@@ -190,19 +190,22 @@ async def _create_browser_from_cdp_websocket(
     return instance
 
 
-async def _call_chromefleet_api(
+async def call_chromefleet_api(
     method: HTTP_METHOD,
-    browser_id: str,
+    browser_id: str | None = None,
     *,
     target_domain: str | None = None,
     timeout: float = 120.0,
     retries: int = 3,
     raise_for_status: bool = True,
-):
+    headers: dict[str, str] | None = None,
+) -> httpx.Response | None:
     base_url = settings.effective_chromefleet_url.rstrip("/")
-    url = f"{base_url}/api/v1/browsers/{browser_id}"
+    path = f"/api/v1/browsers/{browser_id}" if browser_id else "/api/v1/browsers"
+    url = f"{base_url}{path}"
 
-    headers = _build_chromefleet_headers(target_domain=target_domain)
+    if headers is None:
+        headers = _build_chromefleet_headers(target_domain=target_domain)
 
     async with httpx.AsyncClient(
         transport=RetryTransport(
@@ -250,14 +253,14 @@ def _setup_cdp_url(browser_id: str) -> str:
 
 
 async def get_remote_browser_cdp_url(browser_id: str) -> str:
-    await _call_chromefleet_api("GET", browser_id, timeout=2.0, retries=0)
+    await call_chromefleet_api("GET", browser_id, timeout=2.0, retries=0)
     return _setup_cdp_url(browser_id)
 
 
 async def get_remote_browser(browser_id: str) -> zd.Browser | None:
     logger.debug(f"Finding the ChromeFleet browser: {browser_id}")
     try:
-        await _call_chromefleet_api("GET", browser_id)
+        await call_chromefleet_api("GET", browser_id)
     except Exception:
         return None
 
@@ -291,9 +294,7 @@ async def terminate_remote_browser(browser: zd.Browser) -> None:
     browser_id = cast(str, browser.id)  # type: ignore[attr-defined]
     logger.info(f"Terminating ChromeFleet browser: {browser_id}")
     # no need to raise for error (which would fail the whole process)
-    await _call_chromefleet_api(
-        "DELETE", browser_id, timeout=1.0, retries=0, raise_for_status=False
-    )
+    await call_chromefleet_api("DELETE", browser_id, timeout=1.0, retries=0, raise_for_status=False)
 
 
 _CREDENTIALS_BLOCK_SCRIPT = r"""
