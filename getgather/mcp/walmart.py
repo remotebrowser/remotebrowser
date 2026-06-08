@@ -122,7 +122,8 @@ function collectItems(priceByItemId, items) {
         priceByItemId[id] = {
             linePrice: pi.linePrice ?? null,
             itemPrice: pi.itemPrice ?? null,
-            unitPrice: pi.unitPrice ?? null
+            unitPrice: pi.unitPrice ?? null,
+            canonicalUrl: item?.productInfo?.canonicalUrl ?? null
         };
     }
 }
@@ -288,7 +289,17 @@ def _merge_price_info(
         for group in order.get("groups", []):
             for item in group.get("items", []):
                 item_id = item.get("id")
-                item["priceInfo"] = item_prices.get(item_id) if (item_prices and item_id) else None
+                detail = item_prices.get(item_id) if (item_prices and item_id) else None
+                if detail:
+                    item["priceInfo"] = {
+                        "linePrice": detail.get("linePrice"),
+                        "itemPrice": detail.get("itemPrice"),
+                        "unitPrice": detail.get("unitPrice"),
+                    }
+                    item["canonicalUrl"] = detail.get("canonicalUrl")
+                else:
+                    item["priceInfo"] = None
+                    item["canonicalUrl"] = None
 
 
 @walmart_mcp.tool

@@ -3,6 +3,7 @@
     <title gg-match="h1.f3">Walmart - Choose verification method</title>
   </head>
   <body>
+    <span class="error-box" gg-optional gg-match="div[data-testid='alert'] div"></span>
     <div gg-match="[data-testid='auth-choice-title']"></div>
     <div class="vertical-radios">
       <div class="radio-wrapper">
@@ -60,7 +61,7 @@
       id="wm-submit"
       type="submit"
       disabled
-      gg-match="//button[contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code') or contains(text(), 'Continue')]"
+      gg-match="//button[(contains(text(), 'Sign in') or contains(text(), 'Request code') or contains(text(), 'Send code') or contains(text(), 'Continue') or contains(text(), 'Text me')) and not(@disabled)]"
     >
       Choose a method above
     </button>

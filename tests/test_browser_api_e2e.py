@@ -117,3 +117,66 @@ class TestAutoStart:
 
         response = client.get(f"/api/v1/browsers/{browser_id}")
         assert response.status_code == 200
+
+
+@pytest.mark.api
+class TestListPages:
+    def __init__(self) -> None:
+        self.browser_ids: list[str] = []
+
+    @pytest.fixture(autouse=True)
+    def cleanup(self, client: httpx.Client) -> Generator[None, None, None]:
+        self.browser_ids = []
+        yield
+        for browser_id in self.browser_ids:
+            try:
+                client.delete(f"/api/v1/browsers/{browser_id}")
+            except Exception:
+                pass
+
+    def test_list_pages_is_stable(self, client: httpx.Client) -> None:
+        browser_id = "test-list-pages"
+        self.browser_ids.append(browser_id)
+
+        # Ensure clean state
+        client.delete(f"/api/v1/browsers/{browser_id}")
+        assert client.post(f"/api/v1/browsers/{browser_id}").status_code == 200
+
+        first: list[object] = client.get(f"/api/v1/browsers/{browser_id}/pages").json()
+        second: list[object] = client.get(f"/api/v1/browsers/{browser_id}/pages").json()
+
+        assert isinstance(first, list)
+        assert len(first) >= 1
+        assert first == second
+
+
+@pytest.mark.api
+class TestPageContent:
+    def __init__(self) -> None:
+        self.browser_ids: list[str] = []
+
+    @pytest.fixture(autouse=True)
+    def cleanup(self, client: httpx.Client) -> Generator[None, None, None]:
+        self.browser_ids = []
+        yield
+        for browser_id in self.browser_ids:
+            try:
+                client.delete(f"/api/v1/browsers/{browser_id}")
+            except Exception:
+                pass
+
+    def test_page_html_and_distilled(self, client: httpx.Client) -> None:
+        browser_id = "test-page-content"
+        self.browser_ids.append(browser_id)
+
+        # Ensure clean state
+        client.delete(f"/api/v1/browsers/{browser_id}")
+        assert client.post(f"/api/v1/browsers/{browser_id}").status_code == 200
+
+        page_ids: list[object] = client.get(f"/api/v1/browsers/{browser_id}/pages").json()
+        assert len(page_ids) >= 1
+        page_id = str(page_ids[0])
+
+        html = client.get(f"/api/v1/browsers/{browser_id}/pages/{page_id}/html")
+        assert html.status_code == 200
+        assert "<html" in html.text.lower()

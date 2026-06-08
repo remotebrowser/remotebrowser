@@ -115,6 +115,28 @@ _Example_: `curl localhost:8300/api/v1/browsers` returns:
 ["xyz123", "abc234"]
 ```
 
+### List pages of a browser
+
+`GET /api/v1/browsers/{browser_id}/pages` returns a JSON array of page identifiers (CDP target IDs) for all open pages in the specified browser. Returns HTTP 404 if the browser is not found.
+
+_Example_: `curl localhost:23456/api/v1/browsers/test/pages` returns:
+
+```json
+["96FDE4162B8EEEBF98E26756D21CF0C5"]
+```
+
+### Get page HTML
+
+`GET /api/v1/browsers/{browser_id}/pages/{page_id}/html` returns the raw HTML of the specified page. Returns HTTP 404 if the browser or page is not found.
+
+_Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/html`
+
+### Get distilled page JSON
+
+`GET /api/v1/browsers/{browser_id}/pages/{page_id}/distilled` returns the distilled JSON representation of the specified page, produced by matching the page against distillation patterns. Returns HTTP 404 if the browser or page is not found.
+
+_Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/distilled`
+
 ## Development
 
 To run the development version, clone this repository and run:

@@ -1,8 +1,13 @@
-<html gg-domain="walmart">
+<html gg-domain="walmart" gg-action-delay="200">
   <head>
     <title>Walmart Sign In - Email or Phone</title>
   </head>
   <body>
+    <span
+      class="error-box"
+      gg-optional
+      gg-match="div[data-testid='dropdown'] section div span"
+    ></span>
     <input
       autofocus
       name="email"
@@ -10,6 +15,6 @@
       placeholder="Phone number or email (required)"
       gg-match="input[aria-label='Phone number or email (required)']"
     />
-    <button type="submit" gg-match="button#login-continue-button">Continue</button>
+    <button type="submit" gg-match="button#login-continue-button:not([disabled])">Continue</button>
   </body>
 </html>

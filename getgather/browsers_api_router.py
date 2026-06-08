@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.parse
 from typing import Any
 
 import httpx
@@ -14,8 +15,10 @@ from loguru import logger
 from starlette.requests import HTTPConnection
 from websockets.exceptions import ConnectionClosed
 
+from getgather.cdp_client import PageNotFoundError, open_cdp
 from getgather.config import settings
 from getgather.residential_proxy import MassiveLocation, MassiveProxy
+from getgather.zen_distill import convert, distill, load_distillation_patterns
 
 router = APIRouter()
 
@@ -374,6 +377,23 @@ async def find_browser_id(page_id: str) -> str | None:
     return None
 
 
+def strip_browser_id_from_target_id(target_id: str) -> str:
+    if "@" not in target_id:
+        return target_id
+    return target_id.split("@", 1)[1]
+
+
+def prepend_browser_id_to_target_id(target_id: str, browser_id: str) -> str:
+    return browser_id + "@" + target_id
+
+
+CDP_TARGET_METHODS_STRIP_ID = (
+    "Target.attachToTarget",
+    "Target.closeTarget",
+    "Target.getTargetInfo",
+)
+
+
 def patch_cdp_target(message: str, browser_id: str) -> str:
     if "targetId" not in message:
         return message
@@ -389,19 +409,23 @@ def patch_cdp_target(message: str, browser_id: str) -> str:
             if isinstance(params, dict):
                 target_info: Any = params.get("targetInfo")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
                 if isinstance(target_info, dict) and "targetId" in target_info:
-                    target_info["targetId"] = browser_id + "@" + str(target_info["targetId"])  # pyright: ignore[reportUnknownArgumentType]
+                    target_info["targetId"] = prepend_browser_id_to_target_id(
+                        str(target_info["targetId"]),  # pyright: ignore[reportUnknownArgumentType]
+                        browser_id,
+                    )
                     return json.dumps(data)
-        elif data.get("method") == "Target.getTargetInfo":  # pyright: ignore[reportUnknownMemberType]
+        elif data.get("method") in CDP_TARGET_METHODS_STRIP_ID:  # pyright: ignore[reportUnknownMemberType]
             params = data.get("params")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
             if isinstance(params, dict) and "targetId" in params:
-                target_id = str(params["targetId"])  # pyright: ignore[reportUnknownArgumentType]
-                if "@" in target_id:
-                    params["targetId"] = target_id.split("@", 1)[1]
-                    return json.dumps(data)
+                params["targetId"] = strip_browser_id_from_target_id(str(params["targetId"]))  # pyright: ignore[reportUnknownArgumentType]
+                return json.dumps(data)
         elif "result" in data:
             result: Any = data.get("result")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
             if isinstance(result, dict) and "targetId" in result:
-                result["targetId"] = browser_id + "@" + str(result["targetId"])  # pyright: ignore[reportUnknownArgumentType]
+                result["targetId"] = prepend_browser_id_to_target_id(
+                    str(result["targetId"]),  # pyright: ignore[reportUnknownArgumentType]
+                    browser_id,
+                )
                 return json.dumps(data)
 
     return message
@@ -532,6 +556,100 @@ async def list_browsers() -> JSONResponse:
         detail = "Unable to list all browsers"
         logger.error(f"{detail} Exception={e}")
         raise HTTPException(status_code=500, detail=detail)
+
+
+@router.get("/api/v1/browsers/{browser_id}/pages")
+async def list_pages(browser_id: str) -> JSONResponse:
+    try:
+        client = await open_cdp(browser_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    try:
+        result = await client.send("Target.getTargets")
+    except Exception as e:
+        logger.error(f"Error listing pages via CDP for {browser_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to list pages: {e}")
+    finally:
+        await client.aclose()
+
+    target_infos: list[dict[str, Any]] = result.get("targetInfos", [])  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+    page_ids = [str(info["targetId"]) for info in target_infos if info.get("type") == "page"]
+    return JSONResponse(page_ids)
+
+
+@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/html")
+async def get_page_html(browser_id: str, page_id: str) -> HTMLResponse:
+    page_id = strip_browser_id_from_target_id(page_id)
+    try:
+        client = await open_cdp(browser_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    try:
+        try:
+            page = await client.attach_to_page(page_id)
+        except PageNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
+        except Exception as e:
+            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to get page HTML: {e}")
+
+        try:
+            html = await page.evaluate("document.documentElement.outerHTML")
+        except Exception as e:
+            logger.error(f"Error fetching page HTML for {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to get page HTML: {e}")
+
+        if not isinstance(html, str):
+            html = str(html) if html is not None else ""
+        return HTMLResponse(content=html)
+    finally:
+        await client.aclose()
+
+
+@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/distilled")
+async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse:
+    page_id = strip_browser_id_from_target_id(page_id)
+    try:
+        client = await open_cdp(browser_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    try:
+        try:
+            page = await client.attach_to_page(page_id)
+        except PageNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
+        except Exception as e:
+            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to distill page: {e}")
+
+        try:
+            current_url = str(await page.evaluate("window.location.href", await_promise=True))
+            hostname = urllib.parse.urlparse(current_url).hostname or ""
+
+            path = os.path.join(os.path.dirname(__file__), "mcp", "patterns", "*.html")
+            patterns = load_distillation_patterns(path)
+            if not patterns:
+                raise HTTPException(status_code=502, detail="No patterns found for '*.html'")
+
+            match = await distill(hostname, page, patterns)  # type: ignore[arg-type]
+            if not match:
+                raise HTTPException(status_code=502, detail="No matching pattern found for page")
+
+            converted = await convert(match.distilled, pattern_path=match.name)
+            if converted:
+                return JSONResponse(converted)
+
+            return JSONResponse({"distilled": match.distilled})
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error distilling page for {browser_id}/{page_id}: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to distill page: {e}")
+    finally:
+        await client.aclose()
 
 
 @router.websocket("/cdp/{browser_id}")
