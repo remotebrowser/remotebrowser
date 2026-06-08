@@ -985,7 +985,7 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
         for (const [index, action] of actions.entries()) {{
             const actionDelayMs = Number(action?.action_delay_ms) || 0;
             if (index > 0 && actionDelayMs > 0) {{
-                await sleep(actionDelayMs);
+                await new Promise(resolve => setTimeout(resolve, actionDelayMs));
             }}
             const key = action?.key;
             const kind = action?.kind;
