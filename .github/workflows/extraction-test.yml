@@ -97,10 +97,10 @@ jobs:
         run: unzip -l dist/*.whl
 
       - name: Execute the wheel
-        # The daytona backend needs the optional SDK; pin anyio>=4.10 since httpx-ws under-declares it.
+        # The daytona backend needs the optional SDK (lazy-imported); add it for that variant only.
         run: |
           if [ "${{ matrix.browser_backend }}" = daytona ]; then
-            uvx --with daytona --with 'anyio>=4.10' ./dist/*.whl &
+            uvx --with daytona ./dist/*.whl &
           else
             uvx ./dist/*.whl &
           fi

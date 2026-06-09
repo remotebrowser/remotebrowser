@@ -56,7 +56,7 @@ jobs:
         timeout-minutes: 3
 
       - name: Run the browser API E2E tests
-        run: uv run pytest -v -s tests/test_browser_api_e2e.py tests/test_daytona.py
+        run: uv run pytest -v -s tests/test_browser_api_e2e.py
 
   browser-api-e2e-tests-wheel:
     runs-on: ubuntu-24.04
@@ -97,10 +97,10 @@ jobs:
         run: unzip -l dist/*.whl
 
       - name: Execute the wheel
-        # The daytona backend needs the optional SDK; pin anyio>=4.10 since httpx-ws under-declares it.
+        # The daytona backend needs the optional SDK (lazy-imported); add it for that variant only.
         run: |
           if [ "${{ matrix.browser_backend }}" = daytona ]; then
-            uvx --with daytona --with 'anyio>=4.10' ./dist/*.whl &
+            uvx --with daytona ./dist/*.whl &
           else
             uvx ./dist/*.whl &
           fi
@@ -109,7 +109,5 @@ jobs:
         run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
         timeout-minutes: 3
 
-      # test_daytona.py runs only in the -uv job: it creates fixed-named sandboxes, so running it
-      # here too would collide with that job on the shared Daytona server.
       - name: Run the browser API E2E tests
         run: uv run pytest -v -s tests/test_browser_api_e2e.py

@@ -22,18 +22,23 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Optionally bundle the Daytona backend SDK. Build with --build-arg BROWSER_BACKEND=daytona to
+# include it; the default podman build stays lean. The SDK is lazy-imported, so the image runs
+# whichever backend the BROWSER_BACKEND env selects at runtime (as long as it was built in).
+ARG BROWSER_BACKEND=podman
+
 # Copy only dependency files first for better layer caching
 COPY pyproject.toml uv.lock* README.md ./
 
 # Install dependencies without workspace members
-RUN uv sync --no-dev --no-install-workspace
+RUN uv sync --no-dev --no-install-workspace $([ "$BROWSER_BACKEND" = daytona ] && echo --extra daytona)
 
 # Now copy the actual source code
 COPY getgather /app/getgather
 COPY tests /app/tests
 
 # Install the workspace package
-RUN uv sync --no-dev
+RUN uv sync --no-dev $([ "$BROWSER_BACKEND" = daytona ] && echo --extra daytona)
 
 # Stage 2: Final image
 FROM mirror.gcr.io/library/python:3.13-slim-bookworm
