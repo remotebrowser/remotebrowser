@@ -302,9 +302,25 @@ def render_form(
     <script>
       document.addEventListener("DOMContentLoaded", function () {{
         const form = document.querySelector("div.card");
+        const phoneTextPattern = /^\\+?\\d+(-\\d+)+$/;
 
         if (form) {{
           form.addEventListener("submit", function (e) {{
+            const formElement = form.querySelector("form");
+            if (formElement) {{
+              formElement.querySelectorAll("input").forEach(function (input) {{
+                const value = input.value;
+                if (!value || !value.includes("-")) {{
+                  return;
+                }}
+                const type = input.type.toLowerCase();
+                if (type === "tel" || type === "number") {{
+                  input.value = value.replace(/-/g, "");
+                }} else if (type === "text" && phoneTextPattern.test(value)) {{
+                  input.value = value.replace(/-/g, "");
+                }}
+              }});
+            }}
 
             const overlay = document.createElement("div");
             overlay.className = "form-overlay";
