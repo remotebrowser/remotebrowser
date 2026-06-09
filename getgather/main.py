@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from getgather.auth.auth import setup_mcp_auth
-from getgather.browsers_api_router import router as browsers_router
+from getgather.browsers.router import backend, router as browsers_router
 from getgather.config import PROJECT_DIR, settings
 from getgather.logs import MCPLoggingContextMiddleware
 from getgather.mcp.dpage import remote_zen_dpage_mcp_tool, router as dpage_router
@@ -47,13 +47,16 @@ async def lifespan(app: FastAPI):
 
     background_task = asyncio.create_task(timer_loop())
 
-    async with AsyncExitStack() as stack:
-        for mcp_app in mcp_apps:
-            await stack.enter_async_context(mcp_app.app.lifespan(app))
-        yield
+    try:
+        async with AsyncExitStack() as stack:
+            for mcp_app in mcp_apps:
+                await stack.enter_async_context(mcp_app.app.lifespan(app))
+            yield
 
-        stop_event.set()
-        await background_task
+            stop_event.set()
+            await background_task
+    finally:
+        await backend.shutdown()
 
 
 app = FastAPI(

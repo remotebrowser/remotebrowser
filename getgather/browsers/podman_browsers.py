@@ -1,14 +1,19 @@
 import asyncio
+import math
 import os
 import subprocess
 import sys
+from datetime import datetime
+from typing import Any
 
 from loguru import logger
 
+from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.residential_proxy import MassiveLocation, MassiveProxy
 from getgather.config import settings
-from getgather.residential_proxy import MassiveLocation, MassiveProxy
 
 DOCKER_INTERNAL_HOST = "172.17.0.1"
+MAX_IDLE = 15 * 60  # seconds
 
 
 def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -289,3 +294,81 @@ async def get_cdp_url(browser_id: str) -> str:
     if not host_port:
         raise Exception(f"CDP port not found for {container_name}")
     return f"http://{container_host()}:{host_port}"
+
+
+class PodmanBackend:
+    async def shutdown(self) -> None:
+        return None
+
+    async def create_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+        container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
+        await launch_container(settings.CONTAINER_IMAGE, container_name)
+        ip = await configure_remote_browser(browser_id, container_name, origin_ip)
+        return {"container_name": container_name, "status": "created", "ip": ip}
+
+    async def get_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+        container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
+        if not await container_is_running(container_name):
+            raise BrowserNotFound(browser_id)
+        last_activity_timestamp = await get_container_last_activity(container_name)
+        logger.debug(f"Browser {browser_id}: last_activity_timestamp={last_activity_timestamp}.")
+        if origin_ip:
+            ip = await configure_remote_browser(browser_id, container_name, origin_ip)
+        else:
+            ip = await get_container_public_ip(container_name)
+        return {"last_activity_timestamp": last_activity_timestamp, "ip": ip}
+
+    async def delete_browser(self, browser_id: str) -> dict[str, Any]:
+        container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
+        await kill_container(container_name)
+        return {"container_name": container_name, "status": "deleted"}
+
+    async def browser_exists(self, browser_id: str) -> bool:
+        return await container_exists(f"{BROWSER_NAME_PREFIX}{browser_id}")
+
+    async def list_browser_ids(self) -> list[str]:
+        containers = await list_containers()
+        return [
+            c[len(BROWSER_NAME_PREFIX) :] for c in containers if c.startswith(BROWSER_NAME_PREFIX)
+        ]
+
+    async def cleanup_idle(self) -> list[str]:
+        browser_ids = await self.list_browser_ids()
+
+        browsers: list[dict[str, Any]] = []
+        for browser_id in browser_ids:
+            container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
+            last_activity_timestamp = await get_container_last_activity(container_name)
+            if last_activity_timestamp is None:
+                logger.debug(f"Skipping browser {browser_id}: error retrieving last activity")
+                continue
+            browsers.append({
+                "browser_id": browser_id,
+                "last_activity_timestamp": last_activity_timestamp,
+            })
+
+        now = datetime.now().timestamp()
+        deleted: list[str] = []
+        for browser in browsers:
+            idle_seconds = now - browser["last_activity_timestamp"]
+            idle_minutes = math.ceil(idle_seconds / 60)
+            logger.debug(f"Browser {browser['browser_id']} idle for {idle_minutes}m")
+            if idle_seconds > MAX_IDLE:
+                logger.info(f"Deleting browser {browser['browser_id']} (idle: {idle_minutes}m)")
+                try:
+                    await self.delete_browser(browser["browser_id"])
+                    deleted.append(browser["browser_id"])
+                except Exception as e:
+                    logger.error(f"Failed to delete browser {browser['browser_id']}: {e}")
+
+        logger.info(f"Cleanup complete: total={len(browser_ids)} deleted={len(deleted)}")
+        return deleted
+
+    async def get_cdp_base_url(self, browser_id: str) -> str:
+        return await get_cdp_url(browser_id)
+
+    async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
+        vnc_port = await get_host_port(f"{BROWSER_NAME_PREFIX}{browser_id}", 5900)
+        if not vnc_port:
+            return None
+        return (container_host(), vnc_port)

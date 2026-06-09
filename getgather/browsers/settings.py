@@ -1,0 +1,69 @@
+from typing import Literal, Self
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BrowserBackendName = Literal["podman", "daytona"]
+
+
+class BrowserSettings(BaseSettings):
+    """Settings for the browser backends (fleet, podman, daytona).
+
+    The concrete `getgather.config.Settings` inherits this and supplies the `.env`
+    file; here we only declare the fields and their validation.
+    """
+
+    model_config = SettingsConfigDict(env_ignore_empty=True, extra="ignore")
+
+    # Port the server listens on; used to build the local fallback Chrome Fleet URL.
+    PORT: int = 23456
+
+    # External Chrome Fleet: when set, the browser API is proxied to this upstream fleet
+    # (takes precedence over BROWSER_BACKEND).
+    CHROMEFLEET_URL: str = ""
+    CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS: float = 30.0
+
+    # Local backend selection (ignored when CHROMEFLEET_URL is set)
+    BROWSER_BACKEND: BrowserBackendName = "podman"
+
+    # Podman backend
+    CONTAINER_IMAGE: str = "ghcr.io/remotebrowser/chromium-live"
+    CONTAINER_HOST: str = ""
+
+    # Residential proxy (Massive) and MaxMind GeoIP (podman backend only)
+    MASSIVE_PROXY_USERNAME: str = ""
+    MASSIVE_PROXY_PASSWORD: str = ""
+    MAXMIND_ACCOUNT_ID: int = 0
+    MAXMIND_LICENSE_KEY: str = ""
+
+    # Daytona backend (required when BROWSER_BACKEND=daytona; install: uv sync --extra daytona).
+    DAYTONA_API_KEY: str = ""
+    DAYTONA_API_URL: str = (
+        ""  # point at a self-hosted Daytona; empty uses the managed cloud default
+    )
+    DAYTONA_SNAPSHOT: str = ""
+
+    @property
+    def effective_chromefleet_url(self) -> str:
+        """Returns CHROMEFLEET_URL if set, otherwise falls back to the local backend."""
+        return self.CHROMEFLEET_URL or f"http://127.0.0.1:{self.PORT}"
+
+    @property
+    def MASSIVE_PROXY_ENABLED(self) -> bool:
+        return bool(self.MASSIVE_PROXY_USERNAME and self.MASSIVE_PROXY_PASSWORD)
+
+    @property
+    def MAXMIND_ENABLED(self) -> bool:
+        return bool(self.MAXMIND_ACCOUNT_ID and self.MAXMIND_LICENSE_KEY)
+
+    @model_validator(mode="after")
+    def validate_daytona_settings(self) -> Self:
+        if self.BROWSER_BACKEND == "daytona":
+            missing = [
+                key for key in ("DAYTONA_API_KEY", "DAYTONA_SNAPSHOT") if not getattr(self, key)
+            ]
+            if missing:
+                raise ValueError(
+                    f"Missing settings for BROWSER_BACKEND=daytona: {', '.join(missing)}"
+                )
+        return self

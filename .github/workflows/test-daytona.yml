@@ -1,0 +1,50 @@
+name: Daytona E2E Tests
+
+# The Daytona tests talk to a self-hosted Daytona server on a Tailscale network and create
+# real sandboxes. Configure these under Settings -> Secrets and variables -> Actions:
+#   Secrets:   DAYTONA_API_KEY, TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET
+#   Variables: DAYTONA_API_URL (e.g. http://100.89.25.69:3000/api), DAYTONA_SNAPSHOT
+# The Tailscale OAuth client needs the `auth_keys` scope and ownership of the tag below.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  daytona-tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        # Only GitHub-hosted runners need Tailscale to reach the Daytona server; act (where
+        # runner.environment is empty) and self-hosted runners are assumed to already have
+        # tailnet access, so the step self-skips there.
+        if: ${{ runner.environment == 'github-hosted' }}
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: Prepare back-end environment
+        uses: ./.github/actions/prepare-backend
+
+      - name: Verify Daytona API reachable
+        run: while ! curl -sf "${DAYTONA_API_URL}/health" >/dev/null; do echo "waiting for Daytona..."; sleep 2; done
+        timeout-minutes: 2
+        env:
+          DAYTONA_API_URL: ${{ vars.DAYTONA_API_URL }}
+
+      - name: Run Daytona tests
+        run: uv run pytest tests/test_daytona.py -v -s
+        env:
+          BROWSER_BACKEND: daytona
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          DAYTONA_API_URL: ${{ vars.DAYTONA_API_URL }}
+          DAYTONA_SNAPSHOT: ${{ vars.DAYTONA_SNAPSHOT }}

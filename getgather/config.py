@@ -1,16 +1,16 @@
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from getgather.auth.settings import AuthSettings
+from getgather.browsers.settings import BrowserSettings
 
 FRIENDLY_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 
-class Settings(AuthSettings, BaseSettings):
+class Settings(AuthSettings, BrowserSettings, BaseSettings):
     model_config = SettingsConfigDict(
         env_file=PROJECT_DIR / ".env", env_ignore_empty=True, extra="ignore"
     )
@@ -19,39 +19,10 @@ class Settings(AuthSettings, BaseSettings):
 
     DATA_DIR: str = ""
 
-    CHROMEFLEET_URL: str = ""
-    CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS: float = 30.0
-
-    @property
-    def effective_chromefleet_url(self) -> str:
-        """Returns CHROMEFLEET_URL if set, otherwise falls back to the local backend."""
-        port = os.getenv("PORT", "23456")
-        return self.CHROMEFLEET_URL or f"http://127.0.0.1:{port}"
-
-    # Browser fleet (ChromeFleet integrated)
-    CONTAINER_IMAGE: str = "ghcr.io/remotebrowser/chromium-live"
-    CONTAINER_HOST: str = ""
-
-    # Residential proxy (Massive)
-    MASSIVE_PROXY_USERNAME: str = ""
-    MASSIVE_PROXY_PASSWORD: str = ""
-
-    # MaxMind GeoIP
-    MAXMIND_ACCOUNT_ID: int = 0
-    MAXMIND_LICENSE_KEY: str = ""
-
     # Logging
     LOG_LEVEL: str = "INFO"
     SENTRY_DSN: str = ""
     LOGFIRE_TOKEN: str = ""
-
-    @property
-    def MASSIVE_PROXY_ENABLED(self) -> bool:
-        return bool(self.MASSIVE_PROXY_USERNAME and self.MASSIVE_PROXY_PASSWORD)
-
-    @property
-    def MAXMIND_ENABLED(self) -> bool:
-        return bool(self.MAXMIND_ACCOUNT_ID and self.MAXMIND_LICENSE_KEY)
 
     @property
     def data_dir(self) -> Path:

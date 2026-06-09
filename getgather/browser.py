@@ -5,17 +5,14 @@ from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, TypeVar, cast
 from urllib.parse import urlparse
 
 import asyncio_atexit
-import httpx
 import logfire
 import sentry_sdk
 import websockets
 import zendriver as zd
-from fastmcp.server.dependencies import get_http_headers
-from httpx_retries import Retry, RetryTransport
 from loguru import logger
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from zendriver.core import util
@@ -23,10 +20,9 @@ from zendriver.core._contradict import ContraDict
 from zendriver.core.config import Config
 from zendriver.core.connection import Connection, ProtocolException
 
-from getgather.client_ip import client_ip_var
+from getgather.browsers.fleet_browsers import build_chromefleet_headers, call_chromefleet_api
 from getgather.config import settings
 
-HTTP_METHOD = Literal["GET", "POST", "DELETE"]
 _ws_extra_headers_var: ContextVar[dict[str, str] | None] = ContextVar(
     "_ws_extra_headers_var", default=None
 )
@@ -62,22 +58,6 @@ def _ensure_ws_connect_patched() -> None:
         return
     websockets.connect = _traced_websocket_connect  # type: ignore[assignment]
     _ws_connect_patched = True
-
-
-def _build_chromefleet_headers(*, target_domain: str | None = None) -> dict[str, str]:
-    mcp_headers = get_http_headers(include_all=True)
-    headers = {
-        "x-forwarded-for": mcp_headers.get("x-forwarded-for", None),
-        "user-agent": mcp_headers.get("user-agent", None),
-        "sec-ch-ua": mcp_headers.get("sec-ch-ua", None),
-        "sec-ch-ua-mobile": mcp_headers.get("sec-ch-ua-mobile", None),
-        "sec-ch-ua-platform": mcp_headers.get("sec-ch-ua-platform", None),
-        "x-origin-ip": mcp_headers.get("x-origin-ip") or client_ip_var.get(),
-        "x-origin-id": mcp_headers.get("x-origin-id", None),
-        "x-origin-ua": mcp_headers.get("x-origin-ua", None),
-        "x-target-domains": target_domain,
-    }
-    return {k: v for k, v in headers.items() if v is not None}
 
 
 @contextmanager
@@ -129,7 +109,7 @@ async def _create_browser_from_cdp_websocket(
         except StopIteration:
             logger.debug("Ignored transient target update race: StopIteration")
 
-    extra_headers = _build_chromefleet_headers(target_domain=target_domain)
+    extra_headers = build_chromefleet_headers(target_domain=target_domain)
     with (
         logfire.span(
             "cdp websocket connect {browser_id}",
@@ -188,53 +168,6 @@ async def _create_browser_from_cdp_websocket(
 
     instance.id = browser_id  # type: ignore[attr-defined]
     return instance
-
-
-async def call_chromefleet_api(
-    method: HTTP_METHOD,
-    browser_id: str | None = None,
-    *,
-    target_domain: str | None = None,
-    timeout: float = 120.0,
-    retries: int = 3,
-    raise_for_status: bool = True,
-    headers: dict[str, str] | None = None,
-) -> httpx.Response | None:
-    base_url = settings.effective_chromefleet_url.rstrip("/")
-    path = f"/api/v1/browsers/{browser_id}" if browser_id else "/api/v1/browsers"
-    url = f"{base_url}{path}"
-
-    if headers is None:
-        headers = _build_chromefleet_headers(target_domain=target_domain)
-
-    async with httpx.AsyncClient(
-        transport=RetryTransport(
-            retry=Retry(
-                total=retries,
-                backoff_factor=1.0,
-                status_forcelist=[429, 500, 502, 503, 504],
-                allowed_methods=[method],
-            )
-        ),
-    ) as client:
-        error = None
-        response = None
-        try:
-            response = await client.request(
-                method,
-                url,
-                headers=headers,
-                timeout=httpx.Timeout(connect=2.0, pool=None, read=timeout, write=timeout),
-            )
-        except Exception as e:
-            error = e
-
-        if raise_for_status:
-            if error:
-                raise error
-            if response:
-                response.raise_for_status()
-        return response
 
 
 def find_browser_tab(browser: zd.Browser, target_id: str) -> zd.Tab | None:

@@ -147,6 +147,18 @@ _Example_: `curl -X POST 'localhost:23456/api/v1/browsers/test/pages/96FDE4162B8
 
 _Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/distilled`
 
+## Backends
+
+The browser API runs on one of three backends, selected at startup:
+
+| Backend          | Selected by               | Browser runs as           | CDP reached via             |
+| ---------------- | ------------------------- | ------------------------- | --------------------------- |
+| Podman (default) | (default)                 | local podman container    | local mapped port           |
+| Daytona          | `BROWSER_BACKEND=daytona` | on-demand Daytona sandbox | a signed HTTPS preview URL  |
+| External Fleet   | `CHROMEFLEET_URL` set     | upstream Chrome Fleet     | the upstream fleet's `/cdp` |
+
+Podman is the default and needs no extra setup. Daytona is an on-demand sandbox provider: install the extra (`uv sync --extra daytona`) and set `DAYTONA_API_KEY` and `DAYTONA_SNAPSHOT`, plus `DAYTONA_API_URL` for a self-hosted Daytona. Setting `CHROMEFLEET_URL` takes precedence and proxies the browser API to an external Chrome Fleet. Because Daytona is reached over a signed HTTPS preview URL rather than a local port, the VNC live view (`/live`, `/websockify`) and the residential-proxy / geo-IP features are podman only.
+
 ## Development
 
 To run the development version, clone this repository and run:

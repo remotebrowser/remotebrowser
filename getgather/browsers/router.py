@@ -10,65 +10,54 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketState
 from loguru import logger
-from starlette.requests import HTTPConnection
 from websockets.exceptions import ConnectionClosed
 
-from getgather.browser import call_chromefleet_api
+from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
 from getgather.cdp_client import PageNotFoundError, open_cdp
-from getgather.config import settings
-from getgather.podman_browsers import (
-    configure_remote_browser,
-    container_exists,
-    container_host,
-    container_is_running,
-    get_cdp_url,
-    get_container_last_activity,
-    get_container_public_ip,
-    get_host_port,
-    kill_container,
-    launch_container,
-    list_containers,
-)
 from getgather.zen_distill import convert, distill, load_distillation_patterns
 
 router = APIRouter()
 
+backend: Backend = create_backend()
+logger.info(f"Using browser backend: {backend.__class__.__name__}")
 
-def _forward_headers(request: HTTPConnection, *names: str) -> dict[str, str]:
-    headers: dict[str, str] = {}
-    for name in names:
-        value = request.headers.get(name)
-        if value:
-            headers[name] = value
-    return headers
+
+def rewrite_ws_url(ws_url: str, cdp_base_url: str) -> str:
+    """Rewrite a CDP webSocketDebuggerUrl to use the cdp_base_url's scheme/host/port.
+
+    Chrome reports webSocketDebuggerUrl against the Host it saw (e.g. ws://localhost:9222/...),
+    which is unreachable when CDP is fronted by a reverse proxy (a Daytona signed preview URL).
+    This points the websocket at the same scheme+host+port we reached CDP on (https -> wss),
+    keeping the path/query. For the local podman backend the host already matches, so it is a no-op.
+    """
+    base = httpx.URL(cdp_base_url)
+    scheme = "wss" if base.scheme == "https" else "ws"
+    return str(httpx.URL(ws_url).copy_with(scheme=scheme, host=base.host, port=base.port))
 
 
 async def get_cdp_websocket_url(browser_id: str) -> str:
-    cdp_url = await get_cdp_url(browser_id)
+    cdp_base_url = await backend.get_cdp_base_url(browser_id)
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(f"{cdp_url}/json/version")
+        response = await client.get(f"{cdp_base_url}/json/version")
         response.raise_for_status()
         data = response.json()
         logger.debug(f"[CDP] CDP json version gives {data}")
-        return str(data["webSocketDebuggerUrl"])
+        return rewrite_ws_url(str(data["webSocketDebuggerUrl"]), cdp_base_url)
 
 
 async def get_page_websocket_url(browser_id: str, page_id: str) -> str | None:
     try:
-        cdp_url = await get_cdp_url(browser_id)
+        cdp_base_url = await backend.get_cdp_base_url(browser_id)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{cdp_url}/json/list")
+            response = await client.get(f"{cdp_base_url}/json/list")
             response.raise_for_status()
             data: list[dict[str, Any]] = response.json()
             for item in data:
                 if item.get("id") == page_id:
-                    return (
-                        str(item["webSocketDebuggerUrl"])
-                        if "webSocketDebuggerUrl" in item
-                        else None
-                    )
+                    ws_url = item.get("webSocketDebuggerUrl")
+                    return rewrite_ws_url(str(ws_url), cdp_base_url) if ws_url else None
             return None
     except Exception as e:
         logger.error(f"[CDP] Error getting page websocket URL for {browser_id}/{page_id}: {e}")
@@ -77,10 +66,10 @@ async def get_page_websocket_url(browser_id: str, page_id: str) -> str | None:
 
 async def get_page_list(browser_id: str) -> list[str]:
     try:
-        cdp_url = await get_cdp_url(browser_id)
+        cdp_base_url = await backend.get_cdp_base_url(browser_id)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{cdp_url}/json/list")
+            response = await client.get(f"{cdp_base_url}/json/list")
             response.raise_for_status()
             data: list[dict[str, Any]] = response.json()
             return [str(item["id"]) for item in data]
@@ -90,9 +79,7 @@ async def get_page_list(browser_id: str) -> list[str]:
 
 
 async def find_browser_id(page_id: str) -> str | None:
-    containers = await list_containers()
-    for container in [c for c in containers if c.startswith("chromium-")]:
-        browser_id = container.replace("chromium-", "")
+    for browser_id in await backend.list_browser_ids():
         page_ids = await get_page_list(browser_id)
         if page_id in page_ids:
             return browser_id
@@ -216,105 +203,54 @@ async def websocket_proxy(client_ws: WebSocket, remote_url: str, browser_id: str
             await client_ws.close(code=4500, reason="Internal proxy error")
 
 
-@router.post("/api/v1/browsers/{browser_id}", response_model=None)
-async def create_browser(
-    browser_id: str, request: HTTPConnection
-) -> dict[str, str | None] | JSONResponse:
-    if settings.CHROMEFLEET_URL:
-        logger.info(f"Proxying create_browser({browser_id}) to external Chrome Fleet")
-        response = await call_chromefleet_api(
-            "POST",
-            browser_id,
-            headers=_forward_headers(request, "x-origin-ip"),
-        )
-        if response is None:
-            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
-        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
-
+@router.post("/api/v1/browsers/{browser_id}")
+async def create_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Starting browser {browser_id}...")
-    container_name = f"chromium-{browser_id}"
     try:
-        await launch_container(settings.CONTAINER_IMAGE, container_name)
-        logger.info(f"Browser {browser_id} is started.")
         origin_ip = request.headers.get("x-origin-ip")
-        ip = await configure_remote_browser(browser_id, container_name, origin_ip)
-        return {"container_name": container_name, "status": "created", "ip": ip}
+        result = await backend.create_browser(browser_id, origin_ip)
+        logger.info(f"Browser {browser_id} is started.")
+        return result
     except Exception as e:
         detail = f"Unable to start browser {browser_id}!"
         logger.error(f"{detail} Exception={e}")
         raise HTTPException(status_code=500, detail=detail)
 
 
-@router.delete("/api/v1/browsers/{browser_id}", response_model=None)
-async def delete_browser(browser_id: str) -> dict[str, str] | JSONResponse:
-    if settings.CHROMEFLEET_URL:
-        logger.info(f"Proxying delete_browser({browser_id}) to external Chrome Fleet")
-        response = await call_chromefleet_api("DELETE", browser_id)
-        if response is None:
-            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
-        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
-
+@router.delete("/api/v1/browsers/{browser_id}")
+async def delete_browser(browser_id: str) -> dict[str, Any]:
     logger.info(f"Stopping browser {browser_id}...")
-    container_name = f"chromium-{browser_id}"
-    if not await container_exists(container_name):
+    if not await backend.browser_exists(browser_id):
         detail = f"Browser {browser_id} not found!"
         logger.warning(detail)
         raise HTTPException(status_code=404, detail=detail)
     try:
-        await kill_container(container_name)
+        result = await backend.delete_browser(browser_id)
         logger.info(f"Browser {browser_id} is stopped.")
-        return {"container_name": container_name, "status": "deleted"}
+        return result
     except Exception as e:
         detail = f"Unable to stop browser {browser_id}!"
         logger.error(f"{detail} Exception={e}")
         raise HTTPException(status_code=500, detail=detail)
 
 
-@router.get("/api/v1/browsers/{browser_id}", response_model=None)
-async def get_browser(
-    browser_id: str, request: Request
-) -> dict[str, float | str | None] | JSONResponse:
-    if settings.CHROMEFLEET_URL:
-        logger.info(f"Proxying get_browser({browser_id}) to external Chrome Fleet")
-        response = await call_chromefleet_api(
-            "GET",
-            browser_id,
-            headers=_forward_headers(request, "x-origin-ip"),
-        )
-        if response is None:
-            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
-        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
-
+@router.get("/api/v1/browsers/{browser_id}")
+async def get_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Querying browser {browser_id}...")
-    container_name = f"chromium-{browser_id}"
-    if not await container_is_running(container_name):
+    origin_ip = request.headers.get("x-origin-ip")
+    try:
+        return await backend.get_browser(browser_id, origin_ip)
+    except BrowserNotFound:
         detail = f"Browser {browser_id} not found!"
         logger.warning(detail)
         raise HTTPException(status_code=404, detail=detail)
-    last_activity_timestamp = await get_container_last_activity(container_name)
-    logger.debug(f"Browser {browser_id}: last_activity_timestamp={last_activity_timestamp}.")
-    origin_ip = request.headers.get("x-origin-ip")
-    if origin_ip:
-        ip = await configure_remote_browser(browser_id, container_name, origin_ip)
-    else:
-        ip = await get_container_public_ip(container_name)
-    return {"last_activity_timestamp": last_activity_timestamp, "ip": ip}
 
 
 @router.get("/api/v1/browsers")
 async def list_browsers() -> JSONResponse:
-    if settings.CHROMEFLEET_URL:
-        logger.info("Proxying list_browsers() to external Chrome Fleet")
-        response = await call_chromefleet_api("GET")
-        if response is None:
-            raise HTTPException(status_code=502, detail="Chrome Fleet request failed")
-        return JSONResponse(content=response.json(), status_code=response.status_code)  # pyright: ignore[reportUnknownArgumentType]
-
     logger.info("Enumerating all browsers...")
     try:
-        containers = await list_containers()
-        all_browsers = [c[len("chromium-") :] for c in containers if c.startswith("chromium-")]
-        return JSONResponse(all_browsers)
+        return JSONResponse(await backend.list_browser_ids())
     except Exception as e:
         detail = "Unable to list all browsers"
         logger.error(f"{detail} Exception={e}")
@@ -392,7 +328,9 @@ async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse:
             current_url = str(await page.evaluate("window.location.href", await_promise=True))
             hostname = urllib.parse.urlparse(current_url).hostname or ""
 
-            path = os.path.join(os.path.dirname(__file__), "mcp", "patterns", "*.html")
+            path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "mcp", "patterns", "*.html"
+            )
             patterns = load_distillation_patterns(path)
             if not patterns:
                 raise HTTPException(status_code=502, detail="No patterns found for '*.html'")
@@ -456,18 +394,18 @@ async def navigate_page(
 @router.websocket("/cdp/{browser_id}")
 async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> None:
     logger.debug(f"[CDP] Entered cdp_browser_websocket_proxy for browser_id={browser_id}")
-    container_name = f"chromium-{browser_id}"
 
     await client_ws.accept()
     logger.debug("[CDP] WebSocket accepted")
 
-    if not await container_exists(container_name):
-        logger.info(f"[CDP] Container {container_name} not found — launching")
+    if not await backend.browser_exists(browser_id):
+        logger.info(f"[CDP] Browser {browser_id} not found — launching")
         try:
-            await create_browser(browser_id, client_ws)
-            logger.info(f"[CDP] Container {container_name} started")
+            origin_ip = client_ws.headers.get("x-origin-ip")
+            await backend.create_browser(browser_id, origin_ip)
+            logger.info(f"[CDP] Browser {browser_id} started")
         except Exception as e:
-            logger.error(f"[CDP] Failed to auto-start container {container_name}: {e}")
+            logger.error(f"[CDP] Failed to auto-start browser {browser_id}: {e}")
             await client_ws.close(code=1008)
             return
 
@@ -571,11 +509,11 @@ async def vnc_live_viewer(browser_id: str) -> HTMLResponse:
 
 @router.websocket("/websockify/{browser_id}")
 async def websockify_proxy(websocket: WebSocket, browser_id: str) -> None:
-    container_name = f"chromium-{browser_id}"
-    vnc_port = await get_host_port(container_name, 5900)
-    if not vnc_port:
+    endpoint = await backend.get_vnc_endpoint(browser_id)
+    if endpoint is None:
         await websocket.close()
         return
+    host, vnc_port = endpoint
 
     client_subprotocol = websocket.headers.get("sec-websocket-protocol")
     if client_subprotocol and "binary" in [p.strip() for p in client_subprotocol.split(",")]:
@@ -584,7 +522,7 @@ async def websockify_proxy(websocket: WebSocket, browser_id: str) -> None:
         await websocket.accept()
 
     try:
-        reader, writer = await asyncio.open_connection(container_host(), vnc_port)
+        reader, writer = await asyncio.open_connection(host, vnc_port)
     except Exception:
         await websocket.close()
         return
