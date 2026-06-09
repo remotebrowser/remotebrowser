@@ -118,3 +118,29 @@ jobs:
             -e DAYTONA_API_KEY=${{ secrets.DAYTONA_API_KEY }}
             -e DAYTONA_API_URL=${{ vars.DAYTONA_API_URL }}
             -e DAYTONA_SNAPSHOT=${{ vars.DAYTONA_SNAPSHOT }}
+
+      - name: Delete the health-check Daytona sandbox
+        # The extended-health check creates a sandbox named after this runner's hostname
+        # (AuthUser.user_id for the noauth user). Runner hostnames repeat across runs, so
+        # without cleanup the next run with the same hostname inherits a stopped sandbox
+        # (auto_stop_interval=15m) until auto_delete removes it ~60 minutes later. Reuses
+        # the image built by the health-check action so the sandbox name and delete path
+        # come from the same production code instead of re-deriving them here.
+        if: ${{ always() }}
+        run: |-
+          docker image inspect getgather >/dev/null 2>&1 || { echo "image not built; nothing to clean up"; exit 0; }
+          docker run --rm -i --network host --entrypoint python \
+            -e BROWSER_BACKEND=daytona \
+            -e DAYTONA_API_KEY=${{ secrets.DAYTONA_API_KEY }} \
+            -e DAYTONA_API_URL=${{ vars.DAYTONA_API_URL }} \
+            -e DAYTONA_SNAPSHOT=${{ vars.DAYTONA_SNAPSHOT }} \
+            getgather - <<'EOF'
+          import asyncio
+
+          from getgather.auth.auth import _get_user_for_no_auth
+          from getgather.browsers.backend import create_backend
+
+          browser_id = _get_user_for_no_auth().user_id
+          result = asyncio.run(create_backend().delete_browser(browser_id))
+          print(f"delete_browser({browser_id}): {result}")
+          EOF
