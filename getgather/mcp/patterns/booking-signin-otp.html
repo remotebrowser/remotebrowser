@@ -12,15 +12,48 @@
         name="otp-1"
         type="text"
         inputmode="numeric"
+        data-testid="otp-0"
         gg-match="input[name='code_0']"
       />
-      <input name="otp-2" type="text" inputmode="numeric" gg-match="input[name='code_1']" />
-      <input name="otp-3" type="text" inputmode="numeric" gg-match="input[name='code_2']" />
-      <input name="otp-4" type="text" inputmode="numeric" gg-match="input[name='code_3']" />
-      <input name="otp-5" type="text" inputmode="numeric" gg-match="input[name='code_4']" />
-      <input name="otp-6" type="text" inputmode="numeric" gg-match="input[name='code_5']" />
+      <input
+        name="otp-2"
+        type="text"
+        inputmode="numeric"
+        data-testid="otp-1"
+        gg-match="input[name='code_1']"
+      />
+      <input
+        name="otp-3"
+        type="text"
+        inputmode="numeric"
+        data-testid="otp-2"
+        gg-match="input[name='code_2']"
+      />
+      <input
+        name="otp-4"
+        type="text"
+        inputmode="numeric"
+        data-testid="otp-3"
+        gg-match="input[name='code_3']"
+      />
+      <input
+        name="otp-5"
+        type="text"
+        inputmode="numeric"
+        data-testid="otp-4"
+        gg-match="input[name='code_4']"
+      />
+      <input
+        name="otp-6"
+        type="text"
+        inputmode="numeric"
+        data-testid="otp-5"
+        gg-match="input[name='code_5']"
+      />
     </div>
-    <button type="submit" gg-match="form button[type='submit']">Verify email</button>
+    <button type="submit" data-testid="submit" gg-match="form button[type='submit']">
+      Verify email
+    </button>
 
     <style>
       .otp-container {

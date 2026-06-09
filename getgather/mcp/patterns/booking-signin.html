@@ -9,8 +9,11 @@
       placeholder="Email"
       name="email"
       type="email"
+      data-testid="email"
       gg-match="div:not(.app--loading) form input#username"
     />
-    <button type="submit" gg-match="form button[type='submit'] span">Continue</button>
+    <button type="submit" data-testid="submit" gg-match="form button[type='submit'] span">
+      Continue
+    </button>
   </body>
 </html>

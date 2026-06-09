@@ -7,15 +7,19 @@
     <input
       type="email"
       name="email"
+      data-testid="email"
       gg-match="input#ExistingAccount_EmailAddress"
       placeholder="Email Address"
     />
     <input
       type="password"
       name="password"
+      data-testid="password"
       gg-match="input#ExistingAccount_Password"
       placeholder="Password"
     />
-    <button type="submit" gg-match="div.LoginBox-submitArea input.Button">Log In</button>
+    <button type="submit" data-testid="submit" gg-match="div.LoginBox-submitArea input.Button">
+      Log In
+    </button>
   </body>
 </html>

@@ -5,8 +5,19 @@
   <body>
     <p gg-optional gg-match="div#email--error"></p>
     <p gg-optional gg-match="p._error_tbedu_60"></p>
-    <input autofocus name="email" type="email" gg-match="input#email" placeholder="Email Address" />
-    <button type="submit" gg-match="button#two-step-form-button:not([disabled]) span">
+    <input
+      autofocus
+      name="email"
+      type="email"
+      data-testid="email"
+      gg-match="input#email"
+      placeholder="Email Address"
+    />
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button#two-step-form-button:not([disabled]) span"
+    >
       Continue
     </button>
   </body>

@@ -6,7 +6,13 @@
     <h2 gg-match="//button/span[contains(text(), 'Register')]"></h2>
     <p>You do not have an account with this email, please try again with a different email.</p>
     <input name="none" style="display: none" />
-    <button type="submit" name="button" value="back" gg-match="//button[contains(text(), 'Back')]">
+    <button
+      type="submit"
+      name="button"
+      value="back"
+      data-testid="submit"
+      gg-match="//button[contains(text(), 'Back')]"
+    >
       Back
     </button>
   </body>

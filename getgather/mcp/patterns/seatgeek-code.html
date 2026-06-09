@@ -13,40 +13,50 @@
           name="otp-1"
           type="text"
           inputmode="numeric"
+          data-testid="otp-0"
           gg-match="input[aria-label='6-digit code digit 1']"
         />
         <input
           name="otp-2"
           type="text"
           inputmode="numeric"
+          data-testid="otp-1"
           gg-match="input[aria-label='6-digit code digit 2']"
         />
         <input
           name="otp-3"
           type="text"
           inputmode="numeric"
+          data-testid="otp-2"
           gg-match="input[aria-label='6-digit code digit 3']"
         />
         <input
           name="otp-4"
           type="text"
           inputmode="numeric"
+          data-testid="otp-3"
           gg-match="input[aria-label='6-digit code digit 4']"
         />
         <input
           name="otp-5"
           type="text"
           inputmode="numeric"
+          data-testid="otp-4"
           gg-match="input[aria-label='6-digit code digit 5']"
         />
         <input
           name="otp-6"
           type="text"
           inputmode="numeric"
+          data-testid="otp-5"
           gg-match="input[aria-label='6-digit code digit 6']"
         />
       </div>
-      <button type="submit" gg-match="//button/span/span[contains(text(), 'Confirm')]">
+      <button
+        type="submit"
+        data-testid="submit"
+        gg-match="//button/span/span[contains(text(), 'Confirm')]"
+      >
         Confirm
       </button>
     </div>

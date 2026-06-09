@@ -9,8 +9,15 @@
       type="tel"
       name="phone"
       placeholder="+1234567890"
+      data-testid="phone"
       gg-match="//input[@id='phoneNumberId']"
     />
-    <button type="submit" gg-match="//div[@id='idvanyphonecollectNext']//button">Next</button>
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="//div[@id='idvanyphonecollectNext']//button"
+    >
+      Next
+    </button>
   </body>
 </html>

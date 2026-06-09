@@ -8,10 +8,13 @@
       autofocus
       name="totpPin"
       type="tel"
+      data-testid="otp"
       gg-match="input[name='totpPin']"
       placeholder="Enter code"
       aria-label="Enter code"
     />
-    <button type="submit" gg-match="#totpNext button:not([disabled])">Next</button>
+    <button type="submit" data-testid="submit" gg-match="#totpNext button:not([disabled])">
+      Next
+    </button>
   </body>
 </html>

@@ -4,9 +4,17 @@
   </head>
   <body>
     <div>
-      <input autofocus placeholder="Email" type="text" name="email" gg-match="input#username" />
+      <input
+        autofocus
+        placeholder="Email"
+        type="text"
+        name="email"
+        data-testid="email"
+        gg-match="input#username"
+      />
       <button
         type="submit"
+        data-testid="submit"
         gg-match="//form//button[@type='submit' and contains(text(), 'Continue')]"
       >
         Continue

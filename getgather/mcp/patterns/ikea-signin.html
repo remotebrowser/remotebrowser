@@ -9,10 +9,12 @@
       name="email"
       type="email"
       placeholder="Email"
+      data-testid="email"
       gg-match="//input[@id='email' or @id='passwordless-primary-login-form-username']"
     />
     <button
       type="submit"
+      data-testid="submit"
       gg-match="//button[@type='submit' and contains(., 'Continue') and not(.//span[contains(@class, 'btn__loader')])]"
     >
       Continue

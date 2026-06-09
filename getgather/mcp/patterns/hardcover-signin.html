@@ -10,15 +10,21 @@
         placeholder="Email"
         name="email"
         type="email"
+        data-testid="email"
         gg-match="form input[type='email']"
       />
       <input
         placeholder="Password"
         name="password"
         type="password"
+        data-testid="password"
         gg-match="form input[type='password']"
       />
-      <button type="submit" gg-match="//form//button[@type='submit' and not(.//svg)]">
+      <button
+        type="submit"
+        data-testid="submit"
+        gg-match="//form//button[@type='submit' and not(.//svg)]"
+      >
         Sign in
       </button>
     </div>

@@ -18,8 +18,15 @@
       name="email"
       type="text"
       placeholder="Phone number or email (required)"
+      data-testid="email"
       gg-match="input[aria-label='Phone number or email (required)']"
     />
-    <button type="submit" gg-match="button#login-continue-button:not([disabled])">Continue</button>
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button#login-continue-button:not([disabled])"
+    >
+      Continue
+    </button>
   </body>
 </html>

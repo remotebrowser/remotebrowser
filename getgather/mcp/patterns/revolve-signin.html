@@ -4,13 +4,23 @@
   </head>
   <body>
     <div gg-optional gg-match="div#login_error_message"></div>
-    <input autofocus placeholder="Email" type="email" name="email" gg-match="input#emailCustomer" />
+    <input
+      autofocus
+      placeholder="Email"
+      type="email"
+      name="email"
+      data-testid="email"
+      gg-match="input#emailCustomer"
+    />
     <input
       placeholder="Password"
       type="password"
       name="password"
+      data-testid="password"
       gg-match="input#passwordCustomer"
     />
-    <button type="submit" gg-match="input#signInButton:not([disabled])">Sign in</button>
+    <button type="submit" data-testid="submit" gg-match="input#signInButton:not([disabled])">
+      Sign in
+    </button>
   </body>
 </html>

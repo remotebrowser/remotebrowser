@@ -30,6 +30,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-0"
         gg-match="form#otc-submit-form input[type=number][aria-label='0']"
         value="0"
       />
@@ -40,6 +41,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-1"
         gg-match="form#otc-submit-form input[type=number][aria-label='1']"
         value="0"
       />
@@ -50,6 +52,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-2"
         gg-match="form#otc-submit-form input[type=number][aria-label='2']"
         value="0"
       />
@@ -60,6 +63,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-3"
         gg-match="form#otc-submit-form input[type=number][aria-label='3']"
         value="0"
       />
@@ -70,6 +74,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-4"
         gg-match="form#otc-submit-form input[type=number][aria-label='4']"
         value="0"
       />
@@ -80,6 +85,7 @@
         inputmode="numeric"
         pattern="[0-9]"
         maxlength="1"
+        data-testid="otp-5"
         gg-match="form#otc-submit-form input[type=number][aria-label='5']"
         value="0"
       />
@@ -115,6 +121,6 @@
       gg-optional
       gg-match="form#otc-submit-form span:nth-child(5)"
     />
-    <button type="submit" gg-match="button#otc-submit-button">Sign in</button>
+    <button type="submit" data-testid="submit" gg-match="button#otc-submit-button">Sign in</button>
   </body>
 </html>

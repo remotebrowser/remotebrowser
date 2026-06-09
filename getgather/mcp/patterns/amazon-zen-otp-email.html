@@ -7,8 +7,19 @@
     <span gg-optional gg-match="div#verifyFailureAlerts"></span>
     <h2 gg-match="//h2[contains(., 'Enter verification code')]">Enter verification code</h2>
     <span gg-optional gg-match="//span[contains(., 'your email')]"></span>
-    <input autofocus name="otp" type="tel" placeholder="OTP" gg-match="input#input-box-otp" />
-    <button type="submit" gg-match="span#cvf-submit-otp-button input[type=submit]">
+    <input
+      autofocus
+      name="otp"
+      type="tel"
+      placeholder="OTP"
+      data-testid="otp"
+      gg-match="input#input-box-otp"
+    />
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="span#cvf-submit-otp-button input[type=submit]"
+    >
       Submit code
     </button>
   </body>

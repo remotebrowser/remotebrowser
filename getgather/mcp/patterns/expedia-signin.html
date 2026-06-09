@@ -9,8 +9,15 @@
       placeholder="Email"
       type="text"
       name="loginFormEmailInput"
+      data-testid="email"
       gg-match="input#loginFormEmailInput"
     />
-    <button type="submit" gg-match="button#loginFormSubmitButton:not([disabled])">Continue</button>
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button#loginFormSubmitButton:not([disabled])"
+    >
+      Continue
+    </button>
   </body>
 </html>

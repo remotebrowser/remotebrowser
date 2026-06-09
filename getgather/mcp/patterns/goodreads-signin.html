@@ -4,8 +4,21 @@
   </head>
   <body>
     <p gg-optional gg-match="div[aria-live] .a-alert-content"></p>
-    <input autofocus name="email" type="email" placeholder="Email" gg-match="input[type=email]" />
-    <input name="password" type="password" placeholder="Password" gg-match="input[type=password]" />
+    <input
+      autofocus
+      name="email"
+      type="email"
+      placeholder="Email"
+      data-testid="email"
+      gg-match="input[type=email]"
+    />
+    <input
+      name="password"
+      type="password"
+      placeholder="Password"
+      data-testid="password"
+      gg-match="input[type=password]"
+    />
     <input
       name="remember"
       type="checkbox"
@@ -13,6 +26,6 @@
       gg-match="input[name=rememberMe]"
       style="display: none"
     />
-    <button type="submit" gg-match="input[type=submit]">Sign in</button>
+    <button type="submit" data-testid="submit" gg-match="input[type=submit]">Sign in</button>
   </body>
 </html>

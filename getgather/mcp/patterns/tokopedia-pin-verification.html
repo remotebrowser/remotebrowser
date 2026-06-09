@@ -13,10 +13,11 @@
     <input
       name="pin"
       type="tel"
+      data-testid="otp"
       gg-match="input[type=tel][maxlength='6'][aria-label='pin input']"
       placeholder="PIN"
     />
     <span gg-optional gg-match="span[aria-label='forgot pin']"></span>
-    <button type="submit">Submit</button>
+    <button type="submit" data-testid="submit">Submit</button>
   </body>
 </html>

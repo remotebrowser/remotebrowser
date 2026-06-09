@@ -11,16 +11,18 @@
     <p gg-optional gg-match="adc-inline-notification[role='alert'][kind='error']"></p>
     <input
       type="text"
+      data-testid="email"
       gg-match="adc-text-input[name='username']"
       placeholder="AAdvantage® # or username"
       name="username"
     />
     <input
       type="password"
+      data-testid="password"
       gg-match="adc-text-input[name='password']"
       placeholder="Password"
       name="password"
     />
-    <button type="submit" gg-match="div.loginButton adc-button">Log in</button>
+    <button type="submit" data-testid="submit" gg-match="div.loginButton adc-button">Log in</button>
   </body>
 </html>

@@ -6,9 +6,12 @@
     <input
       name="email"
       type="email"
+      data-testid="email"
       gg-match="input[label='Email']"
       placeholder="Email or phone number"
     />
-    <button gg-match="button[aria-label='Continue']" type="submit">Continue</button>
+    <button data-testid="submit" gg-match="button[aria-label='Continue']" type="submit">
+      Continue
+    </button>
   </body>
 </html>

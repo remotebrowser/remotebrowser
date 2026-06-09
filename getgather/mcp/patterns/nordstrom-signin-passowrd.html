@@ -7,10 +7,15 @@
       autofocus
       name="password"
       type="password"
+      data-testid="password"
       gg-match="form#sign-in input[name='password']"
       placeholder="Password"
     />
-    <button type="submit" gg-match="//button[@alt='sign in button' and contains(., 'Sign In')]">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="//button[@alt='sign in button' and contains(., 'Sign In')]"
+    >
       Sign In
     </button>
   </body>

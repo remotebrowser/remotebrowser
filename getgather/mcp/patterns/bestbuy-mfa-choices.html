@@ -11,6 +11,7 @@
           type="radio"
           name="signin-option-radio"
           id="password-radio"
+          data-testid="signin-method-password"
           gg-match="input#password-radio"
           value="password-radio"
           checked
@@ -23,6 +24,7 @@
           type="radio"
           name="signin-option-radio"
           id="email-code-radio"
+          data-testid="signin-method-email"
           gg-match="input#email-code-radio"
           value="email-code-radio"
         />
@@ -36,12 +38,13 @@
           type="radio"
           name="signin-option-radio"
           id="sms-radio"
+          data-testid="signin-method-sms"
           gg-match="input#sms-radio"
           value="sms-radio"
         />
         <label gg-optional for="sms-radio" gg-match="label[for=sms-radio]">Use email link</label>
       </div>
     </div>
-    <button type="submit" gg-match="button[type=submit]">Continue</button>
+    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Continue</button>
   </body>
 </html>

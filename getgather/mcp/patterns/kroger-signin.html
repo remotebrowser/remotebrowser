@@ -11,15 +11,21 @@
       name="email"
       type="email"
       placeholder="Email"
+      data-testid="email"
       gg-match="form#attributeVerification input#signInName"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
+      data-testid="password"
       gg-match="form#attributeVerification input#password"
     />
-    <button type="submit" gg-match="form#attributeVerification button#continue:not([disabled])">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="form#attributeVerification button#continue:not([disabled])"
+    >
       Sign in
     </button>
   </body>

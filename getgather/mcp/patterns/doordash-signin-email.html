@@ -8,9 +8,12 @@
       name="email"
       type="email"
       placeholder="Email"
+      data-testid="email"
       gg-match="form#login-form-guided-email input[type=email]"
     />
-    <button type="submit" gg-match="button#guided-submit-button">Continue to sign in</button>
+    <button type="submit" data-testid="submit" gg-match="button#guided-submit-button">
+      Continue to sign in
+    </button>
     <p
       id="error"
       style="color: red"

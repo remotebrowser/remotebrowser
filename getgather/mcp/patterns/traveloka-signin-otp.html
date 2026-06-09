@@ -4,7 +4,13 @@
   </head>
   <body>
     <div gg-match="//h1[contains(text(), 'Input Verification Code')]"></div>
-    <input name="otp" type="tel" gg-match="input[inputmode=decimal]" placeholder="OTP" />
-    <button type="submit">Submit</button>
+    <input
+      name="otp"
+      type="tel"
+      data-testid="otp"
+      gg-match="input[inputmode=decimal]"
+      placeholder="OTP"
+    />
+    <button type="submit" data-testid="submit">Submit</button>
   </body>
 </html>

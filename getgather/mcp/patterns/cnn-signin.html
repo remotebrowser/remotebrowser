@@ -8,14 +8,22 @@
       name="loginEmail"
       type="email"
       placeholder="Email"
+      data-testid="email"
       gg-match="input#login-email-input"
     />
     <input
       name="loginPassword"
       type="password"
       placeholder="Password"
+      data-testid="password"
       gg-match="input#login-password-input"
     />
-    <button type="submit" gg-match="button[type=submit]:not([aria-disabled=true])">Sign in</button>
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button[type=submit]:not([aria-disabled=true])"
+    >
+      Sign in
+    </button>
   </body>
 </html>

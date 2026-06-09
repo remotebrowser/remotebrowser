@@ -10,10 +10,12 @@
         placeholder="8-digit code"
         type="text"
         name="otp"
+        data-testid="otp"
         gg-match="input#send-code"
       />
       <button
         type="submit"
+        data-testid="submit"
         gg-match="//form//button[@type='submit' and contains(text(), 'Sign In')]"
       >
         Continue

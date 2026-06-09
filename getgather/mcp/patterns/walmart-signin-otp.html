@@ -32,6 +32,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-0"
         gg-match="input#input-verificationCode"
       />
       <input
@@ -48,6 +49,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-1"
         gg-match="input#input-verificationCode-1"
       />
       <input
@@ -64,6 +66,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-2"
         gg-match="input#input-verificationCode-2"
       />
       <input
@@ -80,6 +83,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-3"
         gg-match="input#input-verificationCode-3"
       />
       <input
@@ -96,6 +100,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-4"
         gg-match="input#input-verificationCode-4"
       />
       <input
@@ -112,6 +117,7 @@
           font-size: 1.5rem;
           font-weight: bold;
         "
+        data-testid="otp-5"
         gg-match="input#input-verificationCode-5"
       />
     </div>
@@ -161,7 +167,11 @@
         if (e.target.value && inputs[i + 1]) inputs[i + 1].focus();
       });
     </script>
-    <button type="submit" gg-match="button[type='submit'][form$='-otp-form']:not([disabled])">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button[type='submit'][form$='-otp-form']:not([disabled])"
+    >
       Sign in
     </button>
   </body>
