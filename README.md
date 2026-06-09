@@ -131,6 +131,16 @@ _Example_: `curl localhost:23456/api/v1/browsers/test/pages` returns:
 
 _Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/html`
 
+### Navigate a page
+
+`POST` or `GET /api/v1/browsers/{browser_id}/pages/{page_id}/navigate` navigates the specified page to a URL taken from the request's query string. The `url` query parameter is preferred if present; otherwise the entire raw query string is used as the URL. Returns HTTP 400 if no URL is provided, HTTP 404 if the browser or page is not found, and HTTP 502 if the navigation fails.
+
+_Example_: `curl -X POST 'localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/navigate?url=https://text.npr.org/'` returns:
+
+```json
+{ "status": "success" }
+```
+
 ### Get distilled page JSON
 
 `GET /api/v1/browsers/{browser_id}/pages/{page_id}/distilled` returns the distilled JSON representation of the specified page, produced by matching the page against distillation patterns. Returns HTTP 404 if the browser or page is not found.

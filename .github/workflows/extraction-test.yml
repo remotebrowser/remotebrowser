@@ -1,0 +1,51 @@
+name: Extraction Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  extraction-tests-uv:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Prepare back-end environment
+        uses: ./.github/actions/prepare-backend
+
+      - run: uv run -m uvicorn getgather.main:app --port 23456 &
+
+      - name: Run the health check validation
+        run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
+        timeout-minutes: 3
+
+      - name: Run the extraction tests
+        run: uv run pytest -v -s tests/test_extractions.py
+
+  extraction-tests-wheel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Prepare back-end environment
+        uses: ./.github/actions/prepare-backend
+
+      - run: uvx hatch build
+
+      - name: List the wheel contents
+        run: unzip -l dist/*.whl
+
+      - name: Execute the wheel
+        run: uvx ./dist/*.whl &
+
+      - name: Run the health check validation
+        run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
+        timeout-minutes: 3
+
+      - name: Run the extraction tests
+        run: uv run pytest -v -s tests/test_extractions.py
