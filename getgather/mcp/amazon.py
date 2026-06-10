@@ -859,6 +859,7 @@ async def remote_get_purchase_history_with_details(
                             const productNames = [];
                             const productUrls = [];
                             const imageUrls = [];
+                            const quantities = [];
 
                             itemRows.forEach(row => {{
                                 const productLink = row.querySelector('div.a-column.a-span10 > a.a-size-small.a-link-normal');
@@ -878,6 +879,11 @@ async def remote_get_purchase_history_with_details(
                                     prices.push(priceSpan.textContent?.trim() || '');
                                 }}
 
+                                const quantitySpan = row.querySelector('div.a-column.a-span10 > div.a-spacing-none:nth-of-type(2) > span.a-size-small');
+                                if (quantitySpan) {{
+                                    quantities.push(quantitySpan.textContent?.replace("Qty: ", "")?.trim() || '');
+                                }}
+
                                 const img = row.querySelector('img.ufpo-itemListWidget-image');
                                 if (img) {{
                                     const src = img.getAttribute('src') || img.getAttribute('data-a-hires');
@@ -895,7 +901,8 @@ async def remote_get_purchase_history_with_details(
                                 productNames,
                                 productUrls,
                                 imageUrls,
-                                paymentInfo
+                                paymentInfo,
+                                quantities
                             }};
                         }})()
                     """
@@ -919,11 +926,17 @@ async def remote_get_purchase_history_with_details(
                             const productNames = [];
                             const productUrls = [];
                             const imageUrls = [];
+                            const quantities = []
 
                             itemRows.forEach(row => {{
                                 const priceSpan = row.querySelector('span[id$="-item-total-price"]');
                                 if (priceSpan) {{
                                     prices.push(priceSpan.textContent?.trim() || '');
+                                }}
+
+                                const quantitySpan = row.querySelector('div.a-span-last div.a-grid-vertical-align div.a-text-center');
+                                if (quantitySpan) {{
+                                    quantities.push(quantitySpan.textContent?.trim() || '');
                                 }}
 
                                 const productLink = row.querySelector('a.a-link-normal.a-text-normal');
@@ -965,7 +978,8 @@ async def remote_get_purchase_history_with_details(
                                 productUrls,
                                 imageUrls,
                                 paymentInfo,
-                                paymentInfoDetail
+                                paymentInfoDetail,
+                                quantities
                             }};
                         }})()
                     """
@@ -988,6 +1002,10 @@ async def remote_get_purchase_history_with_details(
                             const prices = Array.from(rows)
                                 .map(row => row.querySelector("span.a-price span.a-offscreen")?.textContent?.trim())
                                 .filter(Boolean);
+                            const quantities = Array.from(rows)
+                                .map(row => row.querySelector("div[data-component='itemImage']"))
+                                .filter(Boolean)
+                                .map(row => row?.querySelector("div[class='od-item-view-qty']")?.textContent?.trim() || "1");
                                 
                             const paymentElement = doc.querySelector("div.pmts-payment-instrument-billing-address");
                             const paymentInfoElements = Array.from(doc.querySelectorAll("span.pmts-payments-instrument-detail-box-paystationpaymentmethod"));
@@ -1027,6 +1045,7 @@ async def remote_get_purchase_history_with_details(
                                 paymentInfoDetail,
                                 paymentGiftCardAmount,
                                 paymentMethod,
+                                quantities
                             }};
                         }})()
                     """
@@ -1055,6 +1074,8 @@ async def remote_get_purchase_history_with_details(
                     continue
                 if details.get("prices") is not None:
                     order["product_prices"] = details["prices"]
+                if details.get("quantities") is not None:
+                    order["quantities"] = details["quantities"]
                 # For Fresh/Whole Foods orders, replace product information with the complete details
                 if order.get("store_logo") and details.get("productNames"):
                     order["product_names"] = details["productNames"]
