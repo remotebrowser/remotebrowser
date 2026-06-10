@@ -7,6 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Secrets can't be referenced in a job-level `if`, so we emit a flag as a job output and use it
+  # in the daytona job's `if` condition via the needs context.
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      run_daytona: ${{ steps.check.outputs.run_daytona }}
+    steps:
+      - name: Check Daytona API key
+        id: check
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        run: |
+          if [ -n "$DAYTONA_API_KEY" ]; then
+            echo 'run_daytona=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run_daytona=false' >> "$GITHUB_OUTPUT"
+          fi
+
   built-in:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -81,6 +99,8 @@ jobs:
             -e CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS=120
 
   daytona:
+    needs: setup
+    if: ${{ needs.setup.outputs.run_daytona == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
