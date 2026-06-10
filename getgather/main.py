@@ -18,9 +18,10 @@ from getgather.auth.auth import setup_mcp_auth
 from getgather.browsers.router import backend, router as browsers_router
 from getgather.config import PROJECT_DIR, settings
 from getgather.logs import MCPLoggingContextMiddleware
-from getgather.mcp.dpage import remote_zen_dpage_mcp_tool, router as dpage_router
+from getgather.mcp.dpage import router as dpage_router
 from getgather.mcp.main import MCPDoc, create_mcp_apps, mcp_app_docs
 from getgather.tracing import MCPSessionTraceMiddleware, instrument_fastapi
+from getgather.zen_distill import short_lived_mcp_tool
 
 # Create MCP apps once and reuse for lifespan and mounting
 mcp_apps = create_mcp_apps()
@@ -80,8 +81,15 @@ def health():
 @app.get("/extended-health")
 async def extended_health():
     try:
-        result = await remote_zen_dpage_mcp_tool(
-            initial_url="https://ip.fly.dev/ip", result_key="ip_address", timeout=3
+        # A fresh short-lived browser per probe, terminated when done: the probe never touches
+        # the shared noauth browser (which holds real sessions in noauth deployments) and leaves
+        # no sandbox behind for a later run on the same hostname to inherit.
+        _, result = await short_lived_mcp_tool(
+            location="https://ip.fly.dev/ip",
+            pattern_wildcard="ip-fly.html",
+            result_key="ip_address",
+            url_hostname="ip.fly.dev",
+            timeout=3,
         )
         ip_text = str(result.get("ip_address", "Unknown"))[:100]
         ip_list = ast.literal_eval(ip_text)

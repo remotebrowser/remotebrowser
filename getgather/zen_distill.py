@@ -609,15 +609,18 @@ async def short_lived_mcp_tool(
     pattern_wildcard: str,
     result_key: str,
     url_hostname: str,
+    timeout: int = 15,
 ) -> tuple[bool, dict[str, Any]]:
     browser = await create_remote_browser(browser_id=generate(FRIENDLY_CHARS, 6))
 
     path = os.path.join(os.path.dirname(__file__), "mcp", "patterns", pattern_wildcard)
     patterns = load_distillation_patterns(path)
-    terminated, distilled, converted = await run_distillation_loop(
-        location=location, patterns=patterns, browser=browser
-    )
-    await terminate_remote_browser(browser)
+    try:
+        terminated, distilled, converted = await run_distillation_loop(
+            location=location, patterns=patterns, browser=browser, timeout=timeout
+        )
+    finally:
+        await terminate_remote_browser(browser)
 
     result: dict[str, Any] = {result_key: converted if converted else distilled}
     if result_key in result:
