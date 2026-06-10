@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: true
+      daytona:
+        description: Deploy remotebrowser-daytona
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   prepare-matrix:
@@ -26,11 +31,13 @@ jobs:
         uses: remotebrowser/shared-github-actions/prepare-matrix@v1
         with:
           entries: |
-            { "env": "demo", "config": "demo", "app_name": "remotebrowser"     }
-            { "env": "dev",  "config": "dev",  "app_name": "remotebrowser-dev" }
+            { "env": "demo",    "config": "demo",    "app_name": "remotebrowser"     }
+            { "env": "dev",     "config": "dev",     "app_name": "remotebrowser-dev" }
+            { "env": "daytona", "config": "daytona", "app_name": "remotebrowser-daytona" }
           selections: |
-            ${{ inputs.demo && 'demo' || '' }}
-            ${{ inputs.dev  && 'dev'  || '' }}
+            ${{ inputs.demo    && 'demo'    || '' }}
+            ${{ inputs.dev     && 'dev'     || '' }}
+            ${{ inputs.daytona && 'daytona' || '' }}
           key-field: env
 
   deploy:
@@ -51,3 +58,4 @@ jobs:
           doppler-project: remotebrowser
           doppler-config: ${{ matrix.config }}
           app-name: ${{ matrix.app_name }}
+          build-args: ${{ matrix.env == 'daytona' && 'BROWSER_BACKEND=daytona' || '' }}
