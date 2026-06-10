@@ -9,14 +9,16 @@
       name="email"
       type="email"
       placeholder="Email"
+      data-testid="username"
       gg-match="input[name='userLoginId']"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
+      data-testid="password"
       gg-match="input[name='password']"
     />
-    <button type="submit" gg-match="button[type='submit']">Sign in</button>
+    <button type="submit" data-testid="submit" gg-match="button[type='submit']">Sign in</button>
   </body>
 </html>

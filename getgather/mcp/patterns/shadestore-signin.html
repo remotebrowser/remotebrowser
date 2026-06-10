@@ -9,10 +9,17 @@
     <input
       type="text"
       name="username"
+      data-testid="username"
       gg-match="input#login_username"
       placeholder="Email Address"
     />
-    <input type="password" name="password" gg-match="input#login_password" placeholder="Password" />
-    <button type="submit" gg-match="input#login">Login to My Account</button>
+    <input
+      type="password"
+      name="password"
+      data-testid="password"
+      gg-match="input#login_password"
+      placeholder="Password"
+    />
+    <button type="submit" data-testid="submit" gg-match="input#login">Login to My Account</button>
   </body>
 </html>

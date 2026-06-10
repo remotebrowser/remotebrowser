@@ -9,9 +9,14 @@
       type="text"
       name="code"
       autofocus
+      data-testid="otp"
       gg-match="input#verify-sms-one-time-passcode-input"
     />
-    <button type="submit" gg-match="button#verifyOtpFormSubmitButton:not([disabled])">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button#verifyOtpFormSubmitButton:not([disabled])"
+    >
       Continue
     </button>
   </body>

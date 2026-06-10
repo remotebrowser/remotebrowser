@@ -9,12 +9,14 @@
     <input
       type="text"
       name="username"
+      data-testid="username"
       gg-match="div#modal-root input#signin_username"
       placeholder="Email Address"
     />
     <input
       type="password"
       name="password"
+      data-testid="password"
       gg-match="div#modal-root input#signin_password"
       placeholder="Password"
     />
@@ -25,7 +27,11 @@
       gg-match="div#modal-root input#signin_ssi"
       style="display: none"
     />
-    <button type="submit" gg-match="div#modal-root button[data-at='sign_in_button']">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="div#modal-root button[data-at='sign_in_button']"
+    >
       Sign In
     </button>
   </body>

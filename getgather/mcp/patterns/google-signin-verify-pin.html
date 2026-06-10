@@ -8,8 +8,15 @@
       type="tel"
       name="pin"
       placeholder="Enter code"
+      data-testid="otp"
       gg-match="//input[@id='idvAnyPhonePin']"
     />
-    <button type="submit" gg-match="//div[@id='idvanyphoneverifyNext']//button">Next</button>
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="//div[@id='idvanyphoneverifyNext']//button"
+    >
+      Next
+    </button>
   </body>
 </html>

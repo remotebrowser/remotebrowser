@@ -8,15 +8,19 @@
     <input
       name="email"
       type="text"
+      data-testid="username"
       gg-match="div#login-container div.iweb-input-container input[type='text']"
       placeholder="Please enter your Phone or Email"
     />
     <input
       name="password"
       type="password"
+      data-testid="password"
       gg-match="div#login-container div.iweb-input-container input[type='password']"
       placeholder="Password"
     />
-    <button type="submit" gg-match="div#login-container button[type='button']">Login</button>
+    <button type="submit" data-testid="submit" gg-match="div#login-container button[type='button']">
+      Login
+    </button>
   </body>
 </html>

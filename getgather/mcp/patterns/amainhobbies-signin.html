@@ -8,10 +8,17 @@
       autofocus
       name="email"
       type="text"
+      data-testid="email"
       gg-match="input#EmailAddress"
       placeholder="Email Address"
     />
-    <input name="password" type="password" gg-match="input#Password" placeholder="Password" />
-    <button type="submit" gg-match="div.submit button">Login</button>
+    <input
+      name="password"
+      type="password"
+      data-testid="password"
+      gg-match="input#Password"
+      placeholder="Password"
+    />
+    <button type="submit" data-testid="submit" gg-match="div.submit button">Login</button>
   </body>
 </html>

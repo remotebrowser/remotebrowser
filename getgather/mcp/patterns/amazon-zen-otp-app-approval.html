@@ -5,7 +5,20 @@
   <body>
     <span gg-optional gg-match="div#verifyAlerts"></span>
     <span gg-match="//span[contains(., 'Open your Amazon shopping app')]"></span>
-    <input autofocus name="otpCode" type="tel" placeholder="OTP" gg-match="input#input-box-otp" />
-    <button type="submit" gg-match="span#cvf-submit-otp-button input[type=submit]">Verify</button>
+    <input
+      autofocus
+      name="otpCode"
+      type="tel"
+      placeholder="OTP"
+      data-testid="otp"
+      gg-match="input#input-box-otp"
+    />
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="span#cvf-submit-otp-button input[type=submit]"
+    >
+      Verify
+    </button>
   </body>
 </html>

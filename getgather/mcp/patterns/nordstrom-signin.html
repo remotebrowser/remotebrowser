@@ -3,9 +3,17 @@
     <title>Sign In to Nordstrom</title>
   </head>
   <body>
-    <input autofocus name="email" type="text" gg-match="input[name='email']" placeholder="Email" />
+    <input
+      autofocus
+      name="email"
+      type="text"
+      data-testid="email"
+      gg-match="input[name='email']"
+      placeholder="Email"
+    />
     <button
       type="submit"
+      data-testid="submit"
       gg-match="//button[@id='account-check-next-button' and contains(., 'Next')]"
     >
       Next

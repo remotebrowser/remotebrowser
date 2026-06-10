@@ -11,8 +11,11 @@
       name="code"
       type="text"
       maxlength="5"
+      data-testid="otp"
       gg-match="div.code-input input[maxlength='5']"
     />
-    <button type="submit" gg-match="div.sui-dialog__body button.confirm-btn">SUBMIT</button>
+    <button type="submit" data-testid="submit" gg-match="div.sui-dialog__body button.confirm-btn">
+      SUBMIT
+    </button>
   </body>
 </html>

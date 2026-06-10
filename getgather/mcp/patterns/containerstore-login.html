@@ -1,9 +1,26 @@
 <html gg-domain="containerstore" priority="2">
   <body>
     <p gg-optional gg-match="div.error"></p>
-    <input autofocus name="email" type="email" gg-match="input#signInName" placeholder="Email" />
-    <input name="password" type="password" gg-match="input#password" placeholder="Password" />
-    <button type="submit" gg-match="//button[@id='next' and contains(text(), 'Sign in')]">
+    <input
+      autofocus
+      name="email"
+      type="email"
+      data-testid="username"
+      gg-match="input#signInName"
+      placeholder="Email"
+    />
+    <input
+      name="password"
+      type="password"
+      data-testid="password"
+      gg-match="input#password"
+      placeholder="Password"
+    />
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="//button[@id='next' and contains(text(), 'Sign in')]"
+    >
       Sign in
     </button>
   </body>

@@ -3,7 +3,14 @@
     <title>Best Buy Sign In</title>
   </head>
   <body>
-    <input autofocus name="email" type="email" placeholder="Email" gg-match="input[type=email]" />
-    <button type="submit" gg-match="button[type=submit]">Continue</button>
+    <input
+      autofocus
+      name="email"
+      type="email"
+      placeholder="Email"
+      data-testid="email"
+      gg-match="input[type=email]"
+    />
+    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Continue</button>
   </body>
 </html>

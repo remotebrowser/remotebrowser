@@ -10,8 +10,11 @@
       name="email"
       type="email"
       placeholder="Email or mobile phone number"
+      data-testid="email"
       gg-match="input#ap_email_login"
     />
-    <button type="submit" gg-match="span#continue input[type=submit]">Continue</button>
+    <button type="submit" data-testid="submit" gg-match="span#continue input[type=submit]">
+      Continue
+    </button>
   </body>
 </html>

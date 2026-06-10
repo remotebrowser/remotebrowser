@@ -5,8 +5,20 @@
   <body>
     <h2 gg-optional gg-match=".sparky-c-alert--error h2"></h2>
     <div gg-optional gg-match=".sparky-c-alert--error div.sparky-c-text-passage"></div>
-    <input type="email" name="email" gg-match="input#email" placeholder="Email" />
-    <input type="password" name="password" gg-match="input#password" placeholder="Password" />
+    <input
+      type="email"
+      name="email"
+      data-testid="email"
+      gg-match="input#email"
+      placeholder="Email"
+    />
+    <input
+      type="password"
+      name="password"
+      data-testid="password"
+      gg-match="input#password"
+      placeholder="Password"
+    />
     <button
       type="submit"
       gg-autoclick

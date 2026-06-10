@@ -16,41 +16,49 @@
         name="otp-1"
         type="text"
         inputmode="numeric"
+        data-testid="otp-0"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(1)"
       />
       <input
         name="otp-2"
         type="text"
         inputmode="numeric"
+        data-testid="otp-1"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(2)"
       />
       <input
         name="otp-3"
         type="text"
         inputmode="numeric"
+        data-testid="otp-2"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(3)"
       />
       <input
         name="otp-4"
         type="text"
         inputmode="numeric"
+        data-testid="otp-3"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(4)"
       />
       <input
         name="otp-5"
         type="text"
         inputmode="numeric"
+        data-testid="otp-4"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(5)"
       />
       <input
         name="otp-6"
         type="text"
         inputmode="numeric"
+        data-testid="otp-5"
         gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(6)"
       />
     </div>
 
-    <button type="submit" gg-match="div[class*='_verify_'] adc-button">Verify</button>
+    <button type="submit" data-testid="submit" gg-match="div[class*='_verify_'] adc-button">
+      Verify
+    </button>
     <style>
       .otp-container {
         display: flex;

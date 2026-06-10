@@ -8,8 +8,14 @@
     <p gg-optional gg-match="//p[contains(text(), 'Invalid verification code')]"></p>
     <div class="otp-input">
       <label gg-match="p.gf-label-m">Enter code</label>
-      <input name="otp" type="tel" gg-match="input[name='data.otp']" placeholder="4-digit OTP" />
+      <input
+        name="otp"
+        type="tel"
+        data-testid="otp"
+        gg-match="input[name='data.otp']"
+        placeholder="4-digit OTP"
+      />
     </div>
-    <button type="submit" gg-match="button[type=submit]">Continue</button>
+    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Continue</button>
   </body>
 </html>

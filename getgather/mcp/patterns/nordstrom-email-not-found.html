@@ -8,7 +8,13 @@
       "Edit" to go back to the previous page.
     </p>
     <input gg-match="input[name='firstName']" name="none" value="none" style="display: none" />
-    <button type="submit" name="button" value="edit" gg-match="button[alt='edit email link']">
+    <button
+      type="submit"
+      name="button"
+      value="edit"
+      data-testid="submit"
+      gg-match="button[alt='edit email link']"
+    >
       Edit
     </button>
   </body>

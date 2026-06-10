@@ -9,6 +9,7 @@
       autofocus
       name="email"
       type="email"
+      data-testid="username"
       gg-match="input#username"
       placeholder="Email Address"
     />
@@ -16,10 +17,15 @@
       password
       name="password"
       type="password"
+      data-testid="password"
       gg-match="input#password"
       placeholder="Password"
     />
-    <button type="submit" gg-match="form[class='w-full'] div > button[type='submit']">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="form[class='w-full'] div > button[type='submit']"
+    >
       Login to My Account
     </button>
   </body>

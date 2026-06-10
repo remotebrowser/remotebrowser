@@ -1,10 +1,17 @@
 <html gg-domain="google" gg-priority="-2">
   <body>
-    <input autofocus placeholder="Email" gg-match="input#identifierId" type="email" name="email" />
+    <input
+      autofocus
+      placeholder="Email"
+      data-testid="username"
+      gg-match="input#identifierId"
+      type="email"
+      name="email"
+    />
     <div
       gg-match="//div[@jsname='B34EJ'][contains(., 'find your Google Account')]"
       style="color: red; font-size: 12px"
     ></div>
-    <button type="submit" gg-match="div#identifierNext">Next</button>
+    <button type="submit" data-testid="submit" gg-match="div#identifierNext">Next</button>
   </body>
 </html>

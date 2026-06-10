@@ -18,10 +18,15 @@
       autofocus
       name="code"
       type="text"
+      data-testid="otp"
       gg-match="input[name='code']"
       placeholder="Code"
     />
-    <button type="submit" gg-match="//button[@type='button' and contains(., 'Verify and Sign in')]">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="//button[@type='button' and contains(., 'Verify and Sign in')]"
+    >
       Verify and Sign in
     </button>
   </body>

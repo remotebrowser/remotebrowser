@@ -9,6 +9,7 @@
       name="otpCode"
       type="tel"
       placeholder="Enter code"
+      data-testid="otp"
       gg-match="input#auth-mfa-otpcode"
     />
     <input
@@ -19,6 +20,8 @@
       gg-match="input#auth-mfa-remember-device"
       style="display: none"
     />
-    <button type="submit" gg-match="input#auth-signin-button[type=submit]">Sign in</button>
+    <button type="submit" data-testid="submit" gg-match="input#auth-signin-button[type=submit]">
+      Sign in
+    </button>
   </body>
 </html>

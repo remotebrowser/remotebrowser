@@ -9,15 +9,21 @@
       autofocus
       type="text"
       name="username"
+      data-testid="username"
       gg-match="input[name='username']"
     />
     <input
       placeholder="Password"
       type="password"
       name="password"
+      data-testid="password"
       gg-match="input[name='password']"
     />
-    <button type="submit" gg-match="button[data-e2e='signInButton']:not([disabled])">
+    <button
+      type="submit"
+      data-testid="submit"
+      gg-match="button[data-e2e='signInButton']:not([disabled])"
+    >
       Sign in
     </button>
   </body>

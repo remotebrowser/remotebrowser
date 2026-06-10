@@ -3,8 +3,22 @@
     <title>Office Depot Sign In</title>
   </head>
   <body>
-    <input type="email" gg-match="input[name=loginName]" placeholder="Email Address" name="email" />
-    <input type="password" gg-match="input[name=password]" placeholder="Password" name="password" />
-    <button type="submit" gg-match="input#order_history_login_btn">Log in</button>
+    <input
+      type="email"
+      data-testid="username"
+      gg-match="input[name=loginName]"
+      placeholder="Email Address"
+      name="email"
+    />
+    <input
+      type="password"
+      data-testid="password"
+      gg-match="input[name=password]"
+      placeholder="Password"
+      name="password"
+    />
+    <button type="submit" data-testid="submit" gg-match="input#order_history_login_btn">
+      Log in
+    </button>
   </body>
 </html>

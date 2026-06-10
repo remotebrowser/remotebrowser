@@ -7,8 +7,22 @@
       gg-optional
       gg-match="//div[contains(@class, 'gq') and contains(., 'Email and/or password incorrect')]"
     ></p>
-    <input type="email" gg-match="input#login-email" placeholder="Email" name="email" />
-    <input type="password" gg-match="input#login-password" placeholder="Password" name="password" />
-    <button type="submit" gg-match="form#login-form button[type=submit]">Sign In</button>
+    <input
+      type="email"
+      data-testid="email"
+      gg-match="input#login-email"
+      placeholder="Email"
+      name="email"
+    />
+    <input
+      type="password"
+      data-testid="password"
+      gg-match="input#login-password"
+      placeholder="Password"
+      name="password"
+    />
+    <button type="submit" data-testid="submit" gg-match="form#login-form button[type=submit]">
+      Sign In
+    </button>
   </body>
 </html>

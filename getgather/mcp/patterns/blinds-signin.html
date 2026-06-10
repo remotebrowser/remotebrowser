@@ -8,6 +8,7 @@
       autofocus
       name="email"
       type="email"
+      data-testid="email"
       gg-match="div#sign-in-sign-up-content-wrapper input#login-email"
       placeholder="Email Address"
     />
@@ -15,11 +16,13 @@
       password
       name="password"
       type="password"
+      data-testid="password"
       gg-match="div#sign-in-sign-up-content-wrapper input#login-password"
       placeholder="Password"
     />
     <button
       type="submit"
+      data-testid="submit"
       gg-match="div#sign-in-sign-up-content-wrapper button[data-test-id='my-account-login-button']:not([disabled])"
     >
       Login to My Account

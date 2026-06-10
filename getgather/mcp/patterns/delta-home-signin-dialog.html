@@ -7,9 +7,18 @@
       placeholder="SkyMiles Number Or Username"
       name="userid"
       type="text"
+      data-testid="username"
       gg-match="input#userId"
     />
-    <input placeholder="Password" name="password" type="password" gg-match="input#password" />
-    <button type="submit" gg-match="button[data-cy='idp-button-Log In']">Log In</button>
+    <input
+      placeholder="Password"
+      name="password"
+      type="password"
+      data-testid="password"
+      gg-match="input#password"
+    />
+    <button type="submit" data-testid="submit" gg-match="button[data-cy='idp-button-Log In']">
+      Log In
+    </button>
   </body>
 </html>

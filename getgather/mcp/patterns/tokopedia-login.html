@@ -6,9 +6,12 @@
     <input
       name="login"
       type="text"
+      data-testid="username"
       gg-match="input[name=login]"
       placeholder="Masukkan nomor ponsel atau email"
     />
-    <button type="submit" gg-match="button[data-testid=button-submit]">Selanjutnya</button>
+    <button type="submit" data-testid="submit" gg-match="button[data-testid=button-submit]">
+      Selanjutnya
+    </button>
   </body>
 </html>

@@ -3,7 +3,14 @@
     <title>Chewy Sign In</title>
   </head>
   <body>
-    <input out name="email" type="email" gg-match="input#username" placeholder="Email" />
-    <button type="submit" gg-match="button#kc-login">Continue</button>
+    <input
+      out
+      name="email"
+      type="email"
+      data-testid="username"
+      gg-match="input#username"
+      placeholder="Email"
+    />
+    <button type="submit" data-testid="submit" gg-match="button#kc-login">Continue</button>
   </body>
 </html>

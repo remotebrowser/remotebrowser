@@ -11,8 +11,21 @@
       Agree
     </div>
     <span gg-optional gg-match="div[class*='alert___']"></span>
-    <input autofocus name="email" type="email" placeholder="Email" gg-match="input#username" />
-    <input name="password" type="password" placeholder="Password" gg-match="input#password" />
-    <button type="submit" gg-match="button[type=submit]">Sign in</button>
+    <input
+      autofocus
+      name="email"
+      type="email"
+      placeholder="Email"
+      data-testid="username"
+      gg-match="input#username"
+    />
+    <input
+      name="password"
+      type="password"
+      placeholder="Password"
+      data-testid="password"
+      gg-match="input#password"
+    />
+    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Sign in</button>
   </body>
 </html>

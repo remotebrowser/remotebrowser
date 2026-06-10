@@ -5,7 +5,7 @@
   <body>
     <p gg-optional gg-match="//span[contains(text(), 'Kode yang kamu masukkan salah.')]"></p>
     <div gg-match="//div[contains(text(), 'Masukkan Kode Verifikasi')]"></div>
-    <input name="otp" type="tel" gg-match="input[type=tel]" placeholder="OTP" />
-    <button type="submit">Submit</button>
+    <input name="otp" type="tel" data-testid="otp" gg-match="input[type=tel]" placeholder="OTP" />
+    <button type="submit" data-testid="submit">Submit</button>
   </body>
 </html>
