@@ -546,25 +546,13 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
         if document.select(SUBMIT_BUTTON):
             if len(names) > 0 and expected_field_count == len(names):
                 logger.info("Submitting form, all fields are filled...")
-                submit_selectors = [
-                    str(sel)
-                    for btn in document.select(SUBMIT_BUTTON)
-                    if (sel := get_selector(str(btn.get("gg-match")))[0]) is not None
-                ]
-                set_value_actions = [a for a in pending_actions if a.get("kind") == "set_value"]
-                if len(set_value_actions) == 1 and len(submit_selectors) == 1:
-                    # Upgrade the single set_value to set_and_submit so the JS layer owns
-                    # the full fill-verify-submit cycle with React commit awareness.
-                    set_value_actions[0]["kind"] = "set_and_submit"
-                    set_value_actions[0]["submit_selector"] = submit_selectors[0]
-                    set_value_actions[0]["timeout_ms"] = "15000"
-                    logger.info("Using set_and_submit for React-aware fill and submit")
-                else:
-                    for submit_selector in submit_selectors:
+                for submit_button in document.select(SUBMIT_BUTTON):
+                    submit_selector, _ = get_selector(str(submit_button.get("gg-match")))
+                    if submit_selector:
                         pending_actions.append({
                             "key": f"click:submit:{len(pending_actions)}",
                             "kind": "click",
-                            "selector": submit_selector,
+                            "selector": str(submit_selector),
                             "action_delay_ms": str(action_delay_ms),
                         })
                 should_submit = True
@@ -599,17 +587,6 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                 elif kind == "set_value":
                     value = action.get("value")
                     await element.type_text(value if isinstance(value, str) else "")
-                elif kind == "set_and_submit":
-                    # set_and_submit failed in JS — fall back to fill + click submit separately
-                    fill_value = action.get("value")
-                    await element.type_text(fill_value if isinstance(fill_value, str) else "")
-                    submit_selector = action.get("submit_selector")
-                    if isinstance(submit_selector, str):
-                        submit_el = await page_query_selector(
-                            page, submit_selector, config=element_config
-                        )
-                        if submit_el:
-                            await submit_el.click()
 
             await asyncio.sleep(0.25)
 

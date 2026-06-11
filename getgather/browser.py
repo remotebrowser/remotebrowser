@@ -961,82 +961,38 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
             el.dispatchEvent(new Event("change", {{ bubbles: true }}));
         }}
 
-        async function setAndSubmit(inputSelector, value, submitSelector, typingDelayMs, idleWindowMs, timeout) {{
-            const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
-            const useHook = hook && typeof hook.onCommitFiberRoot === "function";
+        // For debug logging only — not used in any fill or submit logic.
+        function getReactValue(el) {{
+            const fiberKey = Object.keys(el).find(k => k.startsWith("__reactFiber"));
+            const fiber = fiberKey ? el[fiberKey] : null;
+            return fiber?.memoizedProps?.value ?? null;
+        }}
 
-            let lastCommitAt = Date.now();
-            let fillInProgress = false;
-            let originalOnCommit = null;
+        async function setValueWithPoll(selector, value, typingDelayMs, timeout) {{
+            const el = document.querySelector(selector);
+            if (!el) return {{ success: false, reason: "element not found" }};
+            await fillInput(el, value, typingDelayMs);
 
-            if (useHook) {{
-                originalOnCommit = hook.onCommitFiberRoot.bind(hook);
-                hook.onCommitFiberRoot = function(...args) {{
-                    lastCommitAt = Date.now();
-                    try {{ originalOnCommit(...args); }} catch (_) {{}}
-                    if (!fillInProgress) {{
-                        const el = findCss(inputSelector, document);
-                        if (el && el.value !== value) {{
-                            fillInProgress = true;
-                            fillInput(el, value, typingDelayMs).finally(() => {{ fillInProgress = false; }});
-                        }}
-                    }}
+            let refillCount = 0;
+            const deadline = Date.now() + timeout;
+            while (Date.now() < deadline) {{
+                await sleep(50);
+                const inputEl = document.querySelector(selector);
+                if (!inputEl) continue;
+                if (inputEl.value !== value) {{
+                    refillCount++;
+                    console.log(`set_value: refill #${{refillCount}}, value was "${{inputEl.value}}", expected "${{value}}"`);
+                    await fillInput(inputEl, value, typingDelayMs);
+                    continue;
+                }}
+                return {{
+                    success: true,
+                    actualValue: inputEl.value,
+                    reactValue: getReactValue(inputEl),
+                    refillCount: refillCount,
                 }};
             }}
-
-            try {{
-                const el = findCss(inputSelector, document);
-                if (!el) return {{ success: false, reason: "element not found" }};
-                await fillInput(el, value, typingDelayMs);
-
-                let refillCount = 0;
-                const deadline = Date.now() + timeout;
-                while (Date.now() < deadline) {{
-                    await sleep(50);
-
-                    // With hook: wait for React to go idle before checking/submitting.
-                    // Without hook: poll and re-fill if value was wiped, then submit.
-                    if (useHook && (Date.now() - lastCommitAt) < idleWindowMs) continue;
-
-                    const inputEl = findCss(inputSelector, document);
-                    if (!inputEl) continue;
-
-                    // Re-fill if value was cleared (covers no-hook polling case).
-                    if (inputEl.value !== value && !fillInProgress) {{
-                        refillCount++;
-                        console.log(`set_and_submit: refill #${{refillCount}}, value was "${{inputEl.value}}", expected "${{value}}"`);
-                        fillInProgress = true;
-                        await fillInput(inputEl, value, typingDelayMs);
-                        fillInProgress = false;
-                        if (useHook) lastCommitAt = Date.now(); // reset idle window after re-fill
-                        continue;
-                    }}
-
-                    if (inputEl.value !== value) continue; // fill in progress, wait
-
-                    const submitEl = findCss(submitSelector, document);
-                    if (!submitEl) continue;
-
-                    submitEl.click();
-
-                    const fiberKey = Object.keys(inputEl).find(k => k.startsWith("__reactFiber"));
-                    const fiber = fiberKey ? inputEl[fiberKey] : null;
-                    const reactValue = fiber?.memoizedProps?.value ?? null;
-                    return {{
-                        success: true,
-                        actualValue: inputEl.value,
-                        reactValue: reactValue,
-                        usedHook: useHook,
-                        refillCount: refillCount,
-                    }};
-                }}
-
-                return {{ success: false, reason: "timeout" }};
-            }} finally {{
-                if (useHook && originalOnCommit !== null) {{
-                    hook.onCommitFiberRoot = originalOnCommit;
-                }}
-            }}
+            return {{ success: false, reason: "timeout" }};
         }}
 
         for (const [index, action] of actions.entries()) {{
@@ -1081,26 +1037,15 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
                 if (kind === "click") {{
                     element.click();
                     output[key] = true;
-                }} else if (kind === "set_and_submit") {{
-                    const value = typeof action?.value === "string" ? action.value : "";
-                    const submitSelector = typeof action?.submit_selector === "string" ? action.submit_selector : "";
-                    const requestedDelay = Number(action?.typing_delay_ms);
-                    const typingDelayMs = Number.isFinite(requestedDelay)
-                        ? Math.max(0, Math.min(250, requestedDelay))
-                        : 25;
-                    const idleWindowMs = Number(action?.idle_window_ms) || 300;
-                    const timeout = Number(action?.timeout_ms) || 10000;
-                    if (actionDelayMs > 0) await sleep(actionDelayMs);
-                    output[key] = await setAndSubmit(selector, value, submitSelector, typingDelayMs, idleWindowMs, timeout);
                 }} else if (kind === "set_value") {{
                     const value = typeof action?.value === "string" ? action.value : "";
                     const requestedDelay = Number(action?.typing_delay_ms);
                     const typingDelayMs = Number.isFinite(requestedDelay)
                         ? Math.max(0, Math.min(250, requestedDelay))
                         : 25;
+                    const timeout = Number(action?.timeout_ms) || 5000;
                     if (actionDelayMs > 0) await sleep(actionDelayMs);
-                    await fillInput(element, value, typingDelayMs);
-                    output[key] = true;
+                    output[key] = await setValueWithPoll(selector, value, typingDelayMs, timeout);
                 }} else {{
                     output[key] = false;
                 }}
@@ -1121,9 +1066,9 @@ async def page_batch_actions(page: zd.Tab, actions: list[dict[str, str]]) -> dic
                 if isinstance(v, dict):
                     vd: dict[str, object] = v  # pyright: ignore[reportUnknownVariableType]
                     logger.info(
-                        f"set_and_submit debug: key={k} "
+                        f"set_value debug: key={k} "
                         f"success={vd.get('success')} actualValue={vd.get('actualValue')!r} "
-                        f"reactValue={vd.get('reactValue')!r} usedHook={vd.get('usedHook')} "
+                        f"reactValue={vd.get('reactValue')!r} "
                         f"refillCount={vd.get('refillCount')} reason={vd.get('reason')!r}"
                     )
                     output[str(k)] = vd.get("success") is True  # pyright: ignore[reportUnknownArgumentType]
