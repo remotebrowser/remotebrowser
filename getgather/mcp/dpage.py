@@ -90,6 +90,17 @@ def _target_domain_from_initial_url(initial_url: str) -> str:
     return hostname or ""
 
 
+async def _run_action_with_timeout(
+    action: Any, page: zd.Tab, browser: zd.Browser
+) -> dict[str, Any]:
+    timeout = settings.MCP_ACTION_TIMEOUT
+    try:
+        async with asyncio.timeout(timeout):
+            return await action(page, browser)
+    except TimeoutError:
+        raise TimeoutError(f"Action timed out after {timeout}s") from None
+
+
 async def _try_action_with_probe(
     browser: zd.Browser,
     initial_url: str,
@@ -110,11 +121,14 @@ async def _try_action_with_probe(
             location=initial_url, page=page, browser=browser, timeout=timeout
         )
         if terminated:
-            result = await action(page, browser)
+            result = await _run_action_with_timeout(action, page, browser)
             await safe_close_page(page)
             return result
         await safe_close_page(page)
         return None
+    except TimeoutError:
+        await safe_close_page(page)
+        raise
     except Exception as e:
         logger.info(f"Stateless probe failed for {initial_url}: {e}")
         await safe_close_page(page)
@@ -726,13 +740,18 @@ async def zen_dpage_with_action(
     # 2a. Explicit signin_id: reuse that session directly.
     if signin_id:
         browser = await init_zendriver_browser(signin_id)
+        page: zd.Tab | None = None
         try:
             page = await get_new_page(browser)
             await zen_navigate_with_retry(page, initial_url)
-            result = await action(page, browser)
+            result = await _run_action_with_timeout(action, page, browser)
             await safe_close_page(page)
             logger.info("Action succeeded with existing signin_id session!")
             return result
+        except TimeoutError:
+            if page is not None:
+                await safe_close_page(page)
+            raise
         except Exception as e:
             logger.info(f"zen_dpage_with_action failed with signin_id session: {e}")
 

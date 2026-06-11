@@ -38,7 +38,8 @@ class Settings(AuthSettings, BaseSettings):
     # Overall wall-clock deadline for a single MCP tool call, in seconds.
     # Guards against a stuck tool call (e.g. a hung page navigation) running
     # indefinitely and pinning its browser.
-    MCP_TOOL_CALL_TIMEOUT: int = 300
+    MCP_TOOL_CALL_TIMEOUT: int = 600
+    MCP_ACTION_TIMEOUT: int = 300
 
     @property
     def data_dir(self) -> Path:

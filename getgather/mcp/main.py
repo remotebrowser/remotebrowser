@@ -159,7 +159,6 @@ class LocationProxyMiddleware(Middleware):
                 f"Tool call '{context.message.name}' exceeded {timeout}s timeout; "
                 f"aborting and releasing browser"
             )
-            await self._release_session_browser(signin_id)
             raise TimeoutError(
                 f"Tool call '{context.message.name}' timed out after {timeout}s"
             ) from None
