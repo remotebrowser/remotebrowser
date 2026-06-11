@@ -72,6 +72,8 @@
       description: Search purchase history from amazon.
     - function_name: signin
       description: Signin to amazon.
+    - function_name: get_watchlist_with_pagination
+      description: Get Prime Video watchlist from Amazon with pagination.
 
 - id: amazonca
   name: Amazon CA MCP
@@ -94,6 +96,8 @@
       description: Search product on Amazon Canada.
     - function_name: search_purchase_history
       description: Search purchase history from Amazon Canada.
+    - function_name: get_watchlist_with_pagination
+      description: Get Prime Video watchlist from Amazon Canada with pagination.
 
 - id: americanairlines
   name: American Airlines MCP
