@@ -147,6 +147,50 @@ _Example_: `curl -X POST 'localhost:23456/api/v1/browsers/test/pages/96FDE4162B8
 
 _Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/distilled`
 
+### List all patterns
+
+`GET /api/v1/patterns` returns a JSON array of all pattern filenames (sorted alphabetically), including the extension (`.html` or `.json`).
+
+_Example_: `curl localhost:8300/api/v1/patterns` returns:
+
+```json
+["amazon_signin.html", "amazon_signin.json", "goodreads_signin.html"]
+```
+
+### Get a pattern
+
+`GET /api/v1/patterns/{pattern_name}` returns the content of the named pattern. Accepts an optional `ext` query parameter (`html` or `json`, defaults to `html`). Returns HTTP 404 if the pattern is not found, HTTP 400 if the name contains invalid characters or the extension is unsupported.
+
+_Example_: `curl localhost:8300/api/v1/patterns/amazon_signin` returns the raw HTML of `amazon_signin.html`.
+
+_Example_: `curl localhost:8300/api/v1/patterns/amazon_signin?ext=json` returns the JSON content of `amazon_signin.json`.
+
+### Create or update a pattern
+
+`POST /api/v1/patterns/{pattern_name}` writes content to the named pattern file, creating it if it does not exist. Accepts an optional `ext` query parameter (`html` or `json`, defaults to `html`). Returns HTTP 400 if the name contains invalid characters or the extension is unsupported.
+
+_Example_: `curl -X POST localhost:8300/api/v1/patterns/amazon_signin -H 'Content-Type: application/json' -d '{"content": "<div gg-match=\"...\">"}'` returns:
+
+```json
+{ "pattern_name": "amazon_signin", "status": "created" }
+```
+
+On subsequent calls the status field is `"updated"`.
+
+_Example (JSON)_: `curl -X POST 'localhost:8300/api/v1/patterns/amazon_signin?ext=json' -H 'Content-Type: application/json' -d '{"content": "{\"rows\": \"tr\"}"}'`
+
+### Delete a pattern
+
+`DELETE /api/v1/patterns/{pattern_name}` removes the named pattern file. Accepts an optional `ext` query parameter (`html` or `json`, defaults to `html`). Returns HTTP 404 if the pattern is not found, HTTP 400 if the name contains invalid characters or the extension is unsupported.
+
+_Example_: `curl -X DELETE localhost:8300/api/v1/patterns/amazon_signin` returns:
+
+```json
+{ "pattern_name": "amazon_signin", "status": "deleted" }
+```
+
+_Example (JSON)_: `curl -X DELETE 'localhost:8300/api/v1/patterns/amazon_signin?ext=json'`
+
 ## Backends
 
 The browser API runs on one of three backends, selected at startup:

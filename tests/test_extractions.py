@@ -171,3 +171,51 @@ class TestCNN:
         assert "link" in first
         assert isinstance(first["link"], str)
         assert first["link"]
+
+
+@pytest.mark.distill
+class TestCBC:
+    @pytest.fixture(autouse=True)
+    def upload_cbc_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
+        html_content = """<html gg-domain="cbc">
+  <head>
+    <title>CBC Headlines</title>
+  </head>
+  <body>
+    <ul gg-stop gg-convert="cbc-headlines.json" gg-match-html="main ul"></ul>
+  </body>
+</html>
+"""
+        json_content = """{
+  "rows": "ul li",
+  "columns": [
+    { "name": "title", "selector": "li a" },
+    { "name": "link", "selector": "li a", "attribute": "href" }
+  ]
+}
+"""
+        client.post("/api/v1/patterns/cbc-headlines", json={"content": html_content})
+        client.post(
+            "/api/v1/patterns/cbc-headlines",
+            params={"ext": "json"},
+            json={"content": json_content},
+        )
+        yield
+        client.delete("/api/v1/patterns/cbc-headlines")
+        client.delete("/api/v1/patterns/cbc-headlines", params={"ext": "json"})
+
+    def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
+        browser_id, page_id = prepare_new_browser(client, "cbc", browser_ids)
+
+        navigate_page(client, browser_id, page_id, "https://www.cbc.ca/lite/news")
+
+        data = get_distilled_json(client, browser_id, page_id)
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+        first = data[0]
+        assert isinstance(first, dict)
+        assert "title" in first
+        assert "link" in first
+        assert isinstance(first["link"], str)
+        assert first["link"]
