@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass
 from functools import cache, cached_property
@@ -13,7 +14,9 @@ from loguru import logger
 from pydantic import BaseModel
 
 from getgather.auth.auth import get_auth_user
+from getgather.config import settings
 from getgather.mcp.auto_import import auto_import
+from getgather.mcp.browser import browser_manager, terminate_zendriver_browser
 from getgather.mcp.dpage import (
     dpage_check,
     dpage_finalize,
@@ -95,6 +98,8 @@ class LocationProxyMiddleware(Middleware):
         if browser_session_id:
             log_context["browser_session_id"] = browser_session_id
 
+        signin_id = headers.get("x-signin-id") or None
+
         # Initialize request_info data
         info_data: dict[str, str | None] = {}
 
@@ -121,7 +126,7 @@ class LocationProxyMiddleware(Middleware):
 
         if "general_tool" in tool.tags:  # pyright: ignore[reportOptionalMemberAccess]
             with logger.contextualize(**log_context):
-                return await call_next(context)
+                return await self._call_next_with_timeout(context, call_next, signin_id)
 
         brand_id = context.message.name.split("_")[0]
         await context.fastmcp_context.set_state("brand_id", brand_id)
@@ -131,7 +136,54 @@ class LocationProxyMiddleware(Middleware):
             logger.info(f"[AuthMiddleware Context]: {context.message}")
             if proxy_type:
                 logger.info(f"Received x-proxy-type header: {proxy_type}")
-            return await call_next(context)
+            return await self._call_next_with_timeout(context, call_next, signin_id)
+
+    async def _call_next_with_timeout(
+        self,
+        context: MiddlewareContext[Any],
+        call_next: CallNext[Any, Any],
+        signin_id: str | None,
+    ) -> Any:
+        """Run the tool with an overall deadline.
+
+        A stuck tool call (e.g. a hung page navigation) must not be able to run
+        indefinitely and pin its browser. On timeout we release the session
+        browser and surface the failure to the client instead of hanging.
+        """
+        timeout = settings.MCP_TOOL_CALL_TIMEOUT
+        try:
+            async with asyncio.timeout(timeout):
+                return await call_next(context)
+        except TimeoutError:
+            logger.error(
+                f"Tool call '{context.message.name}' exceeded {timeout}s timeout; "
+                f"aborting and releasing browser"
+            )
+            await self._release_session_browser(signin_id)
+            raise TimeoutError(
+                f"Tool call '{context.message.name}' timed out after {timeout}s"
+            ) from None
+
+    @staticmethod
+    async def _release_session_browser(signin_id: str | None) -> None:
+        """Terminate the browser tied to a signin session after a timeout.
+
+        Only incognito (per-session) browsers are released; the shared global
+        browser is left untouched. Bounded by its own timeout so a stuck
+        teardown cannot hang the request that is already timing out.
+        """
+        if not signin_id or not browser_manager.has_incognito_browser(signin_id):
+            return
+        browser = browser_manager.get_incognito_browser(signin_id)
+        try:
+            if browser is not None:
+                async with asyncio.timeout(30):
+                    await terminate_zendriver_browser(browser)
+                logger.info(f"Released browser for signin_id {signin_id} after tool timeout")
+        except Exception as e:
+            logger.error(f"Failed to release browser for signin_id {signin_id} after timeout: {e}")
+        finally:
+            browser_manager.remove_incognito_browser(signin_id)
 
 
 MCP_BUNDLES: dict[str, list[str]] = {
