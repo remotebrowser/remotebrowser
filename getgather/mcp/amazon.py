@@ -1192,3 +1192,171 @@ async def remote_get_prime_library() -> dict[str, Any]:
         "https://www.amazon.com/gp/video/mystuff/library",
         "amazon_prime_library",
     )
+
+
+@amazon_mcp.tool
+async def get_watchlist_with_pagination(start_index: int = 0) -> dict[str, Any]:
+    """Get Prime Video watchlist from Amazon."""
+
+    async def get_watchlist_with_pagination_action(
+        page: zd.Tab, browser: zd.Browser
+    ) -> dict[str, Any]:
+        current_url = await get_url(page)
+        if current_url is None or "signin" in current_url:
+            logger.info(f"User is not signed in")
+            raise Exception("User is not signed in")
+
+        js_code = f"""
+            (async () => {{
+                const res = await fetch(location.href, {{
+                    method: 'GET',
+                    credentials: 'include',
+                }});
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const hydrationData = doc.querySelector('#dv-web-page-hydration-data')?.textContent;
+                const hydrationDataJson = JSON.parse(hydrationData);
+                const paginationTargetId = hydrationDataJson.init.preparations.body.content.baseOutput.containers[0].paginationTargetId;
+                const paginationServiceToken = hydrationDataJson.init.preparations.body.content.baseOutput.containers[0].paginationServiceToken;
+                const startIndex = {start_index};
+                
+                const queryParam = {{
+                    pageType: "home",
+                    pageId: "Watchlist",
+                    collectionType: "Container",
+                    paginationTargetId: paginationTargetId,
+                    serviceToken: paginationServiceToken,
+                    startIndex: String(startIndex),
+                    actionScheme: "default",
+                    payloadScheme: "default",
+                    decorationScheme: "web-decoration-asin-v4",
+                    featureScheme: "web-features-v6",
+                    dynamicFeatures: [
+                        "integration",
+                        "CLIENT_DECORATION_ENABLE_DAAPI",
+                        "ENABLE_DRAPER_CONTENT",
+                        "HorizontalPagination",
+                        "CleanSlate",
+                        "EpgContainerPagination",
+                        "ENABLE_GPCI",
+                        "SupportsImageTextLinkTextInStandardHero",
+                        "Remaster",
+                        "SupportsChannelWidget",
+                        "PromotionalBannerSupported",
+                        "RemoveFromContinueWatching",
+                        "SearchChannelBundles",
+                        "LinearStationInAllCarousels",
+                        "SupportChannelItemDecoration",
+                        "TvodMovieBundles"
+                    ],
+                    widgetScheme: "web-explore-v38",
+                    variant: "desktopOSX",
+                    myStuffViewType: "watchlist",
+                    journeyIngressContext: ""
+                }};
+                
+                const params = new URLSearchParams();
+            
+                for (const [key, value] of Object.entries(queryParam)) {{
+                    if (Array.isArray(value)) {{
+                        value.forEach(v => params.append(key, v));
+                    }} else {{
+                        params.append(key, value);
+                    }}
+                }}
+            
+                const url = `https://www.amazon.com/gp/video/api/paginateCollection?${{params.toString()}}`;
+            
+                const response = await fetch(url, {{
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {{
+                        accept: '*/*',
+                        'x-requested-with': 'XMLHttpRequest'
+                    }}
+                }});
+            
+                const data = await response.json();
+                const items = data.entities ?? data.container?.entities ?? [];
+            
+                return {{ items, hasMoreItems: data.hasMoreItems === true, startIndex }};
+            }})()
+        """
+
+        result = await page.evaluate(js_code, True)
+
+        return {"amazon_prime_watchlist": result}
+
+    return await remote_zen_dpage_with_action(
+        f"https://www.amazon.com/gp/video/mystuff/watchlist",
+        action=get_watchlist_with_pagination_action,
+    )
+
+
+@amazon_mcp.tool
+async def get_watch_history_with_pagination(nextToken: str | None = None) -> dict[str, Any]:
+    """Get Prime Video watchlist from Amazon."""
+
+    async def get_watch_history_with_pagination_action(
+        page: zd.Tab, browser: zd.Browser
+    ) -> dict[str, Any]:
+        current_url = await get_url(page)
+        if current_url is None or "signin" in current_url:
+            logger.info(f"User is not signed in")
+            raise Exception("User is not signed in")
+
+        js_code = f"""
+            (async () => {{
+                const res = await fetch(location.href, {{
+                    method: "GET",
+                    credentials: "include",
+                }});
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, "text/html");
+                const hydrationData = [...doc.querySelectorAll("script[type='text/template']")]
+                    .map((el) => el.textContent)
+                    .find(
+                    (content) =>
+                        content?.includes("props") &&
+                        content.includes("metadata") &&
+                        content.includes("availability") &&
+                        content.includes("notifications"),
+                    );
+                const hydrationDataJson = JSON.parse(hydrationData);
+                const firstNextToken = hydrationDataJson.props.widgets[2].content.content.nextToken;
+                const requestId = hydrationDataJson.args.context.requestID;
+                const watchHistory = hydrationDataJson.props.widgets[2].content.content;
+
+                if ("{nextToken}" !== "None") {{
+                    const queryString = 'widgetArgs=' + encodeURIComponent(JSON.stringify({{nextToken: "{nextToken}"}}));
+                    const paginationApiResponse = await fetch(`https://www.amazon.com/gp/video/api/getWatchHistorySettingsPage?${{queryString}}`, {{
+                        "headers": {{
+                            "accept": "*/*",
+                            "x-amzn-requestid": requestId,
+                            "Referer": "https://www.amazon.com/gp/video/settings/watch-history",
+                            "x-requested-with": "XMLHttpRequest"
+                        }},
+                        "body": null,
+                        "method": "GET",
+                        "mode": "cors",
+                        "credentials": "include"
+                    }});
+                 
+                    const response = await paginationApiResponse.json();
+                    return {{ watchHistory: response.widgets[2].content.content.titles[0].titles, nextToken: response.widgets[2].content.content.nextToken }};
+                }}
+
+                return {{ watchHistory: watchHistory.titles[0].titles, nextToken: firstNextToken, requestId }};
+            }})()
+        """
+
+        result = await page.evaluate(js_code, True)
+
+        return {"amazon_watch_history": result}
+
+    return await remote_zen_dpage_with_action(
+        f"https://www.amazon.com/gp/video/settings/watch-history",
+        action=get_watch_history_with_pagination_action,
+    )
