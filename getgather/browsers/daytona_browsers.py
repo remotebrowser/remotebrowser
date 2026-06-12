@@ -114,6 +114,11 @@ class DaytonaBackend:
         )
         return signed.url
 
+    def cdp_websocket_base(self) -> None:
+        # CDP is reached per-sandbox over a signed HTTPS preview URL via get_cdp_base_url +
+        # /json/version, not a shared websocket proxy, so there is no relay base.
+        return None
+
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         return None  # no VNC: the sandbox is reached over an HTTPS signed URL, not a raw TCP port
 

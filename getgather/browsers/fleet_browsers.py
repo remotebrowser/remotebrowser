@@ -83,10 +83,13 @@ def _require(response: httpx.Response | None) -> httpx.Response:
 class FleetBackend:
     """Proxy the browser API to an external Chrome Fleet (`CHROMEFLEET_URL`).
 
-    Each method forwards the corresponding REST call to the upstream fleet. The CDP/VNC websocket
-    proxies are not served here: in this mode the MCP client connects directly to the external
-    fleet's `/cdp` endpoint (see `getgather.browser._setup_cdp_url`), so `get_cdp_base_url` and
-    `get_vnc_endpoint` are not used.
+    Each method forwards the corresponding REST call to the upstream fleet. getgather's own MCP
+    client connects directly to the external fleet's `/cdp` endpoint (see
+    `getgather.browser._setup_cdp_url`), so `get_cdp_base_url` (the per-browser `/json/version`
+    flow used by the local backends) is not used. External CDP clients hitting the local
+    `/cdp/{id}` and `/devtools/{path}` websocket routes are relayed transparently to the same
+    fleet endpoints via `cdp_websocket_base()`; the fleet already owns target-id patching, so the
+    relay does not patch again. VNC is not proxied here either (`get_vnc_endpoint` returns None).
     """
 
     async def shutdown(self) -> None:
@@ -132,6 +135,12 @@ class FleetBackend:
         raise NotImplementedError(
             "FleetBackend serves CDP via the external fleet's /cdp endpoint, not the local proxy"
         )
+
+    def cdp_websocket_base(self) -> str:
+        # The external fleet exposes its own `/cdp/{id}` and `/devtools/{path}` websocket proxies;
+        # the local routes relay to them verbatim. ws:// for http, wss:// for https.
+        base = settings.effective_chromefleet_url.rstrip("/")
+        return base.replace("https://", "wss://").replace("http://", "ws://")
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         return None

@@ -367,6 +367,11 @@ class PodmanBackend:
     async def get_cdp_base_url(self, browser_id: str) -> str:
         return await get_cdp_url(browser_id)
 
+    def cdp_websocket_base(self) -> None:
+        # Local containers expose CDP per-browser via /json/version (get_cdp_base_url), not a
+        # shared websocket proxy, so the router uses that flow rather than a transparent relay.
+        return None
+
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         vnc_port = await get_host_port(f"{BROWSER_NAME_PREFIX}{browser_id}", 5900)
         if not vnc_port:
