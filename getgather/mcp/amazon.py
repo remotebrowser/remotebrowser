@@ -763,9 +763,8 @@ async def _get_watchlist_with_pagination(
             
                 const data = await response.json();
                 const items = data.entities ?? data.container?.entities ?? [];
-                hasMoreItems = data.hasMoreItems === true;
             
-                return {{ items, hasMoreItems, startIndex }};
+                return {{ items, hasMoreItems: data.hasMoreItems === true, startIndex }};
             }})()
         """
 
