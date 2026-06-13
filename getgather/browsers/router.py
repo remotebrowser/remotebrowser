@@ -141,7 +141,12 @@ def patch_cdp_target(message: str, browser_id: str) -> str:
     return message
 
 
-async def websocket_proxy(client_ws: WebSocket, remote_url: str, browser_id: str) -> None:
+async def websocket_proxy(
+    client_ws: WebSocket, remote_url: str, browser_id: str, patch: bool = True
+) -> None:
+    # `patch` rewrites target ids to namespace them by browser_id (local backends multiplex many
+    # browsers behind one proxy). The external fleet already does this on its own /cdp proxy, so
+    # when relaying to it we pass `patch=False` to avoid double-prefixing target ids.
     try:
         async with websockets.connect(
             remote_url,
@@ -156,7 +161,8 @@ async def websocket_proxy(client_ws: WebSocket, remote_url: str, browser_id: str
                 try:
                     while True:
                         message = await client_ws.receive_text()
-                        message = patch_cdp_target(message, browser_id)
+                        if patch:
+                            message = patch_cdp_target(message, browser_id)
                         logger.debug(f"[CDP] Client -> Remote: {message[:100]}")
                         await remote_ws.send(message)
                 except (WebSocketDisconnect, RuntimeError):
@@ -168,7 +174,8 @@ async def websocket_proxy(client_ws: WebSocket, remote_url: str, browser_id: str
                 try:
                     async for message in remote_ws:
                         msg_text = message if isinstance(message, str) else message.decode()
-                        msg_text = patch_cdp_target(msg_text, browser_id)
+                        if patch:
+                            msg_text = patch_cdp_target(msg_text, browser_id)
                         logger.debug(f"[CDP] Remote -> Client: {msg_text[:100]}")
                         if client_ws.client_state == WebSocketState.CONNECTED:
                             await client_ws.send_text(msg_text)
@@ -409,6 +416,16 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
             await client_ws.close(code=1008)
             return
 
+    cdp_base = backend.cdp_websocket_base()
+    if cdp_base is not None:
+        # Fleet mode: relay straight to the external fleet's own /cdp proxy, which already
+        # patches target ids — so do not patch again here (would double-prefix browser_id).
+        remote_url = f"{cdp_base}/cdp/{browser_id}"
+        logger.info(f"[CDP] Relaying to external fleet: {remote_url}")
+        await websocket_proxy(client_ws, remote_url, browser_id, patch=False)
+        logger.debug("[CDP] cdp_browser_websocket_proxy exiting")
+        return
+
     remote_url = None
     for attempt in range(10):
         try:
@@ -442,6 +459,16 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
     logger.debug(f"[CDP] Entered cdp_devtools_websocket_proxy for path={path}")
     await client_ws.accept()
     logger.debug("[CDP] WebSocket accepted")
+
+    cdp_base = backend.cdp_websocket_base()
+    if cdp_base is not None:
+        # Fleet mode: relay the page-level CDP socket to the fleet's own /devtools proxy verbatim.
+        # The fleet resolves the page and patches target ids; browser_id is unused with patch=False.
+        remote_url = f"{cdp_base}/devtools/{path}"
+        logger.info(f"[CDP] Relaying to external fleet: {remote_url}")
+        await websocket_proxy(client_ws, remote_url, browser_id="", patch=False)
+        logger.debug("[CDP] cdp_devtools_websocket_proxy exiting")
+        return
 
     parts = path.split("/")
     page_id = parts[-1] if parts else None
