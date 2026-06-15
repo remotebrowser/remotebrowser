@@ -1288,7 +1288,7 @@ async def get_watchlist_with_pagination(start_index: int = 0) -> dict[str, Any]:
 
         return {"amazon_prime_watchlist": result}
 
-    return await remote_zen_dpage_with_action(
+    return await zen_dpage_with_action(
         f"https://www.amazon.com/gp/video/mystuff/watchlist",
         action=get_watchlist_with_pagination_action,
     )
@@ -1356,7 +1356,7 @@ async def get_watch_history_with_pagination(nextToken: str | None = None) -> dic
 
         return {"amazon_watch_history": result}
 
-    return await remote_zen_dpage_with_action(
+    return await zen_dpage_with_action(
         f"https://www.amazon.com/gp/video/settings/watch-history",
         action=get_watch_history_with_pagination_action,
     )
