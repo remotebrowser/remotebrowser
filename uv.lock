@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -2442,6 +2442,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
     { name = "beautifulsoup4" },
+    { name = "daytona" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "geoip2" },
@@ -2486,6 +2487,7 @@ dev = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "beautifulsoup4", specifier = ">=4.13.4" },
+    { name = "daytona", specifier = ">=0.183.0" },
     { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.183.0" },
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.0.0,<4" },

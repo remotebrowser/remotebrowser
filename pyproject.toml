@@ -25,6 +25,7 @@ dependencies = [
   "py-key-value-aio[redis]>=0.4.4",
   "websockets>=15.0.1",
   "geoip2>=5.2.0",
+  "daytona>=0.183.0",
 ]
 
 [project.optional-dependencies]
