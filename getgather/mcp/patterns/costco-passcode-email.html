@@ -1,0 +1,31 @@
+<html gg-domain="costco" gg-action-delay="200">
+  <head>
+    <title>Sign In with a One Time Password</title>
+  </head>
+  <body>
+    <p gg-optional gg-match="div#emailVerificationControl_error_message"></p>
+
+    <input autofocus name="email" type="email" placeholder="Email" gg-match="input#email" />
+
+    <button type="submit" gg-match="button#emailVerificationControl_but_send_code:not([disabled])">
+      Sign In
+    </button>
+
+    <div style="display: flex; flex-direction: column">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          text-align: center;
+          width: 100%;
+          margin-bottom: 12px;
+        "
+      >
+        <div style="position: relative; text-align: center; width: 100%">
+          <hr />
+        </div>
+      </div>
+      <button name="button" value="cancel" gg-optional gg-match="button#cancel">Cancel</button>
+    </div>
+  </body>
+</html>

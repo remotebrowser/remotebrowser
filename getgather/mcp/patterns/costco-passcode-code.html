@@ -1,0 +1,51 @@
+<html gg-domain="costco" gg-action-delay="200">
+  <head>
+    <title>Costco Sign In Passcode</title>
+  </head>
+  <body>
+    <p gg-optional gg-match="div#emailVerificationControl_error_message"></p>
+    <p gg-optional gg-match="div.itemLevel[role='alert']"></p>
+
+    <input
+      autofocus
+      name="code"
+      type="text"
+      placeholder="Verification Code"
+      gg-match="input#VerificationCode"
+    />
+
+    <button
+      type="submit"
+      gg-match="button#emailVerificationControl_but_verify_code:not([disabled])"
+    >
+      Sign In
+    </button>
+
+    <div style="display: flex; flex-direction: column">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          text-align: center;
+          width: 100%;
+          margin-bottom: 12px;
+        "
+      >
+        <div style="position: relative; text-align: center; width: 100%">
+          <hr />
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: row; gap: 12px">
+        <button
+          name="button"
+          value="send_new_code"
+          gg-optional
+          gg-match="button#emailVerificationControl_but_send_new_code"
+        >
+          Send New Code
+        </button>
+        <button name="button" value="cancel" gg-optional gg-match="button#cancel">Cancel</button>
+      </div>
+    </div>
+  </body>
+</html>
