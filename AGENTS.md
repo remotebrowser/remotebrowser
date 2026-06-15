@@ -85,10 +85,6 @@ Browser identity: `browser_id` is derived from the auth user (`{sub}-{auth_provi
 
 `getgather/tracing.py` configures Logfire (if `LOGFIRE_TOKEN` set) and a custom `MCPSessionTraceMiddleware` that reparents per-request OTel spans under a session-root span keyed by `mcp-session-id`. The session ID doubles as the trace ID, so it can be pasted into Logfire. This middleware wraps the FastAPI app last so it runs before OTel's FastAPI instrumentation.
 
-### MCP Apps UI (experimental)
-
-Some tools expose a UI resource via the `io.modelcontextprotocol/ui` extension. `ToolUI` / `ResourceUI` in `getgather/mcp/ui.py` carry CSP/permissions metadata. The parent MCP app wraps `ReadResourceRequest` to attach `_meta.ui` (e.g. CSP) to returned resource contents. See `goodreads.py` for the pattern.
-
 ## Conventions
 
 - Python 3.11+, pyright **strict** mode — avoid `Any` drift, annotate returns
