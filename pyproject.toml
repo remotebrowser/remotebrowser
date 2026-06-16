@@ -24,7 +24,6 @@ dependencies = [
   "httpx-retries>=0.4.6",
   "py-key-value-aio[redis]>=0.4.4",
   "websockets>=15.0.1",
-  "async-lru>=2.0",
   "geoip2>=5.2.0",
   "daytona>=0.183.0",
 ]

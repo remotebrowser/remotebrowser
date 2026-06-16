@@ -13,7 +13,6 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosed
 
 from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
-from getgather.browsers.residential_proxy import parse_target_domains_header
 from getgather.cdp_client import PageNotFoundError, open_cdp
 from getgather.zen_distill import convert, distill, load_distillation_patterns
 
@@ -216,8 +215,7 @@ async def create_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Starting browser {browser_id}...")
     try:
         origin_ip = request.headers.get("x-origin-ip")
-        target_domains = parse_target_domains_header(request.headers.get("x-target-domains"))
-        result = await backend.create_browser(browser_id, origin_ip, target_domains)
+        result = await backend.create_browser(browser_id, origin_ip)
         logger.info(f"Browser {browser_id} is started.")
         return result
     except Exception as e:
@@ -247,9 +245,8 @@ async def delete_browser(browser_id: str) -> dict[str, Any]:
 async def get_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Querying browser {browser_id}...")
     origin_ip = request.headers.get("x-origin-ip")
-    target_domains = parse_target_domains_header(request.headers.get("x-target-domains"))
     try:
-        return await backend.get_browser(browser_id, origin_ip, target_domains)
+        return await backend.get_browser(browser_id, origin_ip)
     except BrowserNotFound:
         detail = f"Browser {browser_id} not found!"
         logger.warning(detail)
@@ -412,8 +409,7 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
         logger.info(f"[CDP] Browser {browser_id} not found — launching")
         try:
             origin_ip = client_ws.headers.get("x-origin-ip")
-            target_domains = parse_target_domains_header(client_ws.headers.get("x-target-domains"))
-            await backend.create_browser(browser_id, origin_ip, target_domains)
+            await backend.create_browser(browser_id, origin_ip)
             logger.info(f"[CDP] Browser {browser_id} started")
         except Exception as e:
             logger.error(f"[CDP] Failed to auto-start browser {browser_id}: {e}")
