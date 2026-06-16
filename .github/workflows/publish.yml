@@ -34,7 +34,7 @@ jobs:
 
       - uses: remotebrowser/shared-github-actions/container-health-check@v1
         with:
-          image-name: getgather
+          image-name: remotebrowser
           health-checks: |
             {"url": "http://localhost:23456/health"}
             {"url": "http://localhost:23456/extended-health"}
