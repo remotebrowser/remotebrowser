@@ -68,13 +68,17 @@ class DaytonaBackend:
     async def shutdown(self) -> None:
         await self.client.close()
 
-    async def create_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def create_browser(
+        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+    ) -> dict[str, Any]:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
             return await self._get_info(sandbox)
 
-    async def get_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def get_browser(
+        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+    ) -> dict[str, Any]:
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
