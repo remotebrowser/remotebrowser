@@ -130,19 +130,12 @@ def parse_target_domains_header(header_value: str | None) -> list[str]:
     return [domain.strip() for domain in header_value.split(",") if domain.strip()]
 
 
-def _registered_domain(domain: str) -> str:
-    """Strip subdomains — 'www.amazon.com' -> 'amazon.com'."""
-    parts = domain.rsplit(".", 2)
-    return ".".join(parts[-2:]) if len(parts) >= 2 else domain
-
-
 def get_proxy_type_for_target_domains(
     target_domains: list[str],
 ) -> Literal["oxylabs", "massive"] | None:
     for domain in target_domains:
-        root = _registered_domain(domain)
         for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
-            if root in domain_pool:
+            if domain in domain_pool:
                 return proxy_type
     return None
 
