@@ -27,11 +27,11 @@ class Backend(Protocol):
     async def shutdown(self) -> None: ...
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...
 
     async def get_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]: ...

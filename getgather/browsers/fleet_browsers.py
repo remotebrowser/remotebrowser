@@ -96,24 +96,24 @@ class FleetBackend:
         return None
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
         headers: dict[str, str] = {}
         if origin_ip:
             headers["x-origin-ip"] = origin_ip
-        if target_domains:
-            headers["x-target-domains"] = ",".join(target_domains)
+        if target_domain:
+            headers["x-target-domains"] = target_domain
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
 
     async def get_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
         headers: dict[str, str] = {}
         if origin_ip:
             headers["x-origin-ip"] = origin_ip
-        if target_domains:
-            headers["x-target-domains"] = ",".join(target_domains)
+        if target_domain:
+            headers["x-target-domains"] = target_domain
         response = _require(
             await call_chromefleet_api("GET", browser_id, headers=headers, raise_for_status=False)
         )

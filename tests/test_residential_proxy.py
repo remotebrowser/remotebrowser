@@ -7,8 +7,7 @@ from getgather.browsers.residential_proxy import (
     MassiveProxyConfig,
     OxylabsProxyConfig,
     get_proxy_config,
-    get_proxy_type_for_target_domains,
-    parse_target_domains_header,
+    get_proxy_type_for_target_domain,
 )
 from getgather.browsers.settings import BrowserSettings
 
@@ -54,50 +53,28 @@ def test_geolocation_city_compacted() -> None:
     assert loc.city_compacted == "newyork"
 
 
-# --- parse_target_domains_header ---
-
-
-def test_parse_target_domains_header_empty() -> None:
-    assert parse_target_domains_header(None) == []
-    assert parse_target_domains_header("") == []
-
-
-def test_parse_target_domains_header_single() -> None:
-    assert parse_target_domains_header("amazon.com") == ["amazon.com"]
-
-
-def test_parse_target_domains_header_multiple() -> None:
-    assert parse_target_domains_header("amazon.com, google.com") == ["amazon.com", "google.com"]
-
-
-def test_parse_target_domains_header_strips_whitespace() -> None:
-    assert parse_target_domains_header("  amazon.com , google.com  ") == [
-        "amazon.com",
-        "google.com",
-    ]
-
-
-# --- get_proxy_type_for_target_domains ---
+# --- get_proxy_type_for_target_domain ---
 
 
 def test_get_proxy_type_oxylabs() -> None:
-    assert get_proxy_type_for_target_domains(["amazon.com"]) == "oxylabs"
+    assert get_proxy_type_for_target_domain("amazon.com") == "oxylabs"
 
 
 def test_get_proxy_type_massive() -> None:
-    assert get_proxy_type_for_target_domains(["google.com"]) == "massive"
-    assert get_proxy_type_for_target_domains(["youtube.com"]) == "massive"
-    assert get_proxy_type_for_target_domains(["doordash.com"]) == "massive"
+    assert get_proxy_type_for_target_domain("google.com") == "massive"
+    assert get_proxy_type_for_target_domain("youtube.com") == "massive"
+    assert get_proxy_type_for_target_domain("doordash.com") == "massive"
 
 
 def test_get_proxy_type_subdomain_matches() -> None:
-    assert get_proxy_type_for_target_domains(["www.amazon.com"]) == "oxylabs"
-    assert get_proxy_type_for_target_domains(["music.youtube.com"]) == "massive"
+    assert get_proxy_type_for_target_domain("www.amazon.com") == "oxylabs"
+    assert get_proxy_type_for_target_domain("music.youtube.com") == "massive"
 
 
 def test_get_proxy_type_no_match_returns_none() -> None:
-    assert get_proxy_type_for_target_domains(["example.com"]) is None
-    assert get_proxy_type_for_target_domains(["www.example.com"]) is None
+    assert get_proxy_type_for_target_domain(None) is None
+    assert get_proxy_type_for_target_domain("example.com") is None
+    assert get_proxy_type_for_target_domain("www.example.com") is None
 
 
 # --- OxylabsProxyConfig / MassiveProxyConfig URL format ---
@@ -142,7 +119,7 @@ async def test_get_proxy_config_no_ip_returns_none() -> None:
         MAXMIND_ACCOUNT_ID=1,
         MAXMIND_LICENSE_KEY="k",
     )
-    result = await get_proxy_config(None, [], s)
+    result = await get_proxy_config(None, None, s)
     assert result is None
 
 
@@ -155,7 +132,7 @@ async def test_get_proxy_config_no_maxmind_returns_none() -> None:
         MAXMIND_ACCOUNT_ID=0,
         MAXMIND_LICENSE_KEY="",
     )
-    result = await get_proxy_config("1.2.3.4", [], s)
+    result = await get_proxy_config("1.2.3.4", None, s)
     assert result is None
 
 
@@ -170,7 +147,7 @@ async def test_get_proxy_config_no_location_returns_none() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=None)
     ):
-        result = await get_proxy_config("1.2.3.4", [], s)
+        result = await get_proxy_config("1.2.3.4", None, s)
     assert result is None
 
 
@@ -188,7 +165,7 @@ async def test_get_proxy_config_domain_route_oxylabs() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=loc)
     ):
-        result = await get_proxy_config("1.2.3.4", ["amazon.com"], s)
+        result = await get_proxy_config("1.2.3.4", "amazon.com", s)
     assert result is not None
     assert result.type_ == "oxylabs"
     assert "oxylabs.io" in result.get_proxy_url("sess")
@@ -208,7 +185,7 @@ async def test_get_proxy_config_domain_route_massive() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=loc)
     ):
-        result = await get_proxy_config("1.2.3.4", ["youtube.com"], s)
+        result = await get_proxy_config("1.2.3.4", "youtube.com", s)
     assert result is not None
     assert result.type_ == "massive"
     assert "joinmassive.com" in result.get_proxy_url("sess")
@@ -229,7 +206,7 @@ async def test_get_proxy_config_default_fallback_when_no_domain_match() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=loc)
     ):
-        result = await get_proxy_config("1.2.3.4", ["example.com"], s)
+        result = await get_proxy_config("1.2.3.4", "example.com", s)
     assert result is not None
     assert result.type_ == "massive"
 
@@ -248,7 +225,7 @@ async def test_get_proxy_config_non_us_origin_country_only_url() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=loc)
     ):
-        result = await get_proxy_config("4.5.6.7", [], s)
+        result = await get_proxy_config("4.5.6.7", None, s)
     assert result is not None
     url = result.get_proxy_url("sess")
     assert "country-de" in url
@@ -271,5 +248,5 @@ async def test_get_proxy_config_no_provider_returns_none() -> None:
     with patch(
         "getgather.browsers.residential_proxy.get_location", new=AsyncMock(return_value=loc)
     ):
-        result = await get_proxy_config("1.2.3.4", [], s)
+        result = await get_proxy_config("1.2.3.4", None, s)
     assert result is None

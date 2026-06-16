@@ -124,25 +124,21 @@ class MassiveProxyConfig:
         )
 
 
-def parse_target_domains_header(header_value: str | None) -> list[str]:
-    if not header_value:
-        return []
-    return [domain.strip() for domain in header_value.split(",") if domain.strip()]
-
-
-def get_proxy_type_for_target_domains(
-    target_domains: list[str],
+def get_proxy_type_for_target_domain(
+    target_domain: str | None,
 ) -> Literal["oxylabs", "massive"] | None:
+    if not target_domain:
+        return None
     for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
         for pool_domain in domain_pool:
-            if any(pool_domain in target for target in target_domains):
+            if pool_domain in target_domain:
                 return proxy_type
     return None
 
 
 async def get_proxy_config(
     origin_ip: str | None,
-    target_domains: list[str],
+    target_domain: str | None,
     settings: "BrowserSettings",
 ) -> "OxylabsProxyConfig | MassiveProxyConfig | None":
     if not origin_ip:
@@ -176,10 +172,10 @@ async def get_proxy_config(
         logger.warning("x-origin-ip provided but no proxy provider is configured")
         return None
 
-    domain_type = get_proxy_type_for_target_domains(target_domains)
+    domain_type = get_proxy_type_for_target_domain(target_domain)
     if domain_type and domain_type in proxies:
         selected = domain_type
-        reason = f"domain-routed ({', '.join(target_domains)})"
+        reason = f"domain-routed ({target_domain})"
     elif settings.DEFAULT_PROXY_TYPE in proxies:
         selected = settings.DEFAULT_PROXY_TYPE
         reason = "default"

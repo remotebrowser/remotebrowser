@@ -236,9 +236,9 @@ async def configure_remote_browser(
     browser_id: str,
     container_name: str,
     origin_ip: str | None,
-    target_domains: list[str],
+    target_domain: str | None,
 ) -> str | None:
-    proxy_config = await get_proxy_config(origin_ip, target_domains, settings)
+    proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
 
     ip_before = await get_container_public_ip(container_name)
@@ -272,15 +272,15 @@ class PodmanBackend:
         return None
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         await launch_container(settings.CONTAINER_IMAGE, container_name)
-        ip = await configure_remote_browser(browser_id, container_name, origin_ip, target_domains)
+        ip = await configure_remote_browser(browser_id, container_name, origin_ip, target_domain)
         return {"container_name": container_name, "status": "created", "ip": ip}
 
     async def get_browser(
-        self, browser_id: str, origin_ip: str | None, target_domains: list[str]
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         if not await container_is_running(container_name):
@@ -289,7 +289,7 @@ class PodmanBackend:
         logger.debug(f"Browser {browser_id}: last_activity_timestamp={last_activity_timestamp}.")
         if origin_ip:
             ip = await configure_remote_browser(
-                browser_id, container_name, origin_ip, target_domains
+                browser_id, container_name, origin_ip, target_domain
             )
         else:
             ip = await get_container_public_ip(container_name)
