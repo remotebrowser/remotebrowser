@@ -90,15 +90,14 @@ def test_get_proxy_type_massive() -> None:
     assert get_proxy_type_for_target_domains(["doordash.com"]) == "massive"
 
 
+def test_get_proxy_type_subdomain_matches() -> None:
+    assert get_proxy_type_for_target_domains(["www.amazon.com"]) == "oxylabs"
+    assert get_proxy_type_for_target_domains(["music.youtube.com"]) == "massive"
+
+
 def test_get_proxy_type_no_match_returns_none() -> None:
     assert get_proxy_type_for_target_domains(["example.com"]) is None
-    assert get_proxy_type_for_target_domains(["www.amazon.com"]) is None
-    assert get_proxy_type_for_target_domains(["music.youtube.com"]) is None
-
-
-def test_get_proxy_type_first_match_wins() -> None:
-    assert get_proxy_type_for_target_domains(["amazon.com", "google.com"]) == "oxylabs"
-    assert get_proxy_type_for_target_domains(["google.com", "amazon.com"]) == "massive"
+    assert get_proxy_type_for_target_domains(["www.example.com"]) is None
 
 
 # --- OxylabsProxyConfig / MassiveProxyConfig URL format ---

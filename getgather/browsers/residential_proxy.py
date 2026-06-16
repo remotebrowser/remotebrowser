@@ -133,9 +133,9 @@ def parse_target_domains_header(header_value: str | None) -> list[str]:
 def get_proxy_type_for_target_domains(
     target_domains: list[str],
 ) -> Literal["oxylabs", "massive"] | None:
-    for domain in target_domains:
-        for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
-            if domain in domain_pool:
+    for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
+        for pool_domain in domain_pool:
+            if any(pool_domain in target for target in target_domains):
                 return proxy_type
     return None
 
