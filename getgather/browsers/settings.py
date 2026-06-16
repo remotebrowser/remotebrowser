@@ -30,7 +30,7 @@ class BrowserSettings(BaseSettings):
     CONTAINER_IMAGE: str = "ghcr.io/remotebrowser/chromium-live"
     CONTAINER_HOST: str = ""
 
-    # Residential proxy (Massive or Oxylabs) and MaxMind GeoIP (podman backend only)
+    # Residential proxy (Massive or Oxylabs) and MaxMind GeoIP (podman and daytona backends)
     MASSIVE_PROXY_USERNAME: str = ""
     MASSIVE_PROXY_PASSWORD: str = ""
     OXYLABS_USERNAME: str = ""

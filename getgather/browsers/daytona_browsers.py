@@ -13,6 +13,13 @@ from daytona import (
 from loguru import logger
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.residential_proxy import (
+    GeoLocation,
+    MassiveProxy,
+    OxylabsProxy,
+    get_location,
+)
+from getgather.config import settings
 
 CDP_PORT = 9222
 
@@ -47,13 +54,125 @@ def _browser_id_from_name(name: str) -> str:
     return name.removeprefix(BROWSER_NAME_PREFIX)
 
 
+async def _set_upstream(sandbox: AsyncSandbox, proxy_url: str) -> None:
+    stripped = proxy_url.removeprefix("http://")
+    cmds = [
+        "sed -i '/^Upstream http/d' /app/tinyproxy.conf",
+        f"sed -i '$ a\\Upstream http {stripped}' /app/tinyproxy.conf",
+        "pkill tinyproxy || true; tinyproxy -d -c /app/tinyproxy.conf &",
+    ]
+    for cmd in cmds:
+        response = await sandbox.process.exec(cmd)
+        if response.exit_code != 0:
+            logger.warning(
+                f"tinyproxy setup cmd failed (exit {response.exit_code}): {cmd!r}: {response.result.strip()!r}"
+            )
+
+
+async def _sandbox_public_ip(
+    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
+) -> str | None:
+    for attempt in range(1, retries + 1):
+        try:
+            response = await sandbox.process.exec(
+                "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+            )
+            ip = response.result.strip() or None
+            if ip:
+                return ip
+            logger.debug(f"IP check attempt {attempt}/{retries} in {sandbox.name}: empty response")
+        except Exception as e:
+            logger.debug(f"IP check attempt {attempt}/{retries} in {sandbox.name} failed: {e}")
+        if attempt < retries:
+            await asyncio.sleep(retry_delay)
+    logger.warning(f"IP check in {sandbox.name} failed after {retries} attempts")
+    return None
+
+
+async def _configure_proxy_in_sandbox(
+    sandbox: AsyncSandbox,
+    browser_id: str,
+    origin_ip: str | None,
+) -> str | None:
+    if origin_ip and not settings.MAXMIND_ENABLED:
+        logger.warning(
+            f"x-origin-ip={origin_ip} provided but MaxMind is not configured (missing MAXMIND_ACCOUNT_ID/MAXMIND_LICENSE_KEY) — location will not be resolved"
+        )
+
+    provider_name = settings.DEFAULT_PROXY_TYPE
+    if provider_name == "oxylabs" and not settings.OXYLABS_PROXY_ENABLED:
+        provider_name = "massive"
+    elif provider_name == "massive" and not settings.MASSIVE_PROXY_ENABLED:
+        provider_name = "oxylabs"
+
+    if provider_name == "oxylabs" and settings.OXYLABS_PROXY_ENABLED:
+        proxy_cls: type[OxylabsProxy] | type[MassiveProxy] | None = OxylabsProxy
+        proxy_user, proxy_pw = settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD
+    elif provider_name == "massive" and settings.MASSIVE_PROXY_ENABLED:
+        proxy_cls = MassiveProxy
+        proxy_user, proxy_pw = settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
+    else:
+        proxy_cls = None
+        proxy_user = proxy_pw = ""
+
+    if origin_ip and proxy_cls is None:
+        logger.warning(
+            f"x-origin-ip={origin_ip} provided but no residential proxy is configured — proxy will not be set"
+        )
+
+    proxy_url: str | None = None
+    if proxy_cls is not None:
+        location: GeoLocation | None = None
+
+        if origin_ip:
+            if settings.MAXMIND_ENABLED:
+                logger.debug(f"Looking up location for x-origin-ip={origin_ip}")
+                location = await get_location(
+                    origin_ip, settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY
+                )
+                if location:
+                    logger.info(
+                        f"MaxMind resolved {origin_ip} -> country={location.country} subdivision={location.subdivision} city={location.city}"
+                    )
+                else:
+                    logger.warning(f"MaxMind returned no location for x-origin-ip={origin_ip}")
+
+        if location:
+            proxy_url = proxy_cls.format_url(
+                location,
+                session_id=browser_id,
+                username=proxy_user,
+                password=proxy_pw,
+            )
+            logger.debug(
+                f"Generated {provider_name} proxy_url for browser {browser_id}: {proxy_url}"
+            )
+
+    ip_before = await _sandbox_public_ip(sandbox)
+    logger.debug(f"Browser {browser_id} IP before applying config: {ip_before}")
+
+    if proxy_url:
+        await _set_upstream(sandbox, proxy_url)
+        ip_after = await _sandbox_public_ip(sandbox)
+        if ip_before and ip_after:
+            if ip_before != ip_after:
+                logger.info(f"Browser {browser_id} IP changed: {ip_before} -> {ip_after}")
+            else:
+                logger.warning(
+                    f"Browser {browser_id} IP unchanged after proxy configuration: {ip_before}"
+                )
+        return ip_after
+    return ip_before
+
+
 class DaytonaBackend:
     """Launch a Daytona sandbox per browser on demand (no pool).
 
     The browser_id -> sandbox mapping is the deterministic sandbox name plus labels, so there is
     no local state. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
     self-authenticating HTTPS reverse proxy to port 9222 (no inbound networking into the sandbox is
-    required). VNC and residential-proxy/geo-IP are podman-only and unavailable here.
+    required). VNC is podman-only; CDP is reached over an HTTPS signed preview URL. Residential
+    proxy / geo-IP works here when configured.
 
     Sandbox teardown is owned by Daytona: auto_stop_interval stops idle sandboxes and
     auto_delete_interval deletes them once continuously stopped past the TTL (both set at create
@@ -72,13 +191,18 @@ class DaytonaBackend:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
-            return await self._get_info(sandbox)
+            ip = await _configure_proxy_in_sandbox(sandbox, browser_id, origin_ip)
+            return await self._get_info(sandbox, ip_address=ip)
 
     async def get_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
-        return await self._get_info(sandbox)
+        if origin_ip:
+            ip = await _configure_proxy_in_sandbox(sandbox, browser_id, origin_ip)
+        else:
+            ip = await _sandbox_public_ip(sandbox)
+        return await self._get_info(sandbox, ip_address=ip)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
         name = _sandbox_name(browser_id)
@@ -134,13 +258,15 @@ class DaytonaBackend:
 
         return sandbox
 
-    async def _get_info(self, sandbox: AsyncSandbox) -> dict[str, Any]:
+    async def _get_info(
+        self, sandbox: AsyncSandbox, *, ip_address: str | None = None
+    ) -> dict[str, Any]:
         signed = await sandbox.create_signed_preview_url(
             CDP_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
         )
         return {
             "hostname": sandbox.name,
-            "ip_address": None,  # the sandbox IP is not reachable; CDP is via the signed preview URL
+            "ip_address": ip_address,
             "cdp_url": signed.url,  # public, internet-reachable; bearer secret (see SIGNED_URL_TTL_SECONDS)
             "app_state": sandbox.state,
             "last_activity_timestamp": await self._get_last_activity(sandbox),
