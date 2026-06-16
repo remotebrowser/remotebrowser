@@ -54,41 +54,37 @@ class MassiveLocation(BaseModel):
         return self
 
 
-class MassiveProxy:
-    @staticmethod
-    async def get_location(
-        ip: str,
-        account_id: int,
-        license_key: str,
-    ) -> "MassiveLocation | None":
-        """Look up geolocation for an IP via MaxMind GeoIP2 City web service.
+async def get_location(ip: str, account_id: int, license_key: str) -> "MassiveLocation | None":
+    """Look up geolocation for an IP via MaxMind GeoIP2 City web service.
 
-        Returns a MassiveLocation or None if the IP is local/unknown or lookup fails.
-        """
-        if not ip or ip in _SKIP_IPS:
-            return None
+    Shared by all proxy providers. Returns MassiveLocation or None.
+    """
+    if not ip or ip in _SKIP_IPS:
+        return None
 
-        async with AsyncClient(account_id, license_key) as client:
-            try:
-                response = await client.city(ip)
-            except GeoIP2Error:
-                return None
-
-        country = response.country.iso_code  # e.g. "US"
-        subdivision = response.subdivisions.most_specific.iso_code  # e.g. "CA"
-        city = response.city.name
-        postal_code = response.postal.code
-
+    async with AsyncClient(account_id, license_key) as client:
         try:
-            return MassiveLocation(
-                country=country,
-                subdivision=subdivision,
-                city=city,
-                postal_code=postal_code,
-            )
-        except ValueError:
+            response = await client.city(ip)
+        except GeoIP2Error:
             return None
 
+    country = response.country.iso_code  # e.g. "US"
+    subdivision = response.subdivisions.most_specific.iso_code  # e.g. "CA"
+    city = response.city.name
+    postal_code = response.postal.code
+
+    try:
+        return MassiveLocation(
+            country=country,
+            subdivision=subdivision,
+            city=city,
+            postal_code=postal_code,
+        )
+    except ValueError:
+        return None
+
+
+class MassiveProxy:
     @staticmethod
     def format_url(
         location: "MassiveLocation",
@@ -112,3 +108,20 @@ class MassiveProxy:
             username_template += f"-zipcode-{location.postal_code}"
         # max ttl is 240 mins: https://docs.joinmassive.com/residential/sticky-sessions
         return f"http://{username_template}-session-{session_id}-sessionttl-240:{password}@network.joinmassive.com:65534"
+
+
+class OxylabsProxy:
+    @staticmethod
+    def format_url(
+        location: "MassiveLocation",
+        session_id: str,
+        username: str,
+        password: str,
+    ) -> str:
+        # Sticky session URL; sesstime=1440 is the max (24h).
+        # Country-only targeting (subdivision/postal_code ignored) — tested higher success rate
+        # than finer-grained targeting; Oxylabs pool is larger at country level.
+        return (
+            f"http://customer-{username}-cc-{(location.country or '').upper()}"
+            f"-sessid-{session_id}-sesstime-1440:{password}@pr.oxylabs.io:7777"
+        )

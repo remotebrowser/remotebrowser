@@ -9,7 +9,12 @@ from typing import Any
 from loguru import logger
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
-from getgather.browsers.residential_proxy import MassiveLocation, MassiveProxy
+from getgather.browsers.residential_proxy import (
+    MassiveLocation,
+    MassiveProxy,
+    OxylabsProxy,
+    get_location,
+)
 from getgather.config import settings
 
 DOCKER_INTERNAL_HOST = "172.17.0.1"
@@ -241,18 +246,36 @@ async def configure_remote_browser(
         logger.warning(
             f"x-origin-ip={origin_ip} provided but MaxMind is not configured (missing MAXMIND_ACCOUNT_ID/MAXMIND_LICENSE_KEY) — location will not be resolved"
         )
-    if origin_ip and not settings.MASSIVE_PROXY_ENABLED:
+
+    provider_name = settings.DEFAULT_PROXY_TYPE
+    if provider_name == "oxylabs" and not settings.OXYLABS_PROXY_ENABLED:
+        provider_name = "massive"
+    elif provider_name == "massive" and not settings.MASSIVE_PROXY_ENABLED:
+        provider_name = "oxylabs"
+
+    if provider_name == "oxylabs" and settings.OXYLABS_PROXY_ENABLED:
+        proxy_cls: type[OxylabsProxy] | type[MassiveProxy] | None = OxylabsProxy
+        proxy_user, proxy_pw = settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD
+    elif provider_name == "massive" and settings.MASSIVE_PROXY_ENABLED:
+        proxy_cls = MassiveProxy
+        proxy_user, proxy_pw = settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
+    else:
+        proxy_cls = None
+        proxy_user = proxy_pw = ""
+
+    if origin_ip and proxy_cls is None:
         logger.warning(
-            f"x-origin-ip={origin_ip} provided but Massive proxy is not configured (missing MASSIVE_PROXY_USERNAME/MASSIVE_PROXY_PASSWORD) — proxy will not be set"
+            f"x-origin-ip={origin_ip} provided but no residential proxy is configured — proxy will not be set"
         )
+
     proxy_url: str | None = None
-    if settings.MASSIVE_PROXY_ENABLED:
+    if proxy_cls is not None:
         location: MassiveLocation | None = None
 
         if origin_ip:
             if settings.MAXMIND_ENABLED:
                 logger.debug(f"Looking up location for x-origin-ip={origin_ip}")
-                location = await MassiveProxy.get_location(
+                location = await get_location(
                     origin_ip, settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY
                 )
                 if location:
@@ -263,13 +286,15 @@ async def configure_remote_browser(
                     logger.warning(f"MaxMind returned no location for x-origin-ip={origin_ip}")
 
         if location:
-            proxy_url = MassiveProxy.format_url(
+            proxy_url = proxy_cls.format_url(
                 location,
                 session_id=browser_id,
-                username=settings.MASSIVE_PROXY_USERNAME,
-                password=settings.MASSIVE_PROXY_PASSWORD,
+                username=proxy_user,
+                password=proxy_pw,
             )
-            logger.debug(f"Generated MassiveProxy proxy_url for browser {browser_id}: {proxy_url}")
+            logger.debug(
+                f"Generated {provider_name} proxy_url for browser {browser_id}: {proxy_url}"
+            )
     ip_before = await get_container_public_ip(container_name)
     logger.debug(f"Browser {browser_id} IP before applying config: {ip_before}")
 
