@@ -7,7 +7,7 @@ from pydantic import BaseModel, model_validator
 _SKIP_IPS = {"127.0.0.1", "::1", "localhost", "unknown"}
 
 
-class MassiveLocation(BaseModel):
+class GeoLocation(BaseModel):
     """Location information for Massive proxy configuration.
 
     Validation rules:
@@ -54,10 +54,10 @@ class MassiveLocation(BaseModel):
         return self
 
 
-async def get_location(ip: str, account_id: int, license_key: str) -> "MassiveLocation | None":
+async def get_location(ip: str, account_id: int, license_key: str) -> "GeoLocation | None":
     """Look up geolocation for an IP via MaxMind GeoIP2 City web service.
 
-    Shared by all proxy providers. Returns MassiveLocation or None.
+    Shared by all proxy providers. Returns GeoLocation or None.
     """
     if not ip or ip in _SKIP_IPS:
         return None
@@ -74,7 +74,7 @@ async def get_location(ip: str, account_id: int, license_key: str) -> "MassiveLo
     postal_code = response.postal.code
 
     try:
-        return MassiveLocation(
+        return GeoLocation(
             country=country,
             subdivision=subdivision,
             city=city,
@@ -87,7 +87,7 @@ async def get_location(ip: str, account_id: int, license_key: str) -> "MassiveLo
 class MassiveProxy:
     @staticmethod
     def format_url(
-        location: "MassiveLocation",
+        location: "GeoLocation",
         session_id: str,
         username: str,
         password: str,
@@ -113,7 +113,7 @@ class MassiveProxy:
 class OxylabsProxy:
     @staticmethod
     def format_url(
-        location: "MassiveLocation",
+        location: "GeoLocation",
         session_id: str,
         username: str,
         password: str,

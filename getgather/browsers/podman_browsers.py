@@ -10,7 +10,7 @@ from loguru import logger
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
 from getgather.browsers.residential_proxy import (
-    MassiveLocation,
+    GeoLocation,
     MassiveProxy,
     OxylabsProxy,
     get_location,
@@ -270,7 +270,7 @@ async def configure_remote_browser(
 
     proxy_url: str | None = None
     if proxy_cls is not None:
-        location: MassiveLocation | None = None
+        location: GeoLocation | None = None
 
         if origin_ip:
             if settings.MAXMIND_ENABLED:
