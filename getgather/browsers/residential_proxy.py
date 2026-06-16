@@ -10,14 +10,8 @@ if TYPE_CHECKING:
     from getgather.browsers.settings import BrowserSettings
 
 _SKIP_IPS = {"127.0.0.1", "::1", "localhost", "unknown"}
-_MASSIVE_DOMAINS: set[str] = {
-    "google.com",
-    "*.google.com",
-    "doordash.com",
-    "youtube.com",
-    "*.youtube.com",
-}
-_OXYLABS_DOMAINS: set[str] = {"amazon.com", "*.amazon.com"}
+_MASSIVE_DOMAINS: set[str] = {"google.com", "doordash.com", "youtube.com"}
+_OXYLABS_DOMAINS: set[str] = {"amazon.com"}
 _PROXY_DOMAIN_POOLS: list[tuple[Literal["oxylabs", "massive"], set[str]]] = [
     ("massive", _MASSIVE_DOMAINS),
     ("oxylabs", _OXYLABS_DOMAINS),
@@ -136,31 +130,12 @@ def parse_target_domains_header(header_value: str | None) -> list[str]:
     return [domain.strip() for domain in header_value.split(",") if domain.strip()]
 
 
-def _domain_matches_pool(domain: str, pool: set[str]) -> bool:
-    if domain in pool:
-        return True
-    labels = domain.split(".")
-    for index in range(1, len(labels)):
-        wildcard = "*." + ".".join(labels[index:])
-        if wildcard in pool:
-            return True
-    return False
-
-
-def _wildcard_matches_pool(domain: str, pool: set[str]) -> bool:
-    return _domain_matches_pool(domain, pool) and domain not in pool
-
-
 def get_proxy_type_for_target_domains(
     target_domains: list[str],
 ) -> Literal["oxylabs", "massive"] | None:
     for domain in target_domains:
         for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
             if domain in domain_pool:
-                return proxy_type
-    for domain in target_domains:
-        for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
-            if _wildcard_matches_pool(domain, domain_pool):
                 return proxy_type
     return None
 

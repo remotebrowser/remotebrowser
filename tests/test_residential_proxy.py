@@ -3,13 +3,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from getgather.browsers.residential_proxy import (
-    _MASSIVE_DOMAINS,  # pyright: ignore[reportPrivateUsage]
-    _OXYLABS_DOMAINS,  # pyright: ignore[reportPrivateUsage]
     GeoLocation,
     MassiveProxyConfig,
     OxylabsProxyConfig,
-    _domain_matches_pool,  # pyright: ignore[reportPrivateUsage]
-    _wildcard_matches_pool,  # pyright: ignore[reportPrivateUsage]
     get_proxy_config,
     get_proxy_type_for_target_domains,
     parse_target_domains_header,
@@ -81,61 +77,28 @@ def test_parse_target_domains_header_strips_whitespace() -> None:
     ]
 
 
-# --- _domain_matches_pool ---
-
-
-def test_domain_matches_pool_exact() -> None:
-    assert _domain_matches_pool("amazon.com", _OXYLABS_DOMAINS)
-    assert _domain_matches_pool("google.com", _MASSIVE_DOMAINS)
-
-
-def test_domain_matches_pool_wildcard() -> None:
-    assert _domain_matches_pool("www.amazon.com", _OXYLABS_DOMAINS)
-    assert _domain_matches_pool("music.youtube.com", _MASSIVE_DOMAINS)
-
-
-def test_domain_matches_pool_no_match() -> None:
-    assert not _domain_matches_pool("example.com", _OXYLABS_DOMAINS)
-    assert not _domain_matches_pool("example.com", _MASSIVE_DOMAINS)
-
-
-def test_wildcard_matches_pool_only_for_subdomains() -> None:
-    # exact match is NOT a wildcard match
-    assert not _wildcard_matches_pool("amazon.com", _OXYLABS_DOMAINS)
-    # subdomain IS a wildcard match
-    assert _wildcard_matches_pool("shop.amazon.com", _OXYLABS_DOMAINS)
-
-
 # --- get_proxy_type_for_target_domains ---
 
 
-def test_get_proxy_type_exact_oxylabs() -> None:
+def test_get_proxy_type_oxylabs() -> None:
     assert get_proxy_type_for_target_domains(["amazon.com"]) == "oxylabs"
 
 
-def test_get_proxy_type_exact_massive() -> None:
+def test_get_proxy_type_massive() -> None:
     assert get_proxy_type_for_target_domains(["google.com"]) == "massive"
     assert get_proxy_type_for_target_domains(["youtube.com"]) == "massive"
     assert get_proxy_type_for_target_domains(["doordash.com"]) == "massive"
 
 
-def test_get_proxy_type_wildcard_oxylabs() -> None:
-    assert get_proxy_type_for_target_domains(["www.amazon.com"]) == "oxylabs"
-
-
-def test_get_proxy_type_wildcard_massive() -> None:
-    assert get_proxy_type_for_target_domains(["music.youtube.com"]) == "massive"
-
-
 def test_get_proxy_type_no_match_returns_none() -> None:
     assert get_proxy_type_for_target_domains(["example.com"]) is None
+    assert get_proxy_type_for_target_domains(["www.amazon.com"]) is None
+    assert get_proxy_type_for_target_domains(["music.youtube.com"]) is None
 
 
-def test_get_proxy_type_exact_wins_over_wildcard() -> None:
-    # "amazon.com" is exact (oxylabs); wildcard "*.amazon.com" also oxylabs — exact takes priority
-    result = get_proxy_type_for_target_domains(["shop.amazon.com", "google.com"])
-    # google.com is exact massive; shop.amazon.com is wildcard oxylabs — exact wins first
-    assert result == "massive"
+def test_get_proxy_type_first_match_wins() -> None:
+    assert get_proxy_type_for_target_domains(["amazon.com", "google.com"]) == "oxylabs"
+    assert get_proxy_type_for_target_domains(["google.com", "amazon.com"]) == "massive"
 
 
 # --- OxylabsProxyConfig / MassiveProxyConfig URL format ---
