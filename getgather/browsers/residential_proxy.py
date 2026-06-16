@@ -1,21 +1,30 @@
-from typing import Self
+from typing import TYPE_CHECKING, Literal, Protocol, Self
 
+from async_lru import alru_cache
 from geoip2.errors import GeoIP2Error
 from geoip2.webservice import AsyncClient
+from loguru import logger
 from pydantic import BaseModel, model_validator
 
+if TYPE_CHECKING:
+    from getgather.browsers.settings import BrowserSettings
+
 _SKIP_IPS = {"127.0.0.1", "::1", "localhost", "unknown"}
+_MASSIVE_DOMAINS: set[str] = {
+    "google.com",
+    "*.google.com",
+    "doordash.com",
+    "youtube.com",
+    "*.youtube.com",
+}
+_OXYLABS_DOMAINS: set[str] = {"amazon.com", "*.amazon.com"}
+_PROXY_DOMAIN_POOLS: list[tuple[Literal["oxylabs", "massive"], set[str]]] = [
+    ("massive", _MASSIVE_DOMAINS),
+    ("oxylabs", _OXYLABS_DOMAINS),
+]
 
 
 class GeoLocation(BaseModel):
-    """Location information for Massive proxy configuration.
-
-    Validation rules:
-    - Country: Must be 2-char ISO code, normalized to lowercase
-    - Subdivision: Normalized to lowercase with underscores, validated for US
-    - Non-US countries: postal_code and subdivision raise ValueError
-    """
-
     country: str | None = None
     subdivision: str | None = None
     city: str | None = None
@@ -36,15 +45,10 @@ class GeoLocation(BaseModel):
                 f"Invalid country code: '{self.country}'. Must be a 2-character ISO country code (e.g., 'us', 'uk')"
             )
 
+        # Geolocation guard: drop fields that don't apply outside US instead of raising.
         if self.country != "us":
-            if self.postal_code:
-                raise ValueError(
-                    f"postal_code not supported for non-US (country: '{self.country}')"
-                )
-            if self.subdivision:
-                raise ValueError(
-                    f"subdivision not supported for non-US (country: '{self.country}')"
-                )
+            self.subdivision = ""
+            self.postal_code = None
 
         if self.city:
             self.city_compacted = (
@@ -54,27 +58,25 @@ class GeoLocation(BaseModel):
         return self
 
 
+@alru_cache
 async def get_location(ip: str, account_id: int, license_key: str) -> "GeoLocation | None":
-    """Look up geolocation for an IP via MaxMind GeoIP2 City web service.
-
-    Shared by all proxy providers. Returns GeoLocation or None.
-    """
     if not ip or ip in _SKIP_IPS:
         return None
 
     async with AsyncClient(account_id, license_key) as client:
         try:
             response = await client.city(ip)
-        except GeoIP2Error:
+        except GeoIP2Error as e:
+            logger.warning(f"MaxMind GeoIP2 error for {ip}: {e}")
             return None
 
-    country = response.country.iso_code  # e.g. "US"
-    subdivision = response.subdivisions.most_specific.iso_code  # e.g. "CA"
+    country = response.country.iso_code
+    subdivision = response.subdivisions.most_specific.iso_code
     city = response.city.name
     postal_code = response.postal.code
 
     try:
-        return GeoLocation(
+        location = GeoLocation(
             country=country,
             subdivision=subdivision,
             city=city,
@@ -83,43 +85,132 @@ async def get_location(ip: str, account_id: int, license_key: str) -> "GeoLocati
     except ValueError:
         return None
 
-
-class MassiveProxy:
-    @staticmethod
-    def format_url(
-        location: "GeoLocation",
-        session_id: str,
-        username: str,
-        password: str,
-    ) -> str:
-        """Format a Massive residential proxy URL from a location.
-
-        Returns:
-            Formatted proxy URL.
-        """
-        username_template = f"{username}-country-{(location.country or 'US').upper()}"
-        if (
-            location.subdivision and len(location.subdivision) == 2
-        ):  # only add subdivision if it's a valid 2-letter code (currently only supporting US subdivisions)
-            username_template += f"-subdivision-{location.subdivision.upper()}"
-        elif location.postal_code:  # don't want to unnecessarily constrain the pool size by adding postal code if subdivision is already specified
-            username_template += f"-zipcode-{location.postal_code}"
-        # max ttl is 240 mins: https://docs.joinmassive.com/residential/sticky-sessions
-        return f"http://{username_template}-session-{session_id}-sessionttl-240:{password}@network.joinmassive.com:65534"
+    logger.info(f"MaxMind resolved {ip} -> country={location.country}")
+    return location
 
 
-class OxylabsProxy:
-    @staticmethod
-    def format_url(
-        location: "GeoLocation",
-        session_id: str,
-        username: str,
-        password: str,
-    ) -> str:
-        # Sticky session URL; sesstime=1440 is the max (24h).
-        # Country-only targeting (subdivision/postal_code ignored) — tested higher success rate
-        # than finer-grained targeting; Oxylabs pool is larger at country level.
+class ProxyConfig(Protocol):
+    @property
+    def type_(self) -> Literal["oxylabs", "massive"]: ...
+
+    location: GeoLocation
+
+    def get_proxy_url(self, session_id: str) -> str: ...
+
+
+class OxylabsProxyConfig:
+    type_: Literal["oxylabs", "massive"] = "oxylabs"
+
+    def __init__(self, location: GeoLocation, username: str, password: str) -> None:
+        self.location = location
+        self.username = username
+        self.password = password
+
+    def get_proxy_url(self, session_id: str) -> str:
+        # Country-only targeting — larger pool, higher success rate than finer-grained.
         return (
-            f"http://customer-{username}-cc-{(location.country or 'US').upper()}"
-            f"-sessid-{session_id}-sesstime-1440:{password}@pr.oxylabs.io:7777"
+            f"http://customer-{self.username}-cc-{(self.location.country or 'us').upper()}"
+            f"-sessid-{session_id}-sesstime-1440:{self.password}@pr.oxylabs.io:7777"
         )
+
+
+class MassiveProxyConfig:
+    type_: Literal["oxylabs", "massive"] = "massive"
+
+    def __init__(self, location: GeoLocation, username: str, password: str) -> None:
+        self.location = location
+        self.username = username
+        self.password = password
+
+    def get_proxy_url(self, session_id: str) -> str:
+        # Country-only targeting — mirror flyfleet; broader pool.
+        return (
+            f"http://{self.username}-country-{self.location.country}"
+            f"-session-{session_id}-sessionttl-240:{self.password}@network.joinmassive.com:65534"
+        )
+
+
+def parse_target_domains_header(header_value: str | None) -> list[str]:
+    if not header_value:
+        return []
+    return [domain.strip() for domain in header_value.split(",") if domain.strip()]
+
+
+def _domain_matches_pool(domain: str, pool: set[str]) -> bool:
+    if domain in pool:
+        return True
+    labels = domain.split(".")
+    for index in range(1, len(labels)):
+        wildcard = "*." + ".".join(labels[index:])
+        if wildcard in pool:
+            return True
+    return False
+
+
+def _wildcard_matches_pool(domain: str, pool: set[str]) -> bool:
+    return _domain_matches_pool(domain, pool) and domain not in pool
+
+
+def get_proxy_type_for_target_domains(
+    target_domains: list[str],
+) -> Literal["oxylabs", "massive"] | None:
+    for domain in target_domains:
+        for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
+            if domain in domain_pool:
+                return proxy_type
+    for domain in target_domains:
+        for proxy_type, domain_pool in _PROXY_DOMAIN_POOLS:
+            if _wildcard_matches_pool(domain, domain_pool):
+                return proxy_type
+    return None
+
+
+async def get_proxy_config(
+    origin_ip: str | None,
+    target_domains: list[str],
+    settings: "BrowserSettings",
+) -> "OxylabsProxyConfig | MassiveProxyConfig | None":
+    if not origin_ip:
+        logger.info("No origin IP provided — skipping proxy selection")
+        return None
+
+    if not settings.MAXMIND_ENABLED:
+        logger.info(
+            f"x-origin-ip={origin_ip} provided but MaxMind not configured — skipping proxy selection"
+        )
+        return None
+
+    location = await get_location(
+        origin_ip, settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY
+    )
+    if not location:
+        logger.info(f"Could not resolve location for {origin_ip} — skipping proxy selection")
+        return None
+
+    proxies: dict[Literal["oxylabs", "massive"], OxylabsProxyConfig | MassiveProxyConfig] = {}
+    if settings.OXYLABS_PROXY_ENABLED:
+        proxies["oxylabs"] = OxylabsProxyConfig(
+            location, settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD
+        )
+    if settings.MASSIVE_PROXY_ENABLED:
+        proxies["massive"] = MassiveProxyConfig(
+            location, settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
+        )
+
+    if not proxies:
+        logger.warning("x-origin-ip provided but no proxy provider is configured")
+        return None
+
+    domain_type = get_proxy_type_for_target_domains(target_domains)
+    if domain_type and domain_type in proxies:
+        selected = domain_type
+        reason = f"domain-routed ({', '.join(target_domains)})"
+    elif settings.DEFAULT_PROXY_TYPE in proxies:
+        selected = settings.DEFAULT_PROXY_TYPE
+        reason = "default"
+    else:
+        selected = next(iter(proxies))
+        reason = "fallback (default unavailable)"
+
+    logger.info(f"Proxy selected: provider={selected} reason={reason} country={location.country}")
+    return proxies[selected]
