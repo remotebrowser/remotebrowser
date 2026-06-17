@@ -9,12 +9,7 @@ from typing import Any
 from loguru import logger
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
-from getgather.browsers.residential_proxy import (
-    GeoLocation,
-    MassiveProxy,
-    OxylabsProxy,
-    get_location,
-)
+from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
 DOCKER_INTERNAL_HOST = "172.17.0.1"
@@ -241,60 +236,11 @@ async def configure_remote_browser(
     browser_id: str,
     container_name: str,
     origin_ip: str | None,
+    target_domain: str | None,
 ) -> str | None:
-    if origin_ip and not settings.MAXMIND_ENABLED:
-        logger.warning(
-            f"x-origin-ip={origin_ip} provided but MaxMind is not configured (missing MAXMIND_ACCOUNT_ID/MAXMIND_LICENSE_KEY) — location will not be resolved"
-        )
+    proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
+    proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
 
-    provider_name = settings.DEFAULT_PROXY_TYPE
-    if provider_name == "oxylabs" and not settings.OXYLABS_PROXY_ENABLED:
-        provider_name = "massive"
-    elif provider_name == "massive" and not settings.MASSIVE_PROXY_ENABLED:
-        provider_name = "oxylabs"
-
-    if provider_name == "oxylabs" and settings.OXYLABS_PROXY_ENABLED:
-        proxy_cls: type[OxylabsProxy] | type[MassiveProxy] | None = OxylabsProxy
-        proxy_user, proxy_pw = settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD
-    elif provider_name == "massive" and settings.MASSIVE_PROXY_ENABLED:
-        proxy_cls = MassiveProxy
-        proxy_user, proxy_pw = settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
-    else:
-        proxy_cls = None
-        proxy_user = proxy_pw = ""
-
-    if origin_ip and proxy_cls is None:
-        logger.warning(
-            f"x-origin-ip={origin_ip} provided but no residential proxy is configured — proxy will not be set"
-        )
-
-    proxy_url: str | None = None
-    if proxy_cls is not None:
-        location: GeoLocation | None = None
-
-        if origin_ip:
-            if settings.MAXMIND_ENABLED:
-                logger.debug(f"Looking up location for x-origin-ip={origin_ip}")
-                location = await get_location(
-                    origin_ip, settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY
-                )
-                if location:
-                    logger.info(
-                        f"MaxMind resolved {origin_ip} -> country={location.country} subdivision={location.subdivision} city={location.city}"
-                    )
-                else:
-                    logger.warning(f"MaxMind returned no location for x-origin-ip={origin_ip}")
-
-        if location:
-            proxy_url = proxy_cls.format_url(
-                location,
-                session_id=browser_id,
-                username=proxy_user,
-                password=proxy_pw,
-            )
-            logger.debug(
-                f"Generated {provider_name} proxy_url for browser {browser_id}: {proxy_url}"
-            )
     ip_before = await get_container_public_ip(container_name)
     logger.debug(f"Browser {browser_id} IP before applying config: {ip_before}")
 
@@ -325,20 +271,26 @@ class PodmanBackend:
     async def shutdown(self) -> None:
         return None
 
-    async def create_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def create_browser(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         await launch_container(settings.CONTAINER_IMAGE, container_name)
-        ip = await configure_remote_browser(browser_id, container_name, origin_ip)
+        ip = await configure_remote_browser(browser_id, container_name, origin_ip, target_domain)
         return {"container_name": container_name, "status": "created", "ip": ip}
 
-    async def get_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def get_browser(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         if not await container_is_running(container_name):
             raise BrowserNotFound(browser_id)
         last_activity_timestamp = await get_container_last_activity(container_name)
         logger.debug(f"Browser {browser_id}: last_activity_timestamp={last_activity_timestamp}.")
         if origin_ip:
-            ip = await configure_remote_browser(browser_id, container_name, origin_ip)
+            ip = await configure_remote_browser(
+                browser_id, container_name, origin_ip, target_domain
+            )
         else:
             ip = await get_container_public_ip(container_name)
         return {"last_activity_timestamp": last_activity_timestamp, "ip": ip}

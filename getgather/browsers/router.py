@@ -215,7 +215,8 @@ async def create_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Starting browser {browser_id}...")
     try:
         origin_ip = request.headers.get("x-origin-ip")
-        result = await backend.create_browser(browser_id, origin_ip)
+        target_domain = request.headers.get("x-target-domains")
+        result = await backend.create_browser(browser_id, origin_ip, target_domain)
         logger.info(f"Browser {browser_id} is started.")
         return result
     except Exception as e:
@@ -245,8 +246,9 @@ async def delete_browser(browser_id: str) -> dict[str, Any]:
 async def get_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Querying browser {browser_id}...")
     origin_ip = request.headers.get("x-origin-ip")
+    target_domain = request.headers.get("x-target-domains")
     try:
-        return await backend.get_browser(browser_id, origin_ip)
+        return await backend.get_browser(browser_id, origin_ip, target_domain)
     except BrowserNotFound:
         detail = f"Browser {browser_id} not found!"
         logger.warning(detail)
@@ -409,7 +411,8 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
         logger.info(f"[CDP] Browser {browser_id} not found — launching")
         try:
             origin_ip = client_ws.headers.get("x-origin-ip")
-            await backend.create_browser(browser_id, origin_ip)
+            target_domain = client_ws.headers.get("x-target-domains")
+            await backend.create_browser(browser_id, origin_ip, target_domain)
             logger.info(f"[CDP] Browser {browser_id} started")
         except Exception as e:
             logger.error(f"[CDP] Failed to auto-start browser {browser_id}: {e}")
