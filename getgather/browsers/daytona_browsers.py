@@ -89,24 +89,25 @@ async def _configure_remote_sandbox(
     browser_id: str,
     origin_ip: str | None,
     target_domain: str | None,
-) -> str | None:
+) -> None:
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
+
+    if not proxy_url:
+        return
 
     ip_before = await _get_sandbox_public_ip(sandbox)
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
-    if proxy_url:
-        ok = await _configure_sandbox_proxy(sandbox, proxy_url)
-        if not ok:
-            return ip_before
-        ip_after = await _get_sandbox_public_ip(sandbox)
-        if ip_before and ip_after and ip_before != ip_after:
-            logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
-        elif ip_before == ip_after:
-            logger.warning(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
-        return ip_after
-    return ip_before
+    ok = await _configure_sandbox_proxy(sandbox, proxy_url)
+    if not ok:
+        return
+
+    ip_after = await _get_sandbox_public_ip(sandbox)
+    if ip_before and ip_after and ip_before != ip_after:
+        logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
+    elif ip_before == ip_after:
+        logger.warning(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -141,10 +142,8 @@ class DaytonaBackend:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
-            ip = await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
-            info = await self._get_info(sandbox)
-            info["ip_address"] = ip
-            return info
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            return await self._get_info(sandbox)
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
@@ -153,12 +152,8 @@ class DaytonaBackend:
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if origin_ip:
-            ip = await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
-        else:
-            ip = await _get_sandbox_public_ip(sandbox)
-        info = await self._get_info(sandbox)
-        info["ip_address"] = ip
-        return info
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+        return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
         name = _sandbox_name(browser_id)
