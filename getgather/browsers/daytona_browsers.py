@@ -51,6 +51,7 @@ async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> boo
         "sed -i '/^Upstream http/d' /app/tinyproxy.conf",
         f"sed -i '$ a\\Upstream http {stripped}' /app/tinyproxy.conf",
         "sudo /command/s6-svc -r /run/service/tinyproxy",
+        "while ! curl -s -o /dev/null -x http://localhost:8119 http://tinyproxy.stats; do sleep 0.1; done",
     ]
     for cmd in cmds:
         try:
