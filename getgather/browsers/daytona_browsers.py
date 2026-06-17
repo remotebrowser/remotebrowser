@@ -16,6 +16,11 @@ from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
+
+class ProxyVerificationError(Exception):
+    """Raised when egress IP is unchanged after proxy configuration."""
+
+
 CDP_PORT = 9222
 
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
@@ -108,7 +113,9 @@ async def _configure_remote_sandbox(
     if ip_before and ip_after and ip_before != ip_after:
         logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
     elif ip_before == ip_after:
-        logger.warning(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
+        raise ProxyVerificationError(
+            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
+        )
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -143,7 +150,10 @@ class DaytonaBackend:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            try:
+                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            except ProxyVerificationError as e:
+                logger.warning(str(e))
             return await self._get_info(sandbox)
 
     async def get_browser(
@@ -153,7 +163,10 @@ class DaytonaBackend:
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if origin_ip:
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            try:
+                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            except ProxyVerificationError as e:
+                logger.warning(str(e))
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
