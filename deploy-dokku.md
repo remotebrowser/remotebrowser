@@ -61,7 +61,7 @@ Create the app:
 
 ```
 dokku apps:create remotebrowser
-dokku ports:add remotebrowser http:80:8300
+dokku ports:add remotebrowser http:80:23456
 dokku config:set remotebrowser CONTAINER_HOST="unix:///run/podman.sock"
 dokku docker-options:add remotebrowser deploy "--cap-add=NET_ADMIN"
 dokku docker-options:add remotebrowser deploy "--cap-add=NET_RAW"
