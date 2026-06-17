@@ -97,9 +97,7 @@ class MassiveProxy:
         Returns:
             Formatted proxy URL.
         """
-        username_template = f"{username}"
-        if location.country:
-            username_template += f"-country-{location.country}"
+        username_template = f"{username}-country-{(location.country or 'US').upper()}"
         if (
             location.subdivision and len(location.subdivision) == 2
         ):  # only add subdivision if it's a valid 2-letter code (currently only supporting US subdivisions)
@@ -122,6 +120,6 @@ class OxylabsProxy:
         # Country-only targeting (subdivision/postal_code ignored) — tested higher success rate
         # than finer-grained targeting; Oxylabs pool is larger at country level.
         return (
-            f"http://customer-{username}-cc-{(location.country or '').upper()}"
+            f"http://customer-{username}-cc-{(location.country or 'US').upper()}"
             f"-sessid-{session_id}-sesstime-1440:{password}@pr.oxylabs.io:7777"
         )
