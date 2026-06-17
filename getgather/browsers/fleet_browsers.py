@@ -95,12 +95,16 @@ class FleetBackend:
     async def shutdown(self) -> None:
         return None
 
-    async def create_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def create_browser(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
         headers = {"x-origin-ip": origin_ip} if origin_ip else {}
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
 
-    async def get_browser(self, browser_id: str, origin_ip: str | None) -> dict[str, Any]:
+    async def get_browser(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
         headers = {"x-origin-ip": origin_ip} if origin_ip else {}
         response = _require(
             await call_chromefleet_api("GET", browser_id, headers=headers, raise_for_status=False)
