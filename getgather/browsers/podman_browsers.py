@@ -123,7 +123,7 @@ async def get_container_last_activity(container_name: str) -> float | None:
             container_name,
             "sh",
             "-c",
-            "cp $HOME/chrome-profile/Default/History db",
+            "cp /home/user/chrome-profile/Default/History db",
         ])
 
         result = run_podman([
