@@ -148,3 +148,6 @@ class FleetBackend:
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         return None
+
+    async def get_live_view_url(self, browser_id: str) -> str | None:
+        return None
