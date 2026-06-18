@@ -118,7 +118,7 @@ class BrowserManager:
                     await terminate_zendriver_browser(browser)
                     logger.info(f"Successfully stopped browser with signin ID {signin_id}")
                 except Exception as e:
-                    logger.error(f"Failed to stop browser with signin ID {signin_id}: {e}")
+                    logger.info(f"Failed to stop browser with signin ID {signin_id}: {e}")
                 finally:
                     self.remove_incognito_browser(signin_id)
 
