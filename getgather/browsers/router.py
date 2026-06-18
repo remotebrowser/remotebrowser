@@ -532,7 +532,8 @@ async def vnc_live_viewer(browser_id: str) -> HTMLResponse:
 </html>"""
         return HTMLResponse(page)
 
-    page = f"""<!DOCTYPE html>
+    if await backend.get_vnc_endpoint(browser_id) is not None:
+        page = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>{browser_id} - Live View</title>
@@ -555,6 +556,28 @@ async def vnc_live_viewer(browser_id: str) -> HTMLResponse:
         );
         rfb.scaleViewport = true;
     </script>
+</body>
+</html>"""
+        return HTMLResponse(page)
+
+    # No external live URL and no local VNC port: either a backend without live view, or an idle
+    # sandbox gated off so it can auto-stop. Show a placeholder instead of a dead noVNC screen.
+    page = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{browser_id} - Live View</title>
+    <style>
+        html, body {{
+            margin: 0; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: #111; color: #aaa;
+            font-family: system-ui, sans-serif; text-align: center;
+        }}
+        .msg {{ padding: 1rem; font-size: 0.9rem; line-height: 1.5; }}
+    </style>
+</head>
+<body>
+    <div class="msg">Live view unavailable<br>The browser is idle or stopped. Use it to resume.</div>
 </body>
 </html>"""
     return HTMLResponse(page)

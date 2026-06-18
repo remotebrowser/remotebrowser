@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any
 
 from daytona import (
@@ -35,6 +36,14 @@ TTL_MINUTES = 60
 # itself, so anyone who obtains the cdp_url can drive the browser's CDP until the token expires.
 # Treat cdp_url as a bearer secret. The token is stateless and survives sandbox restarts.
 SIGNED_URL_TTL_SECONDS = 3600
+
+# An open live-view iframe streams noVNC over port 8080, which Daytona counts as sandbox activity
+# and uses to reset auto_stop_interval. The dashboard embeds a live view per browser, so without a
+# gate just viewing it would keep every sandbox alive indefinitely (defeating auto-stop). Only hand
+# out the live URL when the browser has had real Chrome activity within this window; otherwise let
+# the idle sandbox auto-stop. A sandbox with no history yet (e.g. a fresh sign-in) is treated as
+# active so the primary "watch the sign-in" flow keeps working.
+LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
 
@@ -131,6 +140,22 @@ class DaytonaBackend:
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
+        if sandbox.state != "started":
+            return None  # a stopped sandbox has nothing to show and must not be woken to watch it
+
+        # Gate on recent activity so an embedded live view can't keep an idle sandbox alive. A
+        # missing timestamp (no history yet / read error) is treated as active to avoid hiding the
+        # live view for a fresh sign-in.
+        last_activity = await self._get_last_activity(sandbox)
+        if last_activity is not None:
+            idle_seconds = time.time() - last_activity
+            if idle_seconds > LIVE_VIEW_MAX_IDLE_SECONDS:
+                logger.info(
+                    f"Skipping live view for idle sandbox {sandbox.name}: "
+                    f"last activity {idle_seconds:.0f}s ago (> {LIVE_VIEW_MAX_IDLE_SECONDS}s)"
+                )
+                return None
+
         signed = await sandbox.create_signed_preview_url(
             VNC_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
         )
