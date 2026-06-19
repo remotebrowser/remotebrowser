@@ -29,8 +29,9 @@ class BrowserSettings(BaseSettings):
     # Podman backend
     CONTAINER_IMAGE: str = "ghcr.io/remotebrowser/chromium-live"
     CONTAINER_HOST: str = ""
+    MAX_IDLE_MINUTES: int = 15
 
-    # Residential proxy (Massive or Oxylabs) and MaxMind GeoIP (podman backend only)
+    # Residential proxy (Massive or Oxylabs) and MaxMind GeoIP
     MASSIVE_PROXY_USERNAME: str = ""
     MASSIVE_PROXY_PASSWORD: str = ""
     OXYLABS_USERNAME: str = ""

@@ -13,7 +13,6 @@ from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
 DOCKER_INTERNAL_HOST = "172.17.0.1"
-MAX_IDLE = 15 * 60  # seconds
 
 
 def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -123,7 +122,7 @@ async def get_container_last_activity(container_name: str) -> float | None:
             container_name,
             "sh",
             "-c",
-            "cp $HOME/chrome-profile/Default/History db",
+            "cp /home/user/chrome-profile/Default/History db",
         ])
 
         result = run_podman([
@@ -330,7 +329,7 @@ class PodmanBackend:
             idle_seconds = now - browser["last_activity_timestamp"]
             idle_minutes = math.ceil(idle_seconds / 60)
             logger.debug(f"Browser {browser['browser_id']} idle for {idle_minutes}m")
-            if idle_seconds > MAX_IDLE:
+            if idle_seconds > settings.MAX_IDLE_MINUTES * 60:
                 logger.info(f"Deleting browser {browser['browser_id']} (idle: {idle_minutes}m)")
                 try:
                     await self.delete_browser(browser["browser_id"])

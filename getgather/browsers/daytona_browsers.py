@@ -14,6 +14,13 @@ from daytona import (
 from loguru import logger
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.residential_proxy import get_proxy_config
+from getgather.config import settings
+
+
+class ProxyVerificationError(Exception):
+    """Raised when egress IP is unchanged after proxy configuration."""
+
 
 CDP_PORT = 9222
 VNC_PORT = 8080
@@ -52,6 +59,74 @@ def _sandbox_name(browser_id: str) -> str:
     return f"{BROWSER_NAME_PREFIX}{browser_id}"
 
 
+async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> bool:
+    stripped = proxy_url.removeprefix("http://")
+    cmds = [
+        "sed -i '/^Upstream http/d' /app/tinyproxy.conf",
+        f"sed -i '$ a\\Upstream http {stripped}' /app/tinyproxy.conf",
+        "sudo /command/s6-svc -r /run/service/tinyproxy",
+        "while ! curl -s -o /dev/null -x http://localhost:8119 http://tinyproxy.stats; do sleep 0.1; done",
+    ]
+    for cmd in cmds:
+        try:
+            response = await sandbox.process.exec(cmd)
+        except Exception as e:
+            logger.warning(f"Proxy config failed on {sandbox.name}: {type(e).__name__}: {e}")
+            return False
+        if response.exit_code != 0:
+            logger.warning(
+                f"Proxy config exit={response.exit_code} on {sandbox.name}: cmd={cmd!r} stderr={response.result!r}"
+            )
+            return False
+    return True
+
+
+async def _get_sandbox_public_ip(
+    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
+) -> str | None:
+    cmd = "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+    for attempt in range(1, retries + 1):
+        try:
+            response = await sandbox.process.exec(cmd)
+            ip = response.result.strip() if response.exit_code == 0 else ""
+            if ip:
+                return ip
+        except Exception as e:
+            logger.debug(f"IP check {attempt}/{retries} on {sandbox.name} failed: {e}")
+        if attempt < retries:
+            await asyncio.sleep(retry_delay)
+    logger.warning(f"IP check on {sandbox.name} failed after {retries} attempts")
+    return None
+
+
+async def _configure_remote_sandbox(
+    sandbox: AsyncSandbox,
+    browser_id: str,
+    origin_ip: str | None,
+    target_domain: str | None,
+) -> None:
+    proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
+    proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
+
+    if not proxy_url:
+        return
+
+    ip_before = await _get_sandbox_public_ip(sandbox)
+    logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
+
+    ok = await _configure_sandbox_proxy(sandbox, proxy_url)
+    if not ok:
+        return
+
+    ip_after = await _get_sandbox_public_ip(sandbox)
+    if ip_before and ip_after and ip_before != ip_after:
+        logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
+    elif ip_before == ip_after:
+        raise ProxyVerificationError(
+            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
+        )
+
+
 def _browser_id_from_name(name: str) -> str:
     return name.removeprefix(BROWSER_NAME_PREFIX)
 
@@ -63,7 +138,7 @@ class DaytonaBackend:
     no local state. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
     self-authenticating HTTPS reverse proxy to port 9222 (no inbound networking into the sandbox is
     required). Live view embeds the snapshot's built-in noVNC on port 8080 via a signed preview URL.
-    Residential-proxy/geo-IP are podman-only.
+    Residential proxy/geo-IP are supported via tinyproxy (preconfigured in the snapshot, same as podman).
 
     Sandbox teardown is owned by Daytona: auto_stop_interval stops idle sandboxes and
     auto_delete_interval deletes them once continuously stopped past the TTL (both set at create
@@ -84,6 +159,10 @@ class DaytonaBackend:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
+            try:
+                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            except ProxyVerificationError as e:
+                logger.warning(str(e))
             return await self._get_info(sandbox)
 
     async def get_browser(
@@ -92,6 +171,11 @@ class DaytonaBackend:
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
+        if origin_ip:
+            try:
+                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            except ProxyVerificationError as e:
+                logger.warning(str(e))
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
@@ -179,7 +263,6 @@ class DaytonaBackend:
         )
         return {
             "hostname": sandbox.name,
-            "ip_address": None,  # the sandbox IP is not reachable; CDP is via the signed preview URL
             "cdp_url": signed.url,  # public, internet-reachable; bearer secret (see SIGNED_URL_TTL_SECONDS)
             "app_state": sandbox.state,
             "last_activity_timestamp": await self._get_last_activity(sandbox),

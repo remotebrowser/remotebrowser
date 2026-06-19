@@ -27,6 +27,8 @@ from getgather.zen_distill import short_lived_mcp_tool
 # Create MCP apps once and reuse for lifespan and mounting
 mcp_apps = create_mcp_apps()
 
+BACKGROUND_TASK_INTERVAL = 5 * 60  # seconds
+
 
 def custom_generate_unique_id(route: APIRoute) -> str:
     tag = route.tags[0] if route.tags else "no-tag"
@@ -43,9 +45,12 @@ async def lifespan(app: FastAPI):
     async def timer_loop():
         while not stop_event.is_set():
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=5 * 60)
+                await asyncio.wait_for(stop_event.wait(), timeout=BACKGROUND_TASK_INTERVAL)
             except asyncio.TimeoutError:
-                pass
+                try:
+                    await backend.cleanup_idle()
+                except Exception as e:
+                    logger.error(f"Idle cleanup failed: {e}")
 
     background_task = asyncio.create_task(timer_loop())
 

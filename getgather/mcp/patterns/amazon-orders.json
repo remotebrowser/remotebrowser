@@ -57,6 +57,10 @@
       "name": "store_logo",
       "selector": "div.brand-logo img",
       "attribute": "alt"
+    },
+    {
+      "name": "subscription_frequency",
+      "selector": "span[class='a-size-small']:-soup-contains('Auto-delivered')"
     }
   ]
 }
