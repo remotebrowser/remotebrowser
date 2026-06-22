@@ -374,3 +374,6 @@ class PodmanBackend:
         if not vnc_port:
             return None
         return (container_host(), vnc_port)
+
+    async def get_live_view_url(self, browser_id: str) -> str | None:
+        return None

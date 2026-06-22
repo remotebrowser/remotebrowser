@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any
 
 from daytona import (
@@ -22,6 +23,7 @@ class ProxyVerificationError(Exception):
 
 
 CDP_PORT = 9222
+VNC_PORT = 8080
 
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
 CHROMIUM_EPOCH_OFFSET_SECONDS = 11644473600
@@ -39,9 +41,16 @@ TTL_MINUTES = 60
 # SECURITY: this URL is PUBLICLY reachable on the internet. The sandbox is created public=False,
 # but a signed preview URL bypasses that — the only credential is the token embedded in the URL
 # itself, so anyone who obtains the cdp_url can drive the browser's CDP until the token expires.
-# Treat cdp_url as a bearer secret. The token is stateless and survives sandbox restarts, so we
-# mint one per get_info (no cache) with a generous TTL so it outlives a browser session.
+# Treat cdp_url as a bearer secret. The token is stateless and survives sandbox restarts.
 SIGNED_URL_TTL_SECONDS = 3600
+
+# An open live-view iframe streams noVNC over port 8080, which Daytona counts as sandbox activity
+# and uses to reset auto_stop_interval. The dashboard embeds a live view per browser, so without a
+# gate just viewing it would keep every sandbox alive indefinitely (defeating auto-stop). Only hand
+# out the live URL when the browser has had real Chrome activity within this window; otherwise let
+# the idle sandbox auto-stop. A sandbox with no history yet (e.g. a fresh sign-in) is treated as
+# active so the primary "watch the sign-in" flow keeps working.
+LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
 
@@ -128,8 +137,8 @@ class DaytonaBackend:
     The browser_id -> sandbox mapping is the deterministic sandbox name plus labels, so there is
     no local state. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
     self-authenticating HTTPS reverse proxy to port 9222 (no inbound networking into the sandbox is
-    required). VNC is unavailable; residential proxy/geo-IP are supported via tinyproxy
-    (preconfigured in the snapshot, same as podman).
+    required). Live view embeds the snapshot's built-in noVNC on port 8080 via a signed preview URL.
+    Residential proxy/geo-IP are supported via tinyproxy (preconfigured in the snapshot, same as podman).
 
     Sandbox teardown is owned by Daytona: auto_stop_interval stops idle sandboxes and
     auto_delete_interval deletes them once continuously stopped past the TTL (both set at create
@@ -209,7 +218,32 @@ class DaytonaBackend:
         return None
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
-        return None  # no VNC: the sandbox is reached over an HTTPS signed URL, not a raw TCP port
+        return None  # no raw VNC port; live view uses get_live_view_url (noVNC on VNC_PORT)
+
+    async def get_live_view_url(self, browser_id: str) -> str | None:
+        sandbox = await self._get(_sandbox_name(browser_id))
+        if sandbox is None:
+            raise BrowserNotFound(browser_id)
+        if sandbox.state != "started":
+            return None  # a stopped sandbox has nothing to show and must not be woken to watch it
+
+        # Gate on recent activity so an embedded live view can't keep an idle sandbox alive. A
+        # missing timestamp (no history yet / read error) is treated as active to avoid hiding the
+        # live view for a fresh sign-in.
+        last_activity = await self._get_last_activity(sandbox)
+        if last_activity is not None:
+            idle_seconds = time.time() - last_activity
+            if idle_seconds > LIVE_VIEW_MAX_IDLE_SECONDS:
+                logger.info(
+                    f"Skipping live view for idle sandbox {sandbox.name}: "
+                    f"last activity {idle_seconds:.0f}s ago (> {LIVE_VIEW_MAX_IDLE_SECONDS}s)"
+                )
+                return None
+
+        signed = await sandbox.create_signed_preview_url(
+            VNC_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
+        )
+        return signed.url
 
     async def _ensure(self, browser_id: str) -> AsyncSandbox:
         name = _sandbox_name(browser_id)

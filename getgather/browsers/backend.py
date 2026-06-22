@@ -48,6 +48,8 @@ class Backend(Protocol):
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None: ...
 
+    async def get_live_view_url(self, browser_id: str) -> str | None: ...
+
 
 def create_backend() -> Backend:
     if settings.CHROMEFLEET_URL:

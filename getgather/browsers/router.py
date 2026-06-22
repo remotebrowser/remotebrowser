@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import os
 import urllib.parse
@@ -507,9 +508,32 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
     logger.debug("[CDP] cdp_devtools_websocket_proxy exiting")
 
 
-@router.get("/live/{browser_id}")
+@router.get("/live/{browser_id}", response_model=None)
 async def vnc_live_viewer(browser_id: str) -> HTMLResponse:
-    html = f"""<!DOCTYPE html>
+    try:
+        live_url = await backend.get_live_view_url(browser_id)
+    except BrowserNotFound:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    if live_url:
+        safe_url = html.escape(live_url, quote=True)
+        page = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{browser_id} - Live View</title>
+    <style>
+        html, body {{ margin: 0; height: 100%; overflow: hidden; background: #000; }}
+        iframe {{ border: none; width: 100%; height: 100%; }}
+    </style>
+</head>
+<body>
+    <iframe src="{safe_url}" allow="clipboard-read; clipboard-write"></iframe>
+</body>
+</html>"""
+        return HTMLResponse(page)
+
+    if await backend.get_vnc_endpoint(browser_id) is not None:
+        page = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>{browser_id} - Live View</title>
@@ -534,7 +558,29 @@ async def vnc_live_viewer(browser_id: str) -> HTMLResponse:
     </script>
 </body>
 </html>"""
-    return HTMLResponse(html)
+        return HTMLResponse(page)
+
+    # No external live URL and no local VNC port: either a backend without live view, or an idle
+    # sandbox gated off so it can auto-stop. Show a placeholder instead of a dead noVNC screen.
+    page = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{browser_id} - Live View</title>
+    <style>
+        html, body {{
+            margin: 0; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: #111; color: #aaa;
+            font-family: system-ui, sans-serif; text-align: center;
+        }}
+        .msg {{ padding: 1rem; font-size: 0.9rem; line-height: 1.5; }}
+    </style>
+</head>
+<body>
+    <div class="msg">Live view unavailable<br>The browser is idle or stopped. Use it to resume.</div>
+</body>
+</html>"""
+    return HTMLResponse(page)
 
 
 @router.websocket("/websockify/{browser_id}")
