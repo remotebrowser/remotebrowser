@@ -8,14 +8,19 @@ from getgather.config import settings
 # `chromium-abc`. Both local backends derive names and parse ids from this single prefix.
 BROWSER_NAME_PREFIX = "chromium-"
 
-# Incognito (ephemeral) browser ids are an `E` prefix plus a random suffix. Kept in sync with the
-# id dpage previously minted inline (FRIENDLY_CHARS, length 7).
+# Incognito (ephemeral) browser ids carry an `E` prefix (minted by dpage). The pool only needs to
+# recognize this prefix on a requested id to decide whether to claim a spare.
 INCOGNITO_PREFIX = "E"
 _FRIENDLY_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
 
+# Pool spares get a self-describing `spare-` name so an unclaimed pool sandbox is obvious in the
+# Daytona dashboard. The name is only ever used internally (resolved via the claimed_as label), so
+# it does not need the incognito prefix.
+SPARE_PREFIX = "spare-"
 
-def mint_incognito_browser_id() -> str:
-    return INCOGNITO_PREFIX + generate(_FRIENDLY_CHARS, 7)
+
+def mint_spare_browser_id() -> str:
+    return SPARE_PREFIX + generate(_FRIENDLY_CHARS, 8)
 
 
 class BrowserNotFound(Exception):

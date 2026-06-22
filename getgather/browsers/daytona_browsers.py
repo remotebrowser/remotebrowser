@@ -17,7 +17,7 @@ from getgather.browsers.backend import (
     BROWSER_NAME_PREFIX,
     INCOGNITO_PREFIX,
     BrowserNotFound,
-    mint_incognito_browser_id,
+    mint_spare_browser_id,
 )
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
@@ -322,7 +322,7 @@ class DaytonaBackend:
                     break
 
     async def _spawn_spare(self) -> str:
-        browser_id = mint_incognito_browser_id()
+        browser_id = mint_spare_browser_id()
         name = _sandbox_name(browser_id)
         logger.info(f"Spawning pool spare {name}")
         await self._create(name, labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
