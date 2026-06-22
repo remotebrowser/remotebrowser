@@ -124,6 +124,33 @@ class MassiveProxyConfig:
         )
 
 
+DEFAULT_PROXY_COUNTRY = "us"
+
+
+def default_proxy_config(
+    settings: "BrowserSettings",
+) -> "OxylabsProxyConfig | MassiveProxyConfig | None":
+    """Proxy for a request whose target/origin isn't known yet (e.g. pre-warming a pool spare).
+
+    Uses DEFAULT_PROXY_TYPE + a default country, with no MaxMind lookup. A claim that resolves to the
+    same (provider, country) can reuse it as-is; anything else reconfigures.
+    """
+    location = GeoLocation(country=DEFAULT_PROXY_COUNTRY)
+    if settings.DEFAULT_PROXY_TYPE == "oxylabs" and settings.OXYLABS_PROXY_ENABLED:
+        return OxylabsProxyConfig(location, settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD)
+    if settings.DEFAULT_PROXY_TYPE == "massive" and settings.MASSIVE_PROXY_ENABLED:
+        return MassiveProxyConfig(
+            location, settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
+        )
+    if settings.OXYLABS_PROXY_ENABLED:
+        return OxylabsProxyConfig(location, settings.OXYLABS_USERNAME, settings.OXYLABS_PASSWORD)
+    if settings.MASSIVE_PROXY_ENABLED:
+        return MassiveProxyConfig(
+            location, settings.MASSIVE_PROXY_USERNAME, settings.MASSIVE_PROXY_PASSWORD
+        )
+    return None
+
+
 def get_proxy_type_for_target_domain(
     target_domain: str | None,
 ) -> Literal["oxylabs", "massive"] | None:

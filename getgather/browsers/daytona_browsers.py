@@ -17,7 +17,7 @@ from loguru import logger
 from nanoid import generate
 
 from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
-from getgather.browsers.residential_proxy import get_proxy_config
+from getgather.browsers.residential_proxy import default_proxy_config, get_proxy_config
 from getgather.config import settings
 
 
@@ -64,9 +64,12 @@ LABEL_FLEET = "fleet"
 LABEL_POOL = "pool"
 POOL_SPARE = "spare"
 LABEL_CLAIMED = "claimed_as"
-# Set once the residential proxy has been configured on a sandbox, so a later get_browser query
-# doesn't re-run the (slow) proxy setup + IP-verify round-trip. Proxy is sticky per browser_id.
+# Records that a residential proxy is configured, and which (provider, country). A claim whose
+# resolved proxy matches reuses it as-is — letting a pool spare be pre-proxied at spawn so the slow
+# setup + IP-verify never lands on the request's hot path. A mismatch reconfigures.
 LABEL_PROXIED = "proxied"
+LABEL_PROXY_TYPE = "proxy_type"
+LABEL_PROXY_CC = "proxy_cc"
 
 FLEET_LABELS = {LABEL_FLEET: "1"}
 SPARE_LABELS = {LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE}
@@ -126,18 +129,8 @@ async def _get_sandbox_public_ip(
     return None
 
 
-async def _configure_remote_sandbox(
-    sandbox: AsyncSandbox,
-    browser_id: str,
-    origin_ip: str | None,
-    target_domain: str | None,
-) -> None:
-    proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
-    proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
-
-    if not proxy_url:
-        return
-
+async def _apply_and_verify_proxy(sandbox: AsyncSandbox, proxy_url: str) -> None:
+    """Point tinyproxy at the upstream and verify the egress IP actually changed."""
     ip_before = await _get_sandbox_public_ip(sandbox)
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
@@ -217,21 +210,42 @@ class DaytonaBackend:
         origin_ip: str | None,
         target_domain: str | None,
     ) -> None:
-        """Configure the residential proxy once per sandbox.
+        """Configure the residential proxy for this request, reusing a pre-applied one when it matches.
 
-        Skips the work (a tinyproxy reload + two IP-verify round-trips, several seconds) if the
-        sandbox already carries the proxied label — proxy is sticky per browser_id, so re-running on
-        every query is wasted time.
+        A pool spare is pre-proxied at spawn with the default (provider, country). If the request
+        resolves to the same pair, the proxy is already correct and we skip the slow setup + IP-verify
+        entirely — the whole point of pre-warming. Otherwise (different provider/country, or never
+        proxied) we (re)configure and re-tag.
         """
-        if (sandbox.labels or {}).get(LABEL_PROXIED) == "1":
-            return
+        proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
+        if proxy_config is None:
+            return  # no proxy desired (no origin ip / MaxMind off)
+        desired_type = proxy_config.type_
+        desired_cc = proxy_config.location.country or ""
+
+        labels = sandbox.labels or {}
+        if (
+            labels.get(LABEL_PROXIED) == "1"
+            and labels.get(LABEL_PROXY_TYPE) == desired_type
+            and labels.get(LABEL_PROXY_CC) == desired_cc
+        ):
+            return  # pre-applied proxy already matches this request
+
         try:
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            await _apply_and_verify_proxy(sandbox, proxy_config.get_proxy_url(browser_id))
         except ProxyVerificationError as e:
             logger.warning(str(e))
+        await self._mark_proxied(sandbox, desired_type, desired_cc)
+
+    async def _mark_proxied(self, sandbox: AsyncSandbox, proxy_type: str, country: str) -> None:
         # Mark proxied even if verification was inconclusive — a retry yields the same upstream IP.
         try:
-            await sandbox.set_labels({**(sandbox.labels or {}), LABEL_PROXIED: "1"})
+            await sandbox.set_labels({
+                **(sandbox.labels or {}),
+                LABEL_PROXIED: "1",
+                LABEL_PROXY_TYPE: proxy_type,
+                LABEL_PROXY_CC: country,
+            })
         except Exception as e:
             logger.warning(f"Failed to mark {sandbox.name} proxied: {e}")
 
@@ -344,9 +358,13 @@ class DaytonaBackend:
         labels = fresh.labels or {}
         if labels.get(LABEL_POOL) != POOL_SPARE or LABEL_CLAIMED in labels:
             return False  # stale list entry — already claimed by someone else
-        # Replace labels: drops pool=spare (leaves the pool) and records the binding.
+        # Drop pool=spare (leaves the pool) and record the binding, but keep the rest — notably the
+        # proxied/proxy_type/proxy_cc tags so the pre-applied proxy survives the claim.
+        new_labels = {k: v for k, v in labels.items() if k != LABEL_POOL}
+        new_labels[LABEL_FLEET] = "1"
+        new_labels[LABEL_CLAIMED] = browser_id
         try:
-            await fresh.set_labels({LABEL_FLEET: "1", LABEL_CLAIMED: browser_id})
+            await fresh.set_labels(new_labels)
         except Exception as e:
             logger.warning(f"Failed to claim spare {name}: {e}")
             return False
@@ -377,9 +395,21 @@ class DaytonaBackend:
                     break
 
     async def _spawn_spare(self) -> None:
-        name = _sandbox_name(SPARE_NAME_PREFIX + generate(_SPARE_ID_CHARS, 8))
+        spare_id = SPARE_NAME_PREFIX + generate(_SPARE_ID_CHARS, 8)
+        name = _sandbox_name(spare_id)
         logger.info(f"Spawning pool spare {name}")
-        await self._create(name, labels=SPARE_LABELS)
+        sandbox = await self._create(name, labels=SPARE_LABELS)
+        # Pre-apply the default proxy now (off the hot path). A claim that resolves to the same
+        # (provider, country) reuses it via the proxy_type/proxy_cc labels and skips proxy setup.
+        # Session id is the spare's own id, which becomes the claimed browser's effective id.
+        config = default_proxy_config(settings)
+        if config is None:
+            return
+        try:
+            await _apply_and_verify_proxy(sandbox, config.get_proxy_url(spare_id))
+        except ProxyVerificationError as e:
+            logger.warning(str(e))
+        await self._mark_proxied(sandbox, config.type_, config.location.country or "")
 
     async def get_cdp_base_url(self, browser_id: str) -> str:
         sandbox = await self._get(_sandbox_name(await self._resolve(browser_id)))
