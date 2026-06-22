@@ -36,5 +36,23 @@ class Settings(AuthSettings, BrowserSettings, BaseSettings):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    # Recording
+    RECORDING_STORAGE: str = "local"  # "local" | "s3"
+    RECORDING_DIR: str = ""
+    TIGRIS_BUCKET: str = ""
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_ENDPOINT_URL: str = ""
+
+    @property
+    def recordings_dir(self) -> Path:
+        path = (
+            Path(self.RECORDING_DIR).resolve()
+            if self.RECORDING_DIR
+            else self.data_dir / "recordings"
+        )
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
 
 settings = Settings()
