@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -178,12 +179,11 @@ class DaytonaBackend:
         self._locks: dict[str, asyncio.Lock] = {}
         self._pool_size = settings.DAYTONA_INCOGNITO_POOL_SIZE
         # Pool inventory and the claimed-id binding both live in Daytona labels (see LABEL_CLAIMED),
-        # so the backend holds no durable state and survives restarts. This lock only serializes the
-        # claim within one process; cross-instance claim races are possible (last writer wins) and
-        # self-heal — a future deployment that needs hard cross-instance safety would add a CAS store.
-        self._pool_lock = asyncio.Lock()
-        # Separate from _pool_lock so a slow backfill (each spawn cold-boots a sandbox, ~9s) never
-        # blocks a claim. Just collapses concurrent reconcile calls into one.
+        # so the backend holds no durable state and survives restarts. Claims are NOT serialized:
+        # concurrent claimers race optimistically and _try_claim's confirm step resolves collisions,
+        # so requests don't queue behind one lock (cross-instance races self-heal the same way).
+        # Collapses concurrent reconcile calls into one; separate so a slow backfill (each spawn
+        # cold-boots a sandbox, ~9s) never blocks anything else.
         self._reconcile_lock = asyncio.Lock()
         # Strong refs to background reconcile tasks; asyncio only holds weak refs, so an unreferenced
         # task can be garbage-collected mid-flight (and the pool would never fill).
@@ -316,20 +316,19 @@ class DaytonaBackend:
         if not self._pool_eligible(browser_id):
             return browser_id
 
-        spare_id: str | None = None
-        async with self._pool_lock:
-            async for candidate in self._iter_sandboxes(SPARE_LABELS, started_only=True):
-                if await self._try_claim(candidate.name, browser_id):
-                    spare_id = _browser_id_from_name(candidate.name)
-                    break
+        # Shuffle so concurrent claimers don't all target the same spare first (each collision costs
+        # a wasted set_labels + retry). Claims run unserialized; _try_claim confirms exclusive ownership.
+        candidates = [sb async for sb in self._iter_sandboxes(SPARE_LABELS, started_only=True)]
+        random.shuffle(candidates)
+        for sb in candidates:
+            if sb.name and await self._try_claim(sb.name, browser_id):
+                spare_id = _browser_id_from_name(sb.name)
+                logger.info(f"Claimed pooled spare {spare_id} for incognito browser {browser_id}")
+                self._spawn_reconcile()
+                return spare_id
 
-        if spare_id is None:
-            logger.info(f"Pool empty; cold-creating incognito browser {browser_id}")
-            return browser_id
-
-        logger.info(f"Claimed pooled spare {spare_id} for incognito browser {browser_id}")
-        self._spawn_reconcile()
-        return spare_id
+        logger.info(f"Pool empty; cold-creating incognito browser {browser_id}")
+        return browser_id
 
     async def _try_claim(self, name: str, browser_id: str) -> bool:
         """Claim one spare candidate, guarding against Daytona's eventually-consistent label list.
