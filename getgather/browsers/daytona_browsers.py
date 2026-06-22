@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 from daytona import (
@@ -66,6 +67,9 @@ LABEL_FLEET = "fleet"
 LABEL_POOL = "pool"
 POOL_SPARE = "spare"
 LABEL_CLAIMED = "claimed_as"
+
+FLEET_LABELS = {LABEL_FLEET: "1"}
+SPARE_LABELS = {LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE}
 
 
 def _sandbox_name(browser_id: str) -> str:
@@ -172,6 +176,22 @@ class DaytonaBackend:
         # blocks a claim. Just collapses concurrent reconcile calls into one.
         self._reconcile_lock = asyncio.Lock()
 
+    def _pool_eligible(self, browser_id: str) -> bool:
+        """A non-empty pool only ever serves incognito ids; everything else cold-creates."""
+        return self._pool_size > 0 and browser_id.startswith(INCOGNITO_PREFIX)
+
+    async def _iter_sandboxes(
+        self, labels: dict[str, str], *, started_only: bool = False
+    ) -> AsyncIterator[AsyncSandbox]:
+        """Yield our sandboxes matching `labels`, skipping non-fleet names (e.g. a just-deleted
+        `DESTROYED_<name>_<ts>`) and, when asked, anything Daytona has auto-stopped."""
+        async for sandbox in self.client.list(ListSandboxesQuery(labels=labels)):
+            if not (sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX)):
+                continue
+            if started_only and sandbox.state != "started":
+                continue
+            yield sandbox
+
     async def _resolve(self, browser_id: str) -> str:
         """Resolve a requested browser_id to the real sandbox id backing it.
 
@@ -179,13 +199,10 @@ class DaytonaBackend:
         binding is recorded as a claimed_as=<browser_id> label. Per-user ids, unclaimed ids, and
         cold-created incognito ids resolve to themselves. One Daytona lookup for incognito, none else.
         """
-        if self._pool_size <= 0 or not browser_id.startswith(INCOGNITO_PREFIX):
+        if not self._pool_eligible(browser_id):
             return browser_id
-        async for sandbox in self.client.list(
-            ListSandboxesQuery(labels={LABEL_CLAIMED: browser_id})
-        ):
-            if sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX):
-                return _browser_id_from_name(sandbox.name)
+        async for sandbox in self._iter_sandboxes({LABEL_CLAIMED: browser_id}):
+            return _browser_id_from_name(sandbox.name)
         return browser_id
 
     async def startup(self) -> None:
@@ -242,12 +259,10 @@ class DaytonaBackend:
         return await self._get(_sandbox_name(await self._resolve(browser_id))) is not None
 
     async def list_browser_ids(self) -> list[str]:
-        browser_ids: list[str] = []
-        async for sandbox in self.client.list(ListSandboxesQuery(labels={LABEL_FLEET: "1"})):
-            # A just-deleted sandbox lingers briefly as `DESTROYED_<name>_<ts>`; only our names count.
-            if sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX):
-                browser_ids.append(_browser_id_from_name(sandbox.name))
-        return browser_ids
+        return [
+            _browser_id_from_name(sandbox.name)
+            async for sandbox in self._iter_sandboxes(FLEET_LABELS)
+        ]
 
     async def cleanup_idle(self) -> list[str]:
         # Teardown is owned by Daytona's native auto_stop_interval + auto_delete_interval (set in
@@ -264,18 +279,12 @@ class DaytonaBackend:
         path). Only incognito ids are eligible; per-user ids always cold-create under their own
         deterministic name. The lock serializes claims within this process.
         """
-        if self._pool_size <= 0 or not browser_id.startswith(INCOGNITO_PREFIX):
+        if not self._pool_eligible(browser_id):
             return browser_id
 
         spare_id: str | None = None
         async with self._pool_lock:
-            async for sandbox in self.client.list(
-                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
-            ):
-                if not (sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX)):
-                    continue
-                if sandbox.state != "started":
-                    continue  # auto-stopped/stale; the reconcile sweep will replace it
+            async for sandbox in self._iter_sandboxes(SPARE_LABELS, started_only=True):
                 # Replace labels: drops pool=spare (so it leaves the pool) and records the binding.
                 # Done under the lock so a concurrent claim in this process can't take the same one.
                 try:
@@ -302,16 +311,9 @@ class DaytonaBackend:
         block a claim, while concurrent reconcile calls collapse into one.
         """
         async with self._reconcile_lock:
-            spare_count = 0
-            async for sandbox in self.client.list(
-                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
-            ):
-                if (
-                    sandbox.name
-                    and sandbox.name.startswith(BROWSER_NAME_PREFIX)
-                    and sandbox.state == "started"
-                ):
-                    spare_count += 1
+            spare_count = sum([
+                1 async for _ in self._iter_sandboxes(SPARE_LABELS, started_only=True)
+            ])
             deficit = self._pool_size - spare_count
 
             for _ in range(max(0, deficit)):
