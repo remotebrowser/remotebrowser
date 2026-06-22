@@ -296,16 +296,10 @@ class DaytonaBackend:
 
         spare_id: str | None = None
         async with self._pool_lock:
-            async for sandbox in self._iter_sandboxes(SPARE_LABELS, started_only=True):
-                # Replace labels: drops pool=spare (so it leaves the pool) and records the binding.
-                # Done under the lock so a concurrent claim in this process can't take the same one.
-                try:
-                    await sandbox.set_labels({LABEL_FLEET: "1", LABEL_CLAIMED: browser_id})
-                except Exception as e:
-                    logger.warning(f"Failed to claim spare {sandbox.name}: {e}")
-                    continue
-                spare_id = _browser_id_from_name(sandbox.name)
-                break
+            async for candidate in self._iter_sandboxes(SPARE_LABELS, started_only=True):
+                if await self._try_claim(candidate.name, browser_id):
+                    spare_id = _browser_id_from_name(candidate.name)
+                    break
 
         if spare_id is None:
             logger.info(f"Pool empty; cold-creating incognito browser {browser_id}")
@@ -314,6 +308,32 @@ class DaytonaBackend:
         logger.info(f"Claimed pooled spare {spare_id} for incognito browser {browser_id}")
         self._spawn_reconcile()
         return spare_id
+
+    async def _try_claim(self, name: str, browser_id: str) -> bool:
+        """Claim one spare candidate, guarding against Daytona's eventually-consistent label list.
+
+        The list query can return a sandbox that was already claimed or deleted seconds ago, so re-GET
+        it (object reads are far more consistent than the label index): skip it unless it is still a
+        live, unclaimed spare. After claiming, re-read once more to confirm the label stuck (lost a
+        race otherwise). Returns True only when this caller now exclusively owns the sandbox.
+        """
+        fresh = await self._get(name)
+        if fresh is None or fresh.state != "started":
+            return False  # stale list entry — already deleted/stopped
+        labels = fresh.labels or {}
+        if labels.get(LABEL_POOL) != POOL_SPARE or LABEL_CLAIMED in labels:
+            return False  # stale list entry — already claimed by someone else
+        # Replace labels: drops pool=spare (leaves the pool) and records the binding.
+        try:
+            await fresh.set_labels({LABEL_FLEET: "1", LABEL_CLAIMED: browser_id})
+        except Exception as e:
+            logger.warning(f"Failed to claim spare {name}: {e}")
+            return False
+        confirmed = await self._get(name)
+        if confirmed is None or (confirmed.labels or {}).get(LABEL_CLAIMED) != browser_id:
+            logger.warning(f"Lost claim race for spare {name}; skipping")
+            return False
+        return True
 
     async def _reconcile_pool(self) -> None:
         """Backfill the pool to POOL_SIZE from Daytona's current spare count.
