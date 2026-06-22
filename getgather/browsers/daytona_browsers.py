@@ -58,10 +58,14 @@ SIGNED_URL_TTL_SECONDS = 3600
 LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
-# A spare carries pool=spare; on claim the label is dropped so it reads as a normal browser and the
-# 15m auto-stop / 60m auto-delete teardown applies unchanged.
+# A spare carries pool=spare. On claim the labels are replaced with claimed_as=<requested id>, which
+# (a) removes it from the spare list and (b) records the requested incognito id -> this sandbox
+# binding IN Daytona, so resolution is stateless: no in-memory map, survives restarts. The requested
+# id is unique per request, so the binding is unambiguous. Teardown (15m auto-stop / 60m auto-delete)
+# applies unchanged once it is no longer a spare.
 LABEL_POOL = "pool"
 POOL_SPARE = "spare"
+LABEL_CLAIMED = "claimed_as"
 
 
 def _sandbox_name(browser_id: str) -> str:
@@ -159,17 +163,30 @@ class DaytonaBackend:
         self.client = AsyncDaytona(DaytonaConfig(api_key=api_key, api_url=api_url or None))
         self._locks: dict[str, asyncio.Lock] = {}
         self._pool_size = settings.DAYTONA_INCOGNITO_POOL_SIZE
-        # In-memory set of ready spare browser_ids. Single-process pool: the lock makes claim
-        # atomic within this process; a multi-instance deployment would need a shared store.
-        self._spares: set[str] = set()
+        # Pool inventory and the claimed-id binding both live in Daytona labels (see LABEL_CLAIMED),
+        # so the backend holds no durable state and survives restarts. This lock only serializes the
+        # claim within one process; cross-instance claim races are possible (last writer wins) and
+        # self-heal — a future deployment that needs hard cross-instance safety would add a CAS store.
         self._pool_lock = asyncio.Lock()
-        # Maps a requested incognito browser_id -> the claimed spare's real browser_id. A spare
-        # keeps its own (immutable) sandbox name, so every lookup resolves through this map. In
-        # memory only: a future multi-instance deployment would move it to a shared store.
-        self._id_map: dict[str, str] = {}
+        # Separate from _pool_lock so a slow backfill (each spawn cold-boots a sandbox, ~9s) never
+        # blocks a claim. Just collapses concurrent reconcile calls into one.
+        self._reconcile_lock = asyncio.Lock()
 
-    def _effective_id(self, browser_id: str) -> str:
-        return self._id_map.get(browser_id, browser_id)
+    async def _resolve(self, browser_id: str) -> str:
+        """Resolve a requested browser_id to the real sandbox id backing it.
+
+        Incognito ids may have claimed a pool spare whose sandbox keeps its own (immutable) name; the
+        binding is recorded as a claimed_as=<browser_id> label. Per-user ids, unclaimed ids, and
+        cold-created incognito ids resolve to themselves. One Daytona lookup for incognito, none else.
+        """
+        if self._pool_size <= 0 or not browser_id.startswith(INCOGNITO_PREFIX):
+            return browser_id
+        async for sandbox in self.client.list(
+            ListSandboxesQuery(labels={LABEL_CLAIMED: browser_id})
+        ):
+            if sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX):
+                return _browser_id_from_name(sandbox.name)
+        return browser_id
 
     async def startup(self) -> None:
         if self._pool_size <= 0:
@@ -185,8 +202,8 @@ class DaytonaBackend:
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
         # Incognito requests claim a warm-pool spare when one is ready: the spare keeps its own
-        # sandbox name and we map the requested id -> the spare's id (resolved on every later
-        # lookup). Non-incognito (per-user) ids and an empty pool fall through to cold-create.
+        # sandbox name and the requested id -> spare binding is recorded in a Daytona label
+        # (resolved on every later lookup). Per-user ids and an empty pool fall through to cold-create.
         effective_id = await self._claim_spare_for(browser_id)
         lock = self._locks.setdefault(effective_id, asyncio.Lock())
         async with lock:
@@ -200,7 +217,7 @@ class DaytonaBackend:
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
-        effective_id = self._effective_id(browser_id)
+        effective_id = await self._resolve(browser_id)
         sandbox = await self._get(_sandbox_name(effective_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
@@ -212,17 +229,17 @@ class DaytonaBackend:
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
-        effective_id = self._effective_id(browser_id)
+        effective_id = await self._resolve(browser_id)
         sandbox = await self._get(_sandbox_name(effective_id))
         self._locks.pop(effective_id, None)
-        self._id_map.pop(browser_id, None)
         if sandbox is None:
             return {"status": "not found"}
+        # Deleting the sandbox also removes its claimed_as label, so no binding is left behind.
         await sandbox.delete()
         return {"status": "deleted"}
 
     async def browser_exists(self, browser_id: str) -> bool:
-        return await self._get(_sandbox_name(self._effective_id(browser_id))) is not None
+        return await self._get(_sandbox_name(await self._resolve(browser_id))) is not None
 
     async def list_browser_ids(self) -> list[str]:
         browser_ids: list[str] = []
@@ -241,50 +258,51 @@ class DaytonaBackend:
         return []
 
     async def _claim_spare_for(self, browser_id: str) -> str:
-        """For an incognito request, claim a ready spare and map browser_id -> the spare's id.
+        """For an incognito request, claim a ready spare and record the binding in a Daytona label.
 
         Returns the spare's id when one was claimed, else the original browser_id (cold-create
         path). Only incognito ids are eligible; per-user ids always cold-create under their own
-        deterministic name.
+        deterministic name. The lock serializes claims within this process.
         """
         if self._pool_size <= 0 or not browser_id.startswith(INCOGNITO_PREFIX):
             return browser_id
 
         spare_id: str | None = None
         async with self._pool_lock:
-            while self._spares:
-                candidate = self._spares.pop()
-                sandbox = await self._get(_sandbox_name(candidate))
-                if sandbox is not None and sandbox.state == "started":
-                    spare_id = candidate
-                    break
-                logger.info(f"Discarding stale spare {candidate} (state unavailable)")
+            async for sandbox in self.client.list(
+                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
+            ):
+                if not (sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX)):
+                    continue
+                if sandbox.state != "started":
+                    continue  # auto-stopped/stale; the reconcile sweep will replace it
+                # Replace labels: drops pool=spare (so it leaves the pool) and records the binding.
+                # Done under the lock so a concurrent claim in this process can't take the same one.
+                try:
+                    await sandbox.set_labels({LABEL_FLEET: "1", LABEL_CLAIMED: browser_id})
+                except Exception as e:
+                    logger.warning(f"Failed to claim spare {sandbox.name}: {e}")
+                    continue
+                spare_id = _browser_id_from_name(sandbox.name)
+                break
 
         if spare_id is None:
             logger.info(f"Pool empty; cold-creating incognito browser {browser_id}")
             return browser_id
 
-        # Drop the spare label so normal teardown applies; best-effort (claim already succeeded).
-        try:
-            spare = await self._get(_sandbox_name(spare_id))
-            if spare is not None:
-                await spare.set_labels({LABEL_FLEET: "1"})
-        except Exception as e:
-            logger.warning(f"Failed to clear pool label on {spare_id}: {e}")
-
-        self._id_map[browser_id] = spare_id
         logger.info(f"Claimed pooled spare {spare_id} for incognito browser {browser_id}")
         asyncio.create_task(self._reconcile_pool())
         return spare_id
 
     async def _reconcile_pool(self) -> None:
-        """Sync the in-memory spare set with Daytona, then backfill to POOL_SIZE.
+        """Backfill the pool to POOL_SIZE from Daytona's current spare count.
 
-        Idempotent and safe to call repeatedly. Serialized under the pool lock so concurrent
-        callers (startup, periodic sweep, post-claim backfill) don't over-provision.
+        Stateless: the spare count is read from Daytona labels, not memory. Idempotent and safe to
+        call repeatedly; serialized under its own lock (not the claim lock) so the slow spawns never
+        block a claim, while concurrent reconcile calls collapse into one.
         """
-        async with self._pool_lock:
-            live: set[str] = set()
+        async with self._reconcile_lock:
+            spare_count = 0
             async for sandbox in self.client.list(
                 ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
             ):
@@ -293,18 +311,15 @@ class DaytonaBackend:
                     and sandbox.name.startswith(BROWSER_NAME_PREFIX)
                     and sandbox.state == "started"
                 ):
-                    live.add(_browser_id_from_name(sandbox.name))
-            self._spares = live
-            deficit = self._pool_size - len(self._spares)
+                    spare_count += 1
+            deficit = self._pool_size - spare_count
 
-        for _ in range(max(0, deficit)):
-            try:
-                browser_id = await self._spawn_spare()
-            except Exception as e:
-                logger.warning(f"Failed to spawn pool spare: {type(e).__name__}: {e}")
-                break
-            async with self._pool_lock:
-                self._spares.add(browser_id)
+            for _ in range(max(0, deficit)):
+                try:
+                    await self._spawn_spare()
+                except Exception as e:
+                    logger.warning(f"Failed to spawn pool spare: {type(e).__name__}: {e}")
+                    break
 
     async def _spawn_spare(self) -> str:
         browser_id = mint_incognito_browser_id()
@@ -314,7 +329,7 @@ class DaytonaBackend:
         return browser_id
 
     async def get_cdp_base_url(self, browser_id: str) -> str:
-        sandbox = await self._get(_sandbox_name(self._effective_id(browser_id)))
+        sandbox = await self._get(_sandbox_name(await self._resolve(browser_id)))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         signed = await sandbox.create_signed_preview_url(
@@ -331,7 +346,7 @@ class DaytonaBackend:
         return None  # no raw VNC port; live view uses get_live_view_url (noVNC on VNC_PORT)
 
     async def get_live_view_url(self, browser_id: str) -> str | None:
-        sandbox = await self._get(_sandbox_name(self._effective_id(browser_id)))
+        sandbox = await self._get(_sandbox_name(await self._resolve(browser_id)))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if sandbox.state != "started":
