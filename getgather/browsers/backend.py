@@ -43,16 +43,6 @@ class Backend(Protocol):
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...
 
-    async def acquire_incognito_browser(
-        self, origin_ip: str | None, target_domain: str | None
-    ) -> dict[str, Any]:
-        """Return a ready ephemeral browser, minting its (E-prefixed) browser_id.
-
-        Backends with a warm pool hand out a pre-booted sandbox; others cold-create one. The
-        returned dict is the same shape as `create_browser` plus a `browser_id` key.
-        """
-        ...
-
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...

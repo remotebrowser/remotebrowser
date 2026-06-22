@@ -222,30 +222,6 @@ async def create_remote_browser(
     return browser
 
 
-async def acquire_incognito_remote_browser(
-    target_domain: str | None = None,
-) -> tuple[str, zd.Browser]:
-    """Acquire an ephemeral browser from the fleet (warm pool when available), returning its
-    server-minted browser_id and a connected zendriver Browser.
-
-    Unlike create_remote_browser, the id is assigned by the fleet so a pooled sandbox can be
-    handed out as-is instead of cold-creating one per request.
-    """
-    headers = build_chromefleet_headers(target_domain=target_domain)
-    response = await call_chromefleet_api(
-        "POST", path="/api/v1/browsers-incognito", headers=headers
-    )
-    if response is None:
-        raise RuntimeError("Failed to acquire incognito browser from Chrome Fleet")
-    browser_id = str(response.json()["browser_id"])
-    logger.info(f"Acquired incognito browser: {browser_id}")
-    cdp_websocket_url = _setup_cdp_url(browser_id)
-    browser = await _create_browser_from_cdp_websocket(
-        browser_id=browser_id, websocket_url=cdp_websocket_url, target_domain=target_domain
-    )
-    return browser_id, browser
-
-
 async def terminate_remote_browser(browser: zd.Browser) -> None:
     """Terminate an existing remote Chrome via ChromeFleet."""
     browser_id = cast(str, browser.id)  # type: ignore[attr-defined]

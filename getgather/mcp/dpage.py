@@ -15,7 +15,6 @@ from loguru import logger
 from getgather.auth.auth import get_auth_user
 from getgather.browser import (
     ElementConfig,
-    acquire_incognito_remote_browser,
     create_remote_browser,
     find_browser_tab,
     get_new_page,
@@ -27,6 +26,7 @@ from getgather.browser import (
     wait_for_ready_state,
     zen_navigate_with_retry,
 )
+from getgather.browsers.backend import mint_incognito_browser_id
 from getgather.config import settings
 from getgather.mcp.html_renderer import DEFAULT_TITLE, render_form
 from getgather.zen_distill import (
@@ -636,9 +636,9 @@ async def remote_zen_dpage_mcp_tool(
             browser_id, str(page.target_id), incoming.mcp_session_id or mcp_session_id
         )
     elif incognito:
-        # Fleet mints the id (a warm-pool spare when available); see acquire_incognito_remote_browser.
-        browser_id, browser = await acquire_incognito_remote_browser(
-            target_domain=_target_domain_from_initial_url(initial_url)
+        browser_id = mint_incognito_browser_id()
+        browser = await create_remote_browser(
+            browser_id, target_domain=_target_domain_from_initial_url(initial_url)
         )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
@@ -728,9 +728,9 @@ async def remote_zen_dpage_with_action(
             logger.info(f"Continue with remote browser {browser_id} and page {incoming.target_id}")
             signin_id = SignInId(browser_id, incoming.target_id, session_id)
     elif incognito:
-        # Fleet mints the id (a warm-pool spare when available); see acquire_incognito_remote_browser.
-        browser_id, browser = await acquire_incognito_remote_browser(
-            target_domain=_target_domain_from_initial_url(initial_url)
+        browser_id = mint_incognito_browser_id()
+        browser = await create_remote_browser(
+            browser_id, target_domain=_target_domain_from_initial_url(initial_url)
         )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
