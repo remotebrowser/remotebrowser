@@ -21,5 +21,19 @@
     >
       Sign in
     </button>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const input = document.querySelector("input[name='email']");
+        if (!input) return;
+        const form = input.form;
+        if (!form) return;
+        form.addEventListener("submit", function () {
+          const value = input.value || "";
+          if (value.indexOf("@") === -1) {
+            input.value = value.replace(/[^0-9]/g, "");
+          }
+        });
+      });
+    </script>
   </body>
 </html>
