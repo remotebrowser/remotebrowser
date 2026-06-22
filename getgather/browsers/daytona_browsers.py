@@ -63,6 +63,9 @@ LABEL_FLEET = "fleet"
 LABEL_POOL = "pool"
 POOL_SPARE = "spare"
 LABEL_CLAIMED = "claimed_as"
+# Set once the residential proxy has been configured on a sandbox, so a later get_browser query
+# doesn't re-run the (slow) proxy setup + IP-verify round-trip. Proxy is sticky per browser_id.
+LABEL_PROXIED = "proxied"
 
 FLEET_LABELS = {LABEL_FLEET: "1"}
 SPARE_LABELS = {LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE}
@@ -207,6 +210,31 @@ class DaytonaBackend:
                 continue
             yield sandbox
 
+    async def _ensure_proxy(
+        self,
+        sandbox: AsyncSandbox,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+    ) -> None:
+        """Configure the residential proxy once per sandbox.
+
+        Skips the work (a tinyproxy reload + two IP-verify round-trips, several seconds) if the
+        sandbox already carries the proxied label — proxy is sticky per browser_id, so re-running on
+        every query is wasted time.
+        """
+        if (sandbox.labels or {}).get(LABEL_PROXIED) == "1":
+            return
+        try:
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+        except ProxyVerificationError as e:
+            logger.warning(str(e))
+        # Mark proxied even if verification was inconclusive — a retry yields the same upstream IP.
+        try:
+            await sandbox.set_labels({**(sandbox.labels or {}), LABEL_PROXIED: "1"})
+        except Exception as e:
+            logger.warning(f"Failed to mark {sandbox.name} proxied: {e}")
+
     async def _resolve(self, browser_id: str) -> str:
         """Resolve a requested browser_id to the real sandbox id backing it.
 
@@ -237,10 +265,7 @@ class DaytonaBackend:
         lock = self._locks.setdefault(effective_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(effective_id)
-            try:
-                await _configure_remote_sandbox(sandbox, effective_id, origin_ip, target_domain)
-            except ProxyVerificationError as e:
-                logger.warning(str(e))
+            await self._ensure_proxy(sandbox, effective_id, origin_ip, target_domain)
             return await self._get_info(sandbox)
 
     async def get_browser(
@@ -251,10 +276,7 @@ class DaytonaBackend:
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if origin_ip:
-            try:
-                await _configure_remote_sandbox(sandbox, effective_id, origin_ip, target_domain)
-            except ProxyVerificationError as e:
-                logger.warning(str(e))
+            await self._ensure_proxy(sandbox, effective_id, origin_ip, target_domain)
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
