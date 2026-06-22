@@ -20,6 +20,11 @@ from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
+
+class ProxyVerificationError(Exception):
+    """Raised when egress IP is unchanged after proxy configuration."""
+
+
 CDP_PORT = 9222
 VNC_PORT = 8080
 
@@ -121,22 +126,32 @@ async def _get_sandbox_public_ip(
     return None
 
 
-async def _apply_proxy(
+async def _configure_remote_sandbox(
     sandbox: AsyncSandbox,
     browser_id: str,
     origin_ip: str | None,
     target_domain: str | None,
-) -> bool:
-    """Point the sandbox's tinyproxy at the residential upstream. Returns True if a proxy was set.
-
-    Fast path only (sed + service reload); the egress-IP check is done off the hot path — it was
-    purely diagnostic (logged, never gated anything) yet cost ~5s of curl-through-proxy round-trips.
-    """
+) -> None:
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
+
     if not proxy_url:
-        return False
-    return await _configure_sandbox_proxy(sandbox, proxy_url)
+        return
+
+    ip_before = await _get_sandbox_public_ip(sandbox)
+    logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
+
+    ok = await _configure_sandbox_proxy(sandbox, proxy_url)
+    if not ok:
+        return
+
+    ip_after = await _get_sandbox_public_ip(sandbox)
+    if ip_before and ip_after and ip_before != ip_after:
+        logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
+    elif ip_before == ip_after:
+        raise ProxyVerificationError(
+            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
+        )
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -170,17 +185,14 @@ class DaytonaBackend:
         # Collapses concurrent reconcile calls into one; separate so a slow backfill (each spawn
         # cold-boots a sandbox, ~9s) never blocks anything else.
         self._reconcile_lock = asyncio.Lock()
-        # Strong refs to background tasks; asyncio only holds weak refs, so an unreferenced task can
-        # be garbage-collected mid-flight (e.g. the reconcile that fills the pool would never run).
+        # Strong refs to background reconcile tasks; asyncio only holds weak refs, so an unreferenced
+        # task can be garbage-collected mid-flight (and the pool would never fill).
         self._bg_tasks: set[asyncio.Task[None]] = set()
 
-    def _spawn_bg(self, coro: Any) -> None:
-        task = asyncio.create_task(coro)
+    def _spawn_reconcile(self) -> None:
+        task = asyncio.create_task(self._reconcile_pool())
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
-
-    def _spawn_reconcile(self) -> None:
-        self._spawn_bg(self._reconcile_pool())
 
     def _pool_eligible(self, browser_id: str) -> bool:
         """A non-empty pool only ever serves incognito ids; everything else cold-creates."""
@@ -207,23 +219,21 @@ class DaytonaBackend:
     ) -> None:
         """Configure the residential proxy once per sandbox.
 
-        Skips the (tinyproxy reload) work if the sandbox already carries the proxied label — proxy is
-        sticky per browser_id, so re-running on every query is wasted. The egress-IP verification runs
-        in the background (log-only) so it stays off the request's critical path.
+        Skips the work (a tinyproxy reload + two IP-verify round-trips, several seconds) if the
+        sandbox already carries the proxied label — proxy is sticky per browser_id, so re-running on
+        every query is wasted time.
         """
         if (sandbox.labels or {}).get(LABEL_PROXIED) == "1":
             return
-        applied = await _apply_proxy(sandbox, browser_id, origin_ip, target_domain)
-        if applied:
-            self._spawn_bg(self._log_egress_ip(sandbox))
+        try:
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+        except ProxyVerificationError as e:
+            logger.warning(str(e))
+        # Mark proxied even if verification was inconclusive — a retry yields the same upstream IP.
         try:
             await sandbox.set_labels({**(sandbox.labels or {}), LABEL_PROXIED: "1"})
         except Exception as e:
             logger.warning(f"Failed to mark {sandbox.name} proxied: {e}")
-
-    async def _log_egress_ip(self, sandbox: AsyncSandbox) -> None:
-        ip = await _get_sandbox_public_ip(sandbox)
-        logger.info(f"Sandbox {sandbox.name} egress IP via proxy: {ip}")
 
     async def _resolve(self, browser_id: str) -> str:
         """Resolve a requested browser_id to the real sandbox id backing it.
@@ -251,24 +261,12 @@ class DaytonaBackend:
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
-        t0 = time.monotonic()  # [TIMING] temporary
         effective_id = await self._claim_spare_for(browser_id)
-        t_claim = time.monotonic()  # [TIMING] temporary
         lock = self._locks.setdefault(effective_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(effective_id)
-            t_ensure = time.monotonic()  # [TIMING] temporary
             await self._ensure_proxy(sandbox, effective_id, origin_ip, target_domain)
-            t_proxy = time.monotonic()  # [TIMING] temporary
-            info = await self._get_info(sandbox)
-            # [TIMING] temporary — remove before merge
-            logger.info(
-                f"[TIMING] create_browser {browser_id}: "
-                f"claim={t_claim - t0:.1f}s ensure={t_ensure - t_claim:.1f}s "
-                f"proxy={t_proxy - t_ensure:.1f}s info={time.monotonic() - t_proxy:.1f}s "
-                f"total={time.monotonic() - t0:.1f}s"
-            )
-            return info
+            return await self._get_info(sandbox)
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
