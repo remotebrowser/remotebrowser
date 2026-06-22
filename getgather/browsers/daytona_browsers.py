@@ -155,10 +155,11 @@ def _browser_id_from_name(name: str) -> str:
 
 
 class DaytonaBackend:
-    """Launch a Daytona sandbox per browser on demand (no pool).
+    """Launch a Daytona sandbox per browser, optionally serving incognito requests from a warm pool.
 
-    The browser_id -> sandbox mapping is the deterministic sandbox name plus labels, so there is
-    no local state. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
+    The browser_id -> sandbox mapping is the deterministic sandbox name plus labels (incognito ids
+    that claimed a pool spare are bound via a claimed_as label), so there is no in-process state and
+    resolution survives restarts. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
     self-authenticating HTTPS reverse proxy to port 9222 (no inbound networking into the sandbox is
     required). Live view embeds the snapshot's built-in noVNC on port 8080 via a signed preview URL.
     Residential proxy/geo-IP are supported via tinyproxy (preconfigured in the snapshot, same as podman).
@@ -329,12 +330,10 @@ class DaytonaBackend:
                     logger.warning(f"Failed to spawn pool spare: {type(e).__name__}: {e}")
                     break
 
-    async def _spawn_spare(self) -> str:
-        browser_id = SPARE_NAME_PREFIX + generate(_SPARE_ID_CHARS, 8)
-        name = _sandbox_name(browser_id)
+    async def _spawn_spare(self) -> None:
+        name = _sandbox_name(SPARE_NAME_PREFIX + generate(_SPARE_ID_CHARS, 8))
         logger.info(f"Spawning pool spare {name}")
-        await self._create(name, labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
-        return browser_id
+        await self._create(name, labels=SPARE_LABELS)
 
     async def get_cdp_base_url(self, browser_id: str) -> str:
         sandbox = await self._get(_sandbox_name(await self._resolve(browser_id)))
