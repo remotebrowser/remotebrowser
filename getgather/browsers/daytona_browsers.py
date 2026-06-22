@@ -182,6 +182,14 @@ class DaytonaBackend:
         # Separate from _pool_lock so a slow backfill (each spawn cold-boots a sandbox, ~9s) never
         # blocks a claim. Just collapses concurrent reconcile calls into one.
         self._reconcile_lock = asyncio.Lock()
+        # Strong refs to background reconcile tasks; asyncio only holds weak refs, so an unreferenced
+        # task can be garbage-collected mid-flight (and the pool would never fill).
+        self._bg_tasks: set[asyncio.Task[None]] = set()
+
+    def _spawn_reconcile(self) -> None:
+        task = asyncio.create_task(self._reconcile_pool())
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     def _pool_eligible(self, browser_id: str) -> bool:
         """A non-empty pool only ever serves incognito ids; everything else cold-creates."""
@@ -217,7 +225,7 @@ class DaytonaBackend:
             return
         # Adopt spares that survived a restart, then backfill — both in the background so server
         # startup is never blocked on Daytona.
-        asyncio.create_task(self._reconcile_pool())
+        self._spawn_reconcile()
 
     async def shutdown(self) -> None:
         await self.client.close()
@@ -304,7 +312,7 @@ class DaytonaBackend:
             return browser_id
 
         logger.info(f"Claimed pooled spare {spare_id} for incognito browser {browser_id}")
-        asyncio.create_task(self._reconcile_pool())
+        self._spawn_reconcile()
         return spare_id
 
     async def _reconcile_pool(self) -> None:
