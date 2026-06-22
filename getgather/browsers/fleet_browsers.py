@@ -31,6 +31,7 @@ async def call_chromefleet_api(
     method: HTTP_METHOD,
     browser_id: str | None = None,
     *,
+    path: str | None = None,
     target_domain: str | None = None,
     timeout: float = 120.0,
     retries: int = 3,
@@ -38,7 +39,8 @@ async def call_chromefleet_api(
     headers: dict[str, str] | None = None,
 ) -> httpx.Response | None:
     base_url = settings.effective_chromefleet_url.rstrip("/")
-    path = f"/api/v1/browsers/{browser_id}" if browser_id else "/api/v1/browsers"
+    if path is None:
+        path = f"/api/v1/browsers/{browser_id}" if browser_id else "/api/v1/browsers"
     url = f"{base_url}{path}"
 
     if headers is None:
@@ -92,7 +94,7 @@ class FleetBackend:
     relay does not patch again. VNC is not proxied here either (`get_vnc_endpoint` returns None).
     """
 
-    async def shutdown(self) -> None:
+    async def startup(self) -> None:
         return None
 
     async def create_browser(
@@ -101,6 +103,20 @@ class FleetBackend:
         headers = {"x-origin-ip": origin_ip} if origin_ip else {}
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
+
+    async def acquire_incognito_browser(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
+        headers = {"x-origin-ip": origin_ip} if origin_ip else {}
+        if target_domain:
+            headers["x-target-domains"] = target_domain
+        response = _require(
+            await call_chromefleet_api("POST", path="/api/v1/browsers-incognito", headers=headers)
+        )
+        return response.json()
+
+    async def shutdown(self) -> None:
+        return None
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None

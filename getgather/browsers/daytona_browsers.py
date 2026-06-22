@@ -13,7 +13,11 @@ from daytona import (
 )
 from loguru import logger
 
-from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.backend import (
+    BROWSER_NAME_PREFIX,
+    BrowserNotFound,
+    mint_incognito_browser_id,
+)
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
@@ -53,6 +57,10 @@ SIGNED_URL_TTL_SECONDS = 3600
 LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
+# A spare carries pool=spare; on claim the label is dropped so it reads as a normal browser and the
+# 15m auto-stop / 60m auto-delete teardown applies unchanged.
+LABEL_POOL = "pool"
+POOL_SPARE = "spare"
 
 
 def _sandbox_name(browser_id: str) -> str:
@@ -149,6 +157,18 @@ class DaytonaBackend:
         self.snapshot = snapshot
         self.client = AsyncDaytona(DaytonaConfig(api_key=api_key, api_url=api_url or None))
         self._locks: dict[str, asyncio.Lock] = {}
+        self._pool_size = settings.DAYTONA_INCOGNITO_POOL_SIZE
+        # In-memory set of ready spare browser_ids. Single-process pool: the lock makes claim
+        # atomic within this process; a multi-instance deployment would need a shared store.
+        self._spares: set[str] = set()
+        self._pool_lock = asyncio.Lock()
+
+    async def startup(self) -> None:
+        if self._pool_size <= 0:
+            return
+        # Adopt spares that survived a restart, then backfill — both in the background so server
+        # startup is never blocked on Daytona.
+        asyncio.create_task(self._reconcile_pool())
 
     async def shutdown(self) -> None:
         await self.client.close()
@@ -200,8 +220,83 @@ class DaytonaBackend:
 
     async def cleanup_idle(self) -> list[str]:
         # Teardown is owned by Daytona's native auto_stop_interval + auto_delete_interval (set in
-        # _create), so there is no reconcile sweep to run here.
+        # _create). The only periodic work is keeping the warm pool topped up (spares that Daytona
+        # auto-stopped after idle are dropped and respawned here).
+        if self._pool_size > 0:
+            await self._reconcile_pool()
         return []
+
+    async def acquire_incognito_browser(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
+        browser_id, sandbox = await self._claim_or_create()
+        # Drop the spare label so normal teardown applies; best-effort (claim already succeeded).
+        try:
+            await sandbox.set_labels({LABEL_FLEET: "1"})
+        except Exception as e:
+            logger.warning(f"Failed to clear pool label on {sandbox.name}: {e}")
+        # Proxy is applied at claim time (spares run proxy-free), so each incognito gets a fresh IP.
+        try:
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+        except ProxyVerificationError as e:
+            logger.warning(str(e))
+        if self._pool_size > 0:
+            asyncio.create_task(self._reconcile_pool())
+        info = await self._get_info(sandbox)
+        info["browser_id"] = browser_id
+        return info
+
+    async def _claim_or_create(self) -> tuple[str, AsyncSandbox]:
+        """Pop a ready spare, or cold-create a fresh incognito sandbox if the pool is empty/stale."""
+        async with self._pool_lock:
+            while self._spares:
+                browser_id = self._spares.pop()
+                sandbox = await self._get(_sandbox_name(browser_id))
+                if sandbox is not None and sandbox.state == "started":
+                    logger.info(f"Claimed pooled incognito browser {browser_id}")
+                    return browser_id, sandbox
+                # Stale (auto-stopped or reaped); discard and try the next spare.
+                logger.info(f"Discarding stale spare {browser_id} (state unavailable)")
+        browser_id = mint_incognito_browser_id()
+        logger.info(f"Pool empty; cold-creating incognito browser {browser_id}")
+        sandbox = await self._ensure(browser_id)
+        return browser_id, sandbox
+
+    async def _reconcile_pool(self) -> None:
+        """Sync the in-memory spare set with Daytona, then backfill to POOL_SIZE.
+
+        Idempotent and safe to call repeatedly. Serialized under the pool lock so concurrent
+        callers (startup, periodic sweep, post-claim backfill) don't over-provision.
+        """
+        async with self._pool_lock:
+            live: set[str] = set()
+            async for sandbox in self.client.list(
+                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
+            ):
+                if (
+                    sandbox.name
+                    and sandbox.name.startswith(BROWSER_NAME_PREFIX)
+                    and sandbox.state == "started"
+                ):
+                    live.add(_browser_id_from_name(sandbox.name))
+            self._spares = live
+            deficit = self._pool_size - len(self._spares)
+
+        for _ in range(max(0, deficit)):
+            try:
+                browser_id = await self._spawn_spare()
+            except Exception as e:
+                logger.warning(f"Failed to spawn pool spare: {type(e).__name__}: {e}")
+                break
+            async with self._pool_lock:
+                self._spares.add(browser_id)
+
+    async def _spawn_spare(self) -> str:
+        browser_id = mint_incognito_browser_id()
+        name = _sandbox_name(browser_id)
+        logger.info(f"Spawning pool spare {name}")
+        await self._create(name, labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
+        return browser_id
 
     async def get_cdp_base_url(self, browser_id: str) -> str:
         sandbox = await self._get(_sandbox_name(browser_id))
@@ -305,11 +400,11 @@ class DaytonaBackend:
         except DaytonaNotFoundError:
             return None
 
-    async def _create(self, name: str) -> AsyncSandbox:
+    async def _create(self, name: str, labels: dict[str, str] | None = None) -> AsyncSandbox:
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
-            labels={LABEL_FLEET: "1"},
+            labels=labels or {LABEL_FLEET: "1"},
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown

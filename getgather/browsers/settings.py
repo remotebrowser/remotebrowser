@@ -46,6 +46,9 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+    # Warm pool of pre-booted incognito sandboxes. 0 disables (cold-create per request, the prior
+    # behavior). Spares run without a proxy; the residential proxy is applied at claim time.
+    DAYTONA_INCOGNITO_POOL_SIZE: int = 2
 
     @property
     def effective_chromefleet_url(self) -> str:

@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI):
 
     background_task = asyncio.create_task(timer_loop())
 
+    await backend.startup()
+
     try:
         async with AsyncExitStack() as stack:
             for mcp_app in mcp_apps:

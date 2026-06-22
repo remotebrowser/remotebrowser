@@ -11,11 +11,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
-from nanoid import generate
 
 from getgather.auth.auth import get_auth_user
 from getgather.browser import (
     ElementConfig,
+    acquire_incognito_remote_browser,
     create_remote_browser,
     find_browser_tab,
     get_new_page,
@@ -49,8 +49,6 @@ router = APIRouter(prefix="/dpage", tags=["dpage"])
 
 # Max seconds for the distillation polling loop in zen_post_dpage (per HTTP request).
 DEFAULT_DPAGE_POST_POLL_TIMEOUT = 60
-
-FRIENDLY_CHARS: str = "23456789abcdefghijkmnpqrstuvwxyz"
 
 SIGN_IN_ID_DELIMITER = "--"
 
@@ -638,10 +636,9 @@ async def remote_zen_dpage_mcp_tool(
             browser_id, str(page.target_id), incoming.mcp_session_id or mcp_session_id
         )
     elif incognito:
-        prefix = "E"  # for Ephemeral
-        browser_id = prefix + generate(FRIENDLY_CHARS, 7)
-        browser = await create_remote_browser(
-            browser_id, target_domain=_target_domain_from_initial_url(initial_url)
+        # Fleet mints the id (a warm-pool spare when available); see acquire_incognito_remote_browser.
+        browser_id, browser = await acquire_incognito_remote_browser(
+            target_domain=_target_domain_from_initial_url(initial_url)
         )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
@@ -731,10 +728,9 @@ async def remote_zen_dpage_with_action(
             logger.info(f"Continue with remote browser {browser_id} and page {incoming.target_id}")
             signin_id = SignInId(browser_id, incoming.target_id, session_id)
     elif incognito:
-        prefix = "E"
-        browser_id = prefix + generate(FRIENDLY_CHARS, 7)
-        browser = await create_remote_browser(
-            browser_id, target_domain=_target_domain_from_initial_url(initial_url)
+        # Fleet mints the id (a warm-pool spare when available); see acquire_incognito_remote_browser.
+        browser_id, browser = await acquire_incognito_remote_browser(
+            target_domain=_target_domain_from_initial_url(initial_url)
         )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)

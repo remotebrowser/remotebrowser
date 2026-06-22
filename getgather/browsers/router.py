@@ -211,6 +211,20 @@ async def websocket_proxy(
             await client_ws.close(code=4500, reason="Internal proxy error")
 
 
+@router.post("/api/v1/browsers-incognito")
+async def acquire_incognito_browser(request: Request) -> dict[str, Any]:
+    origin_ip = request.headers.get("x-origin-ip")
+    target_domain = request.headers.get("x-target-domains")
+    try:
+        result = await backend.acquire_incognito_browser(origin_ip, target_domain)
+        logger.info(f"Acquired incognito browser {result.get('browser_id')}")
+        return result
+    except Exception as e:
+        detail = "Unable to acquire incognito browser!"
+        logger.error(f"{detail} Exception={e}")
+        raise HTTPException(status_code=500, detail=detail)
+
+
 @router.post("/api/v1/browsers/{browser_id}")
 async def create_browser(browser_id: str, request: Request) -> dict[str, Any]:
     logger.info(f"Starting browser {browser_id}...")

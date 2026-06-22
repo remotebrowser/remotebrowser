@@ -8,7 +8,11 @@ from typing import Any
 
 from loguru import logger
 
-from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.backend import (
+    BROWSER_NAME_PREFIX,
+    BrowserNotFound,
+    mint_incognito_browser_id,
+)
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
@@ -288,6 +292,9 @@ async def get_cdp_url(browser_id: str) -> str:
 
 
 class PodmanBackend:
+    async def startup(self) -> None:
+        return None
+
     async def shutdown(self) -> None:
         return None
 
@@ -298,6 +305,15 @@ class PodmanBackend:
         await launch_container(settings.CONTAINER_IMAGE, container_name)
         ip = await configure_remote_browser(browser_id, container_name, origin_ip, target_domain)
         return {"container_name": container_name, "status": "created", "ip": ip}
+
+    async def acquire_incognito_browser(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> dict[str, Any]:
+        # No pool locally: mint an ephemeral id and cold-create, matching the prior dpage behavior.
+        browser_id = mint_incognito_browser_id()
+        info = await self.create_browser(browser_id, origin_ip, target_domain)
+        info["browser_id"] = browser_id
+        return info
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
