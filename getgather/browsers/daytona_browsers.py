@@ -225,9 +225,6 @@ class DaytonaBackend:
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
-        # Incognito requests claim a warm-pool spare when one is ready: the spare keeps its own
-        # sandbox name and the requested id -> spare binding is recorded in a Daytona label
-        # (resolved on every later lookup). Per-user ids and an empty pool fall through to cold-create.
         effective_id = await self._claim_spare_for(browser_id)
         lock = self._locks.setdefault(effective_id, asyncio.Lock())
         async with lock:
