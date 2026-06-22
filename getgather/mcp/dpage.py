@@ -677,10 +677,13 @@ async def remote_zen_dpage_mcp_tool(
         error_reporter=error_reporter,
     )
     if terminated:
-        await stop_recording(str(signin_id))
+        recording = await stop_recording(str(signin_id))
         await safe_close_page(page)
         distillation_result = converted if converted is not None else distilled
-        return {result_key: distillation_result}
+        result: dict[str, object] = {result_key: distillation_result}
+        if recording and recording.storage_key:
+            result["recording_id"] = recording.recording_id
+        return result
 
     page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
 
@@ -773,10 +776,12 @@ async def remote_zen_dpage_with_action(
         error_reporter=error_reporter,
     )
     if terminated:
-        result = await action(page, browser)
-        await stop_recording(str(signin_id))
+        action_result = await action(page, browser)
+        recording = await stop_recording(str(signin_id))
         await safe_close_page(page)
-        return result
+        if recording and recording.storage_key and isinstance(action_result, dict):
+            action_result["recording_id"] = recording.recording_id
+        return action_result  # pyright: ignore[reportUnknownVariableType]
 
     page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
 
