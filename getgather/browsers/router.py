@@ -316,8 +316,8 @@ async def get_page_html(browser_id: str, page_id: str) -> HTMLResponse:
         await client.aclose()
 
 
-@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/distilled")
-async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse:
+@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/distilled", response_model=None)
+async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse | HTMLResponse:
     page_id = strip_browser_id_from_target_id(page_id)
     try:
         client = await open_cdp(browser_id)
@@ -352,7 +352,7 @@ async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse:
             if converted:
                 return JSONResponse(converted)
 
-            return JSONResponse({"distilled": match.distilled})
+            return HTMLResponse(content=match.distilled)
         except HTTPException:
             raise
         except Exception as e:
