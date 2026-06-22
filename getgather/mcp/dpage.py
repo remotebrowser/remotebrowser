@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
+from nanoid import generate
 
 from getgather.auth.auth import get_auth_user
 from getgather.browser import (
@@ -26,7 +27,6 @@ from getgather.browser import (
     wait_for_ready_state,
     zen_navigate_with_retry,
 )
-from getgather.browsers.backend import mint_incognito_browser_id
 from getgather.config import settings
 from getgather.mcp.html_renderer import DEFAULT_TITLE, render_form
 from getgather.zen_distill import (
@@ -49,6 +49,8 @@ router = APIRouter(prefix="/dpage", tags=["dpage"])
 
 # Max seconds for the distillation polling loop in zen_post_dpage (per HTTP request).
 DEFAULT_DPAGE_POST_POLL_TIMEOUT = 60
+
+FRIENDLY_CHARS: str = "23456789abcdefghijkmnpqrstuvwxyz"
 
 SIGN_IN_ID_DELIMITER = "--"
 
@@ -636,7 +638,8 @@ async def remote_zen_dpage_mcp_tool(
             browser_id, str(page.target_id), incoming.mcp_session_id or mcp_session_id
         )
     elif incognito:
-        browser_id = mint_incognito_browser_id()
+        prefix = "E"  # for Ephemeral
+        browser_id = prefix + generate(FRIENDLY_CHARS, 7)
         browser = await create_remote_browser(
             browser_id, target_domain=_target_domain_from_initial_url(initial_url)
         )
@@ -728,7 +731,8 @@ async def remote_zen_dpage_with_action(
             logger.info(f"Continue with remote browser {browser_id} and page {incoming.target_id}")
             signin_id = SignInId(browser_id, incoming.target_id, session_id)
     elif incognito:
-        browser_id = mint_incognito_browser_id()
+        prefix = "E"
+        browser_id = prefix + generate(FRIENDLY_CHARS, 7)
         browser = await create_remote_browser(
             browser_id, target_domain=_target_domain_from_initial_url(initial_url)
         )
