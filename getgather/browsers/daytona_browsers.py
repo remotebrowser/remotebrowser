@@ -13,12 +13,12 @@ from daytona import (
     ListSandboxesQuery,
 )
 from loguru import logger
+from nanoid import generate
 
 from getgather.browsers.backend import (
     BROWSER_NAME_PREFIX,
     INCOGNITO_PREFIX,
     BrowserNotFound,
-    mint_spare_browser_id,
 )
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
@@ -70,6 +70,12 @@ LABEL_CLAIMED = "claimed_as"
 
 FLEET_LABELS = {LABEL_FLEET: "1"}
 SPARE_LABELS = {LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE}
+
+# Pool spares get a self-describing `spare-<rand>` name so an unclaimed pool sandbox is obvious in
+# the Daytona dashboard. The name is only used internally (resolved via the claimed_as label), so it
+# does not need the incognito prefix.
+SPARE_NAME_PREFIX = "spare-"
+_SPARE_ID_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
 
 
 def _sandbox_name(browser_id: str) -> str:
@@ -324,7 +330,7 @@ class DaytonaBackend:
                     break
 
     async def _spawn_spare(self) -> str:
-        browser_id = mint_spare_browser_id()
+        browser_id = SPARE_NAME_PREFIX + generate(_SPARE_ID_CHARS, 8)
         name = _sandbox_name(browser_id)
         logger.info(f"Spawning pool spare {name}")
         await self._create(name, labels={LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE})
