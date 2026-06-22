@@ -6,10 +6,6 @@ from getgather.config import settings
 # `chromium-abc`. Both local backends derive names and parse ids from this single prefix.
 BROWSER_NAME_PREFIX = "chromium-"
 
-# Incognito (ephemeral) browser ids carry an `E` prefix (minted by dpage). The pool only needs to
-# recognize this prefix on a requested id to decide whether to claim a spare.
-INCOGNITO_PREFIX = "E"
-
 
 class BrowserNotFound(Exception):
     """Raised by a backend when a browser does not exist; endpoints map it to HTTP 404."""

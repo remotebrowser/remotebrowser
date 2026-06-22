@@ -15,11 +15,7 @@ from daytona import (
 from loguru import logger
 from nanoid import generate
 
-from getgather.browsers.backend import (
-    BROWSER_NAME_PREFIX,
-    INCOGNITO_PREFIX,
-    BrowserNotFound,
-)
+from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
@@ -76,6 +72,10 @@ SPARE_LABELS = {LABEL_FLEET: "1", LABEL_POOL: POOL_SPARE}
 # does not need the incognito prefix.
 SPARE_NAME_PREFIX = "spare-"
 _SPARE_ID_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
+
+# Incognito (ephemeral) browser ids carry this prefix (minted by dpage). The pool only serves
+# incognito requests, so the claim path keys off it. Must match the prefix dpage uses.
+INCOGNITO_PREFIX = "E"
 
 
 def _sandbox_name(browser_id: str) -> str:
