@@ -15,19 +15,49 @@ from getgather.config import settings
 DOCKER_INTERNAL_HOST = "172.17.0.1"
 
 
-def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
+# uvloop's child process watcher can cause asyncio.create_subprocess_exec to hang
+# indefinitely. When uvloop is the active event loop, fall back to running the
+# subprocess in a thread via asyncio.to_thread to avoid the deadlock.
+def _is_uvloop() -> bool:
+    return type(asyncio.get_event_loop()).__module__.startswith("uvloop")
+
+
+async def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
     cmd = ["podman"]
     if settings.CONTAINER_HOST:
         cmd.append("--remote")
     cmd.extend(args)
-    return subprocess.run(
-        cmd, capture_output=True, text=True, check=True, encoding="utf-8", errors="replace"
+
+    if _is_uvloop():
+        return await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_bytes, stderr_bytes = await proc.communicate()
+    assert proc.returncode is not None
+    stdout = stdout_bytes.decode("utf-8", errors="replace")
+    stderr = stderr_bytes.decode("utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(
+        args=cmd, returncode=proc.returncode, stdout=stdout, stderr=stderr
     )
 
 
 async def get_host_port(container_name: str, container_port: int) -> int | None:
     try:
-        result = await asyncio.to_thread(run_podman, ["port", container_name, str(container_port)])
+        result = await run_podman(["port", container_name, str(container_port)])
         port_mapping = result.stdout.strip()
         if not port_mapping:
             return None
@@ -59,7 +89,7 @@ async def launch_container(image_name: str, container_name: str) -> str:
         image_name,
     ])
     try:
-        result = await asyncio.to_thread(run_podman, cmd)
+        result = await run_podman(cmd)
         if result.returncode == 0 and result.stdout:
             container_id = result.stdout.strip()
             cdp_port = await get_host_port(container_name, 9222)
@@ -75,7 +105,7 @@ async def launch_container(image_name: str, container_name: str) -> str:
 
 async def container_exists(container_name: str) -> bool:
     try:
-        result = await asyncio.to_thread(run_podman, ["container", "exists", container_name])
+        result = await run_podman(["container", "exists", container_name])
         return result.returncode == 0
     except subprocess.CalledProcessError:
         return False
@@ -83,10 +113,12 @@ async def container_exists(container_name: str) -> bool:
 
 async def container_is_running(container_name: str) -> bool:
     try:
-        result = await asyncio.to_thread(
-            run_podman,
-            ["inspect", "--format", "{{.State.Running}}", container_name],
-        )
+        result = await run_podman([
+            "inspect",
+            "--format",
+            "{{.State.Running}}",
+            container_name,
+        ])
         return result.stdout.strip() == "true"
     except subprocess.CalledProcessError:
         return False
@@ -95,7 +127,7 @@ async def container_is_running(container_name: str) -> bool:
 async def kill_container(container_name: str) -> None:
     logger.info(f"Killing Chromium container {container_name}...")
     try:
-        result = await asyncio.to_thread(run_podman, ["kill", container_name])
+        result = await run_podman(["kill", container_name])
         if result.returncode == 0 and result.stdout:
             logger.info(f"Container killed: name={container_name}")
         else:
@@ -107,7 +139,7 @@ async def kill_container(container_name: str) -> None:
 async def list_containers() -> list[str]:
     logger.debug("Retrieving the list of all containers...")
     try:
-        result = await asyncio.to_thread(run_podman, ["container", "ls", "--format", "{{.Names}}"])
+        result = await run_podman(["container", "ls", "--format", "{{.Names}}"])
         if result.returncode == 0:
             containers = result.stdout.splitlines() if result.stdout else []
             logger.debug(f"All containers obtained. Total={len(containers)}")
@@ -120,27 +152,21 @@ async def list_containers() -> list[str]:
 
 async def get_container_last_activity(container_name: str) -> float | None:
     try:
-        await asyncio.to_thread(
-            run_podman,
-            [
-                "exec",
-                container_name,
-                "sh",
-                "-c",
-                "cp /home/user/chrome-profile/Default/History db",
-            ],
-        )
+        await run_podman([
+            "exec",
+            container_name,
+            "sh",
+            "-c",
+            "cp /home/user/chrome-profile/Default/History db",
+        ])
 
-        result = await asyncio.to_thread(
-            run_podman,
-            [
-                "exec",
-                container_name,
-                "sqlite3",
-                "db",
-                "select MAX(last_visit_time) from urls;",
-            ],
-        )
+        result = await run_podman([
+            "exec",
+            container_name,
+            "sqlite3",
+            "db",
+            "select MAX(last_visit_time) from urls;",
+        ])
 
         if result.returncode == 0 and result.stdout:
             chromium_time = float(result.stdout.strip())
@@ -161,49 +187,37 @@ async def configure_container(container_name: str, proxy_url: str | None) -> Non
             proxy_url = proxy_url.removeprefix("http://")
             logger.debug(f"Configuring proxy with proxy_url: {proxy_url}")
             logger.info(f"Modifying tinyproxy.conf in {container_name}...")
-            await asyncio.to_thread(
-                run_podman,
-                [
-                    "exec",
-                    container_name,
-                    "sed",
-                    "-i",
-                    "/^Upstream http/d",
-                    "/app/tinyproxy.conf",
-                ],
-            )
-            await asyncio.to_thread(
-                run_podman,
-                [
-                    "exec",
-                    container_name,
-                    "sed",
-                    "-i",
-                    f"$ a\\Upstream http {proxy_url}",
-                    "/app/tinyproxy.conf",
-                ],
-            )
+            await run_podman([
+                "exec",
+                container_name,
+                "sed",
+                "-i",
+                "/^Upstream http/d",
+                "/app/tinyproxy.conf",
+            ])
+            await run_podman([
+                "exec",
+                container_name,
+                "sed",
+                "-i",
+                f"$ a\\Upstream http {proxy_url}",
+                "/app/tinyproxy.conf",
+            ])
             logger.info(f"Restarting tinyproxy in {container_name}...")
-            await asyncio.to_thread(
-                run_podman,
-                [
-                    "exec",
-                    container_name,
-                    "sh",
-                    "-c",
-                    "pkill tinyproxy || true",
-                ],
-            )
-            await asyncio.to_thread(
-                run_podman,
-                [
-                    "exec",
-                    container_name,
-                    "sh",
-                    "-c",
-                    "tinyproxy -d -c /app/tinyproxy.conf &",
-                ],
-            )
+            await run_podman([
+                "exec",
+                container_name,
+                "sh",
+                "-c",
+                "pkill tinyproxy || true",
+            ])
+            await run_podman([
+                "exec",
+                container_name,
+                "sh",
+                "-c",
+                "tinyproxy -d -c /app/tinyproxy.conf &",
+            ])
             logger.info(f"Proxy configured successfully in {container_name}.")
         except subprocess.CalledProcessError as e:
             raise Exception(f"Error configuring proxy: {e}")
@@ -220,20 +234,17 @@ async def get_container_public_ip(
 ) -> str | None:
     for attempt in range(1, retries + 1):
         try:
-            result = await asyncio.to_thread(
-                run_podman,
-                [
-                    "exec",
-                    container_name,
-                    "curl",
-                    "-s",
-                    "--max-time",
-                    "10",
-                    "--proxy",
-                    "http://127.0.0.1:8119",
-                    "https://ip.fly.dev",
-                ],
-            )
+            result = await run_podman([
+                "exec",
+                container_name,
+                "curl",
+                "-s",
+                "--max-time",
+                "10",
+                "--proxy",
+                "http://127.0.0.1:8119",
+                "https://ip.fly.dev",
+            ])
             ip = result.stdout.strip() or None
             if ip:
                 return ip
