@@ -405,10 +405,15 @@ async def navigate_page(
 async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> None:
     logger.debug(f"[CDP] Entered cdp_browser_websocket_proxy for browser_id={browser_id}")
 
+    import time as _t  # [TIMING] temporary
+
+    t0 = _t.monotonic()  # [TIMING] temporary
     await client_ws.accept()
     logger.debug("[CDP] WebSocket accepted")
 
-    if not await backend.browser_exists(browser_id):
+    exists = await backend.browser_exists(browser_id)
+    t_exists = _t.monotonic()  # [TIMING] temporary
+    if not exists:
         logger.info(f"[CDP] Browser {browser_id} not found — launching")
         try:
             origin_ip = client_ws.headers.get("x-origin-ip")
@@ -419,6 +424,11 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
             logger.error(f"[CDP] Failed to auto-start browser {browser_id}: {e}")
             await client_ws.close(code=1008)
             return
+    t_create = _t.monotonic()  # [TIMING] temporary
+    logger.info(
+        f"[TIMING] /cdp/{browser_id}: exists_check={t_exists - t0:.1f}s "
+        f"create={t_create - t_exists:.1f}s (existed={exists})"
+    )
 
     cdp_base = backend.cdp_websocket_base()
     if cdp_base is not None:
@@ -434,6 +444,10 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
     for attempt in range(10):
         try:
             remote_url = await get_cdp_websocket_url(browser_id)
+            logger.info(
+                f"[TIMING] /cdp/{browser_id}: got_remote_url={_t.monotonic() - t_create:.1f}s "
+                f"after create (attempt {attempt + 1})"
+            )
             logger.info(f"[CDP] Got remote URL: {remote_url}")
             break
         except Exception as e:
@@ -497,7 +511,13 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
             await client_ws.close(code=4000, reason="Page not found in any browser")
             return
 
+    import time as _t  # [TIMING] temporary
+
+    _t0 = _t.monotonic()  # [TIMING] temporary
     remote_url = await get_page_websocket_url(browser_id, page_id)
+    logger.info(  # [TIMING] temporary
+        f"[TIMING] /devtools page {page_id}: get_page_ws_url={_t.monotonic() - _t0:.1f}s"
+    )
     if not remote_url:
         logger.error(f"[CDP] Could not get websocket URL for page {page_id}")
         await client_ws.close(code=4502, reason="Failed to get page websocket URL")

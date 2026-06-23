@@ -692,6 +692,9 @@ async def remote_zen_dpage_with_action(
     config: ElementConfig | None = None,
 ) -> dict[str, Any]:
     """Execute an action after signin completion with remote Zendriver."""
+    import time as _t  # [TIMING] temporary
+
+    t_start = _t.monotonic()  # [TIMING] temporary
     path = os.path.join(os.path.dirname(__file__), "patterns", "**/*.html")
     patterns = load_distillation_patterns(path)
 
@@ -751,7 +754,9 @@ async def remote_zen_dpage_with_action(
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
         logger.info(f"For user {user_id}: using remote browser {browser_id}")
 
+    t_browser = _t.monotonic()  # [TIMING] temporary
     await zen_navigate_with_retry(page, initial_url)
+    t_nav = _t.monotonic()  # [TIMING] temporary
 
     error_reporter = make_error_reporter(browser, initial_url) if not incognito else None
     terminated, _, _ = await run_distillation_loop(
@@ -761,6 +766,11 @@ async def remote_zen_dpage_with_action(
         timeout=timeout,
         page=page,
         error_reporter=error_reporter,
+    )
+    logger.info(  # [TIMING] temporary
+        f"[TIMING] dpage {browser_id}: browser+page={t_browser - t_start:.1f}s "
+        f"navigate={t_nav - t_browser:.1f}s distill={_t.monotonic() - t_nav:.1f}s "
+        f"total={_t.monotonic() - t_start:.1f}s"
     )
     if terminated:
         result = await action(page, browser)

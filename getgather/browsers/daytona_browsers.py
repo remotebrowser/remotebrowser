@@ -131,14 +131,21 @@ async def _get_sandbox_public_ip(
 
 async def _apply_and_verify_proxy(sandbox: AsyncSandbox, proxy_url: str) -> None:
     """Point tinyproxy at the upstream and verify the egress IP actually changed."""
+    _t0 = time.monotonic()  # [TIMING] temporary
     ip_before = await _get_sandbox_public_ip(sandbox)
+    _t_before = time.monotonic()  # [TIMING] temporary
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
     ok = await _configure_sandbox_proxy(sandbox, proxy_url)
+    _t_cfg = time.monotonic()  # [TIMING] temporary
     if not ok:
         return
 
     ip_after = await _get_sandbox_public_ip(sandbox)
+    logger.info(  # [TIMING] temporary
+        f"[TIMING] proxy {sandbox.name}: ip_before={_t_before - _t0:.1f}s "
+        f"configure={_t_cfg - _t_before:.1f}s ip_after={time.monotonic() - _t_cfg:.1f}s"
+    )
     if ip_before and ip_after and ip_before != ip_after:
         logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
     elif ip_before == ip_after:
@@ -229,8 +236,15 @@ class DaytonaBackend:
             and labels.get(LABEL_PROXY_TYPE) == desired_type
             and labels.get(LABEL_PROXY_CC) == desired_cc
         ):
+            logger.info(  # [TIMING] temporary
+                f"[TIMING] proxy SKIP {sandbox.name}: pre-applied {desired_type}/{desired_cc} reused"
+            )
             return  # pre-applied proxy already matches this request
 
+        logger.info(  # [TIMING] temporary
+            f"[TIMING] proxy RECONFIGURE {sandbox.name}: want {desired_type}/{desired_cc}, "
+            f"had {labels.get(LABEL_PROXY_TYPE)}/{labels.get(LABEL_PROXY_CC)}"
+        )
         try:
             await _apply_and_verify_proxy(sandbox, proxy_config.get_proxy_url(browser_id))
         except ProxyVerificationError as e:
@@ -275,12 +289,22 @@ class DaytonaBackend:
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
+        t0 = time.monotonic()  # [TIMING] temporary
         effective_id = await self._claim_spare_for(browser_id)
+        t_claim = time.monotonic()  # [TIMING] temporary
         lock = self._locks.setdefault(effective_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(effective_id)
+            t_ensure = time.monotonic()  # [TIMING] temporary
             await self._ensure_proxy(sandbox, effective_id, origin_ip, target_domain)
-            return await self._get_info(sandbox)
+            t_proxy = time.monotonic()  # [TIMING] temporary
+            info = await self._get_info(sandbox)
+            logger.info(  # [TIMING] temporary
+                f"[TIMING] create_browser {browser_id}: claim={t_claim - t0:.1f}s "
+                f"ensure={t_ensure - t_claim:.1f}s proxy={t_proxy - t_ensure:.1f}s "
+                f"info={time.monotonic() - t_proxy:.1f}s total={time.monotonic() - t0:.1f}s"
+            )
+            return info
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
@@ -332,7 +356,12 @@ class DaytonaBackend:
 
         # Shuffle so concurrent claimers don't all target the same spare first (each collision costs
         # a wasted set_labels + retry). Claims run unserialized; _try_claim confirms exclusive ownership.
+        _t_list0 = time.monotonic()  # [TIMING] temporary
         candidates = [sb async for sb in self._iter_sandboxes(SPARE_LABELS, started_only=True)]
+        logger.info(  # [TIMING] temporary
+            f"[TIMING] _claim_spare_for {browser_id}: list_spares={time.monotonic() - _t_list0:.1f}s "
+            f"({len(candidates)} candidates)"
+        )
         random.shuffle(candidates)
         for sb in candidates:
             if sb.name and await self._try_claim(sb.name, browser_id):
@@ -352,7 +381,9 @@ class DaytonaBackend:
         live, unclaimed spare. After claiming, re-read once more to confirm the label stuck (lost a
         race otherwise). Returns True only when this caller now exclusively owns the sandbox.
         """
+        _t0 = time.monotonic()  # [TIMING] temporary
         fresh = await self._get(name)
+        _t_get = time.monotonic()  # [TIMING] temporary
         if fresh is None or fresh.state != "started":
             return False  # stale list entry — already deleted/stopped
         labels = fresh.labels or {}
@@ -368,7 +399,12 @@ class DaytonaBackend:
         except Exception as e:
             logger.warning(f"Failed to claim spare {name}: {e}")
             return False
+        _t_set = time.monotonic()  # [TIMING] temporary
         confirmed = await self._get(name)
+        logger.info(  # [TIMING] temporary
+            f"[TIMING] _try_claim {name}: get={_t_get - _t0:.1f}s "
+            f"set_labels={_t_set - _t_get:.1f}s confirm={time.monotonic() - _t_set:.1f}s"
+        )
         if confirmed is None or (confirmed.labels or {}).get(LABEL_CLAIMED) != browser_id:
             logger.warning(f"Lost claim race for spare {name}; skipping")
             return False
@@ -455,25 +491,43 @@ class DaytonaBackend:
 
     async def _ensure(self, browser_id: str) -> AsyncSandbox:
         name = _sandbox_name(browser_id)
+        _t0 = time.monotonic()  # [TIMING] temporary
         sandbox = await self._get(name)
+        _t_get = time.monotonic()  # [TIMING] temporary
+        created = False  # [TIMING] temporary
         if sandbox is None:
             sandbox = await self._create(name)
+            created = True  # [TIMING] temporary
+        _t_create = time.monotonic()  # [TIMING] temporary
 
+        started = False  # [TIMING] temporary
         if sandbox.state != "started":
             logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
             await sandbox.start()
-
+            started = True  # [TIMING] temporary
+        logger.info(  # [TIMING] temporary
+            f"[TIMING] _ensure {name}: get={_t_get - _t0:.1f}s "
+            f"create={_t_create - _t_get:.1f}s(did={created}) "
+            f"start={time.monotonic() - _t_create:.1f}s(did={started})"
+        )
         return sandbox
 
     async def _get_info(self, sandbox: AsyncSandbox) -> dict[str, Any]:
+        _t0 = time.monotonic()  # [TIMING] temporary
         signed = await sandbox.create_signed_preview_url(
             CDP_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
+        )
+        _t_signed = time.monotonic()  # [TIMING] temporary
+        last_activity = await self._get_last_activity(sandbox)
+        logger.info(  # [TIMING] temporary
+            f"[TIMING] _get_info {sandbox.name}: signed_url={_t_signed - _t0:.1f}s "
+            f"last_activity={time.monotonic() - _t_signed:.1f}s"
         )
         return {
             "hostname": sandbox.name,
             "cdp_url": signed.url,  # public, internet-reachable; bearer secret (see SIGNED_URL_TTL_SECONDS)
             "app_state": sandbox.state,
-            "last_activity_timestamp": await self._get_last_activity(sandbox),
+            "last_activity_timestamp": last_activity,
         }
 
     async def _get_last_activity(self, sandbox: AsyncSandbox) -> float | None:
