@@ -513,21 +513,17 @@ class DaytonaBackend:
         return sandbox
 
     async def _get_info(self, sandbox: AsyncSandbox) -> dict[str, Any]:
-        _t0 = time.monotonic()  # [TIMING] temporary
         signed = await sandbox.create_signed_preview_url(
             CDP_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
         )
-        _t_signed = time.monotonic()  # [TIMING] temporary
-        last_activity = await self._get_last_activity(sandbox)
-        logger.info(  # [TIMING] temporary
-            f"[TIMING] _get_info {sandbox.name}: signed_url={_t_signed - _t0:.1f}s "
-            f"last_activity={time.monotonic() - _t_signed:.1f}s"
-        )
+        # last_activity is intentionally not computed here: it cost ~1s (a `cp History + sqlite3`
+        # exec that usually returns empty on a fresh browser) on the create/get hot path and nothing
+        # consumes the field. The live-view idle gate reads it on demand via _get_last_activity.
         return {
             "hostname": sandbox.name,
             "cdp_url": signed.url,  # public, internet-reachable; bearer secret (see SIGNED_URL_TTL_SECONDS)
             "app_state": sandbox.state,
-            "last_activity_timestamp": last_activity,
+            "last_activity_timestamp": None,
         }
 
     async def _get_last_activity(self, sandbox: AsyncSandbox) -> float | None:
