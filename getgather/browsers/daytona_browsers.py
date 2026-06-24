@@ -330,13 +330,8 @@ class DaytonaBackend:
         self, browser_id: str, winner_name: str, handles: list[AsyncSandbox]
     ) -> None:
         losers = [s for s in handles if s.name != winner_name]
-        logger.info(
-            f"Teardown losers for {browser_id}: winner={winner_name} "
-            f"handles={[s.name for s in handles]} losers={[s.name for s in losers]}"
-        )
 
         async def _delete_one(sandbox: AsyncSandbox) -> None:
-            logger.info(f"Deleting loser sandbox {sandbox.name} (state={sandbox.state})")
             try:
                 await sandbox.delete()
                 logger.info(f"Deleted loser sandbox {sandbox.name}")
@@ -356,13 +351,12 @@ class DaytonaBackend:
             ):
                 if sandbox.name != winner_name:
                     orphans.append(sandbox)
-            logger.info(
+            logger.debug(
                 f"Reconcile sweep for {browser_id}: winner={winner_name} "
                 f"orphans={[s.name for s in orphans]}"
             )
             for s in orphans:
                 try:
-                    logger.info(f"Reconcile deleting orphan {s.name} (state={s.state})")
                     await s.delete()
                     logger.info(f"Reconcile deleted orphan {s.name}")
                 except Exception as e:
