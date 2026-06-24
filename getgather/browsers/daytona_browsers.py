@@ -318,6 +318,10 @@ class DaytonaBackend:
             )
 
         winner_name = winner.name
+        logger.info(
+            f"Best-of-{n} winner for {browser_id}: {winner_name}; "
+            f"scheduling teardown for {[s.name for s in handles if s.name != winner_name]}"
+        )
         asyncio.create_task(self._teardown_losers(browser_id, winner_name, list(handles)))
 
         return winner
@@ -326,26 +330,47 @@ class DaytonaBackend:
         self, browser_id: str, winner_name: str, handles: list[AsyncSandbox]
     ) -> None:
         losers = [s for s in handles if s.name != winner_name]
-        await asyncio.gather(*(sandbox.delete() for sandbox in losers), return_exceptions=True)
+        logger.info(
+            f"Teardown losers for {browser_id}: winner={winner_name} "
+            f"handles={[s.name for s in handles]} losers={[s.name for s in losers]}"
+        )
 
-        # Post-winner reconcile: re-query by label; if >1 started, keep oldest, delete rest.
+        async def _delete_one(sandbox: AsyncSandbox) -> None:
+            logger.info(f"Deleting loser sandbox {sandbox.name} (state={sandbox.state})")
+            try:
+                await sandbox.delete()
+                logger.info(f"Deleted loser sandbox {sandbox.name}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete loser sandbox {sandbox.name}: {type(e).__name__}: {e}"
+                )
+
+        await asyncio.gather(*(_delete_one(s) for s in losers), return_exceptions=True)
+
+        # Post-winner reconcile: re-query by label; delete any non-winner sandbox regardless of state.
+        # Catches sandboxes created but cancelled before appending to handles.
         try:
-            started: list[AsyncSandbox] = []
+            orphans: list[AsyncSandbox] = []
             async for sandbox in self.client.list(
                 ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_BROWSER_ID: browser_id})
             ):
-                if sandbox.state == "started":
-                    started.append(sandbox)
-            if len(started) > 1:
-                started.sort(key=lambda s: (s.created_at is None, s.created_at))
-                for s in started[1:]:
-                    try:
-                        await s.delete()
-                        logger.info(f"Reconcile deleted extra sandbox {s.name} for {browser_id}")
-                    except Exception as e:
-                        logger.warning(f"Reconcile delete failed for {s.name}: {e}")
+                if sandbox.name != winner_name:
+                    orphans.append(sandbox)
+            logger.info(
+                f"Reconcile sweep for {browser_id}: winner={winner_name} "
+                f"orphans={[s.name for s in orphans]}"
+            )
+            for s in orphans:
+                try:
+                    logger.info(f"Reconcile deleting orphan {s.name} (state={s.state})")
+                    await s.delete()
+                    logger.info(f"Reconcile deleted orphan {s.name}")
+                except Exception as e:
+                    logger.warning(f"Reconcile delete failed for {s.name}: {type(e).__name__}: {e}")
         except Exception as e:
-            logger.warning(f"Label reconcile sweep failed for {browser_id}: {e}")
+            logger.warning(
+                f"Label reconcile sweep failed for {browser_id}: {type(e).__name__}: {e}"
+            )
 
     async def _get_info(self, sandbox: AsyncSandbox) -> dict[str, Any]:
         signed = await sandbox.create_signed_preview_url(
