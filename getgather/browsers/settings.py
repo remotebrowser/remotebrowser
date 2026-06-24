@@ -46,6 +46,9 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+    # Best-of-N sandbox creation: on cold-create, launch N candidates in parallel and take the
+    # first to fully pass (started + verified proxy). N=1 disables best-of-N (single path).
+    DAYTONA_BEST_OF_N: int = 3
 
     @property
     def effective_chromefleet_url(self) -> str:
