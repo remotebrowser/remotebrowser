@@ -1,8 +1,6 @@
 import asyncio
 import html
 import json
-import os
-import urllib.parse
 from typing import Any
 
 import httpx
@@ -14,8 +12,6 @@ from loguru import logger
 from websockets.exceptions import ConnectionClosed
 
 from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
-from getgather.cdp_client import PageNotFoundError, open_cdp
-from getgather.zen_distill import convert, distill, load_distillation_patterns
 
 router = APIRouter()
 
@@ -265,140 +261,6 @@ async def list_browsers() -> JSONResponse:
         detail = "Unable to list all browsers"
         logger.error(f"{detail} Exception={e}")
         raise HTTPException(status_code=500, detail=detail)
-
-
-@router.get("/api/v1/browsers/{browser_id}/pages")
-async def list_pages(browser_id: str) -> JSONResponse:
-    try:
-        client = await open_cdp(browser_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
-
-    try:
-        result = await client.send("Target.getTargets")
-    except Exception as e:
-        logger.error(f"Error listing pages via CDP for {browser_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"Failed to list pages: {e}")
-    finally:
-        await client.aclose()
-
-    target_infos: list[dict[str, Any]] = result.get("targetInfos", [])  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-    page_ids = [str(info["targetId"]) for info in target_infos if info.get("type") == "page"]
-    return JSONResponse(page_ids)
-
-
-@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/html")
-async def get_page_html(browser_id: str, page_id: str) -> HTMLResponse:
-    page_id = strip_browser_id_from_target_id(page_id)
-    try:
-        client = await open_cdp(browser_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
-
-    try:
-        try:
-            page = await client.attach_to_page(page_id)
-        except PageNotFoundError:
-            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
-        except Exception as e:
-            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to get page HTML: {e}")
-
-        try:
-            html = await page.evaluate("document.documentElement.outerHTML")
-        except Exception as e:
-            logger.error(f"Error fetching page HTML for {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to get page HTML: {e}")
-
-        if not isinstance(html, str):
-            html = str(html) if html is not None else ""
-        return HTMLResponse(content=html)
-    finally:
-        await client.aclose()
-
-
-@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/distilled", response_model=None)
-async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse | HTMLResponse:
-    page_id = strip_browser_id_from_target_id(page_id)
-    try:
-        client = await open_cdp(browser_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
-
-    try:
-        try:
-            page = await client.attach_to_page(page_id)
-        except PageNotFoundError:
-            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
-        except Exception as e:
-            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to distill page: {e}")
-
-        try:
-            current_url = str(await page.evaluate("window.location.href", await_promise=True))
-            hostname = urllib.parse.urlparse(current_url).hostname or ""
-
-            path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "mcp", "patterns", "*.html"
-            )
-            patterns = load_distillation_patterns(path)
-            if not patterns:
-                raise HTTPException(status_code=502, detail="No patterns found for '*.html'")
-
-            match = await distill(hostname, page, patterns)  # type: ignore[arg-type]
-            if not match:
-                raise HTTPException(status_code=502, detail="No matching pattern found for page")
-
-            converted = await convert(match.distilled, pattern_path=match.name)
-            if converted:
-                return JSONResponse(converted)
-
-            return HTMLResponse(content=match.distilled)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error distilling page for {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to distill page: {e}")
-    finally:
-        await client.aclose()
-
-
-@router.post("/api/v1/browsers/{browser_id}/pages/{page_id}/navigate")
-@router.get("/api/v1/browsers/{browser_id}/pages/{page_id}/navigate")
-async def navigate_page(
-    browser_id: str,
-    page_id: str,
-    request: Request,
-    url: str | None = None,
-) -> JSONResponse:
-    target_url = url if url is not None else request.url.query
-    if not target_url:
-        raise HTTPException(status_code=400, detail="Missing 'url' query parameter")
-
-    page_id = strip_browser_id_from_target_id(page_id)
-    try:
-        client = await open_cdp(browser_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
-
-    try:
-        try:
-            page = await client.attach_to_page(page_id)
-        except PageNotFoundError:
-            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
-        except Exception as e:
-            logger.error(f"Failed to attach to {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to navigate page: {e}")
-
-        try:
-            await page.navigate(target_url)
-        except Exception as e:
-            logger.error(f"Error navigating page for {browser_id}/{page_id}: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to navigate page: {e}")
-
-        return JSONResponse({"status": "success"})
-    finally:
-        await client.aclose()
 
 
 @router.websocket("/cdp/{browser_id}")

@@ -20,6 +20,7 @@ from getgather.config import PROJECT_DIR, settings
 from getgather.logs import MCPLoggingContextMiddleware
 from getgather.mcp.dpage import router as dpage_router
 from getgather.mcp.main import MCPDoc, create_mcp_apps, mcp_app_docs
+from getgather.pages_api_router import router as pages_router
 from getgather.patterns_api_router import router as patterns_router
 from getgather.tracing import MCPSessionTraceMiddleware, instrument_fastapi
 from getgather.zen_distill import short_lived_mcp_tool
@@ -121,6 +122,7 @@ async def mcp_slash_middleware(
 
 # Mount routers and apps AFTER middleware
 app.include_router(browsers_router)
+app.include_router(pages_router)
 app.include_router(patterns_router)
 app.include_router(dpage_router)
 
