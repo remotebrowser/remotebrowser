@@ -15,8 +15,7 @@ primary_region = 'sjc'
 
   [http_service.concurrency]
     type = "requests"
-    soft_limit = 5
-    hard_limit = 20
+    soft_limit = 20
 
   [http_service.http_options]
     idle_timeout = 180
