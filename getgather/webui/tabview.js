@@ -16,7 +16,13 @@ const pinnedTargetId = document.body.dataset.targetId || "";
 const img = document.getElementById("screen");
 const status = document.getElementById("status");
 
-const SCREENCAST = { format: "jpeg", quality: 60, maxWidth: 1280, maxHeight: 720, everyNthFrame: 1 };
+const SCREENCAST = {
+  format: "jpeg",
+  quality: 60,
+  maxWidth: 1280,
+  maxHeight: 720,
+  everyNthFrame: 1,
+};
 
 let ws = null;
 let nextId = 1;
@@ -169,8 +175,20 @@ img.addEventListener(
 // Keyboard: printable chars go through insertText (covers most fields); named keys
 // (Enter, Tab, arrows, Backspace…) go through dispatchKeyEvent with a virtual key code.
 const VK = {
-  Backspace: 8, Tab: 9, Enter: 13, Escape: 27, " ": 32, PageUp: 33, PageDown: 34,
-  End: 35, Home: 36, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46,
+  Backspace: 8,
+  Tab: 9,
+  Enter: 13,
+  Escape: 27,
+  " ": 32,
+  PageUp: 33,
+  PageDown: 34,
+  End: 35,
+  Home: 36,
+  ArrowLeft: 37,
+  ArrowUp: 38,
+  ArrowRight: 39,
+  ArrowDown: 40,
+  Delete: 46,
 };
 
 document.addEventListener("keydown", (e) => {
@@ -184,7 +202,12 @@ document.addEventListener("keydown", (e) => {
   }
   if (VK[e.key] != null) {
     e.preventDefault();
-    const p = { key: e.key, code: e.code, windowsVirtualKeyCode: VK[e.key], nativeVirtualKeyCode: VK[e.key] };
+    const p = {
+      key: e.key,
+      code: e.code,
+      windowsVirtualKeyCode: VK[e.key],
+      nativeVirtualKeyCode: VK[e.key],
+    };
     send("Input.dispatchKeyEvent", { type: "keyDown", ...p }, pageSession);
     send("Input.dispatchKeyEvent", { type: "keyUp", ...p }, pageSession);
   }
