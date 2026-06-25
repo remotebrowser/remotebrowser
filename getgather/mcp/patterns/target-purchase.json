@@ -1,0 +1,44 @@
+{
+  "rows": "[data-test='order-details-link']",
+  "columns": [
+    {
+      "name": "order_date",
+      "selector": "p.h-text-bold.h-text-lg"
+    },
+    {
+      "name": "order_total",
+      "selector": "p.h-text-grayDark.h-text-md:not(.h-padding-b-default)"
+    },
+    {
+      "name": "order_id",
+      "selector": "p.h-padding-b-default"
+    },
+    {
+      "name": "order_url",
+      "selector": "a[href*='/orders/']",
+      "attribute": "href"
+    },
+    {
+      "name": "item_names",
+      "selector": "img[alt]",
+      "attribute": "alt",
+      "kind": "list"
+    },
+    {
+      "name": "item_image_urls",
+      "selector": "img[src*='target.scene7.com']",
+      "attribute": "src",
+      "kind": "list"
+    },
+    {
+      "name": "statuses",
+      "selector": "span.h-text-grayDarkest",
+      "kind": "list"
+    },
+    {
+      "name": "fulfillment_locations",
+      "selector": "[data-test='order-images-component'] p.h-text-sm.h-text-grayDark",
+      "kind": "list"
+    }
+  ]
+}
