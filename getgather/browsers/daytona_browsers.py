@@ -84,9 +84,9 @@ async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> boo
 
 
 async def _get_sandbox_public_ip(
-    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
+    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0, timeout: int = 10
 ) -> str | None:
-    cmd = "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+    cmd = f"curl -s --max-time {timeout} --proxy http://127.0.0.1:8119 https://ip.fly.dev"
     for attempt in range(1, retries + 1):
         try:
             response = await sandbox.process.exec(cmd)
@@ -106,6 +106,8 @@ async def _configure_remote_sandbox(
     browser_id: str,
     origin_ip: str | None,
     target_domain: str | None,
+    *,
+    ip_check_retries: int = 5,
 ) -> None:
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
@@ -113,14 +115,14 @@ async def _configure_remote_sandbox(
     if not proxy_url:
         return
 
-    ip_before = await _get_sandbox_public_ip(sandbox)
+    ip_before = await _get_sandbox_public_ip(sandbox, retries=ip_check_retries)
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
     ok = await _configure_sandbox_proxy(sandbox, proxy_url)
     if not ok:
         return
 
-    ip_after = await _get_sandbox_public_ip(sandbox)
+    ip_after = await _get_sandbox_public_ip(sandbox, retries=ip_check_retries)
     if ip_before and ip_after and ip_before != ip_after:
         logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
     elif ip_before == ip_after:
@@ -288,7 +290,10 @@ class DaytonaBackend:
             if sandbox.state != "started":
                 await sandbox.start()
             started_at.append((asyncio.get_running_loop().time(), sandbox))
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+            # Fail fast on IP checks so a slow candidate doesn't block the race.
+            await _configure_remote_sandbox(
+                sandbox, browser_id, origin_ip, target_domain, ip_check_retries=2
+            )
             return sandbox
 
         tasks: set[asyncio.Task[AsyncSandbox]] = {
