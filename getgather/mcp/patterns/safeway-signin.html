@@ -29,8 +29,14 @@
         if (!form) return;
         form.addEventListener("submit", function () {
           const value = input.value || "";
-          if (value.indexOf("@") === -1) {
-            input.value = value.replace(/[^0-9]/g, "");
+          if (value.indexOf("@") !== -1) {
+            input.value = value.trim().replace(/\s+/g, "");
+          } else {
+            let digits = value.replace(/[^0-9]/g, "");
+            while (digits.length > 0 && (digits[0] === "0" || digits[0] === "1")) {
+              digits = digits.slice(1);
+            }
+            input.value = digits;
           }
         });
       });
