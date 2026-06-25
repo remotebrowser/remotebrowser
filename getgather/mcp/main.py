@@ -39,7 +39,7 @@ class LocationProxyMiddleware(Middleware):
 
         tool = await context.fastmcp_context.fastmcp.get_tool(context.message.name)  # type: ignore
 
-        if tool is None or "general_tool" in tool.tags:
+        if "general_tool" in tool.tags:  # pyright: ignore[reportOptionalMemberAccess]
             with logger.contextualize(**log_context):
                 return await call_next(context)
 
