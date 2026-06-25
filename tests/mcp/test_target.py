@@ -43,9 +43,7 @@ async def test_target_login_and_get_purchases_online(mcp_config: dict[str, Any])
             except Exception:
                 pass
 
-            password_input = await page.wait_for(
-                "input[data-test='login-password']", timeout=15
-            )
+            password_input = await page.wait_for("input[data-test='login-password']", timeout=15)
             await password_input.send_keys(os.environ.get("TARGET_PASSWORD", ""))
             signin_btn = await page.wait_for(
                 "//button[@type='submit' and contains(normalize-space(.), 'Sign in with password')]",
