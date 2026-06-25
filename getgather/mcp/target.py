@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 from typing import Any, cast
 
@@ -68,8 +69,89 @@ async def _fetch_all_details(page: zd.Tab, order_numbers: list[str]) -> list[dic
     return [cast(dict[str, Any], item) for item in cast(list[Any], raw) if isinstance(item, dict)]
 
 
+def _curate_order(raw: dict[str, Any]) -> dict[str, Any]:
+    packages: list[dict[str, Any]] = []
+    for pkg in raw.get("packages", []):
+        gm = pkg.get("grouping_metadata", {})
+        fulfillment = pkg.get("fulfillment", {})
+
+        items: list[dict[str, Any]] = []
+        for line in pkg.get("order_lines", []):
+            item = line.get("item", {})
+            curated_item: dict[str, Any] = {
+                "description": html.unescape(item.get("description", "")),
+                "quantity": line.get("quantity", 1),
+                "unit_price": item.get("unit_price"),
+                "tcin": item.get("tcin"),
+                "seller": item.get("seller_details", {}).get("name"),
+                "product_type": item.get("product_classification", {}).get("product_type_name"),
+            }
+            variations = item.get("variation_themes")
+            if variations:
+                curated_item["variations"] = {v["name"]: v["value"] for v in variations}
+            return_orders = line.get("return_orders")
+            if return_orders:
+                curated_item["returns"] = [
+                    {
+                        "order_number": r.get("order_number"),
+                        "placed_date": r.get("placed_date"),
+                        "status": r.get("status_key"),
+                        "reason": r.get("return_reason"),
+                    }
+                    for r in return_orders
+                ]
+            items.append(curated_item)
+
+        curated_pkg: dict[str, Any] = {
+            "fulfillment_type": gm.get("fulfillment_type"),
+            "fulfillment_method": gm.get("fulfillment_method"),
+            "status": gm.get("status"),
+            "status_date": gm.get("status_date"),
+            "items": items,
+        }
+        fulfilled_date = fulfillment.get("status", {}).get("date")
+        if fulfilled_date:
+            curated_pkg["fulfilled_date"] = fulfilled_date
+        packages.append(curated_pkg)
+
+    store_address: dict[str, Any] | None = None
+    for addr in raw.get("addresses", []):
+        if "STORE" in addr.get("types", []):
+            store_address = {
+                "name": addr.get("first_name"),
+                "address": addr.get("address_line1"),
+                "city": addr.get("city"),
+                "state": addr.get("state"),
+            }
+            break
+
+    summary = raw.get("summary", {})
+    payments = [
+        {"payment_type": p.get("guest_display_payment_type"), "amount": p.get("amount")}
+        for p in raw.get("payments", [])
+    ]
+
+    result: dict[str, Any] = {
+        "order_number": raw.get("order_number"),
+        "order_date": raw.get("order_date"),
+        "order_type": raw.get("order_type"),
+        "summary": {
+            "grand_total": summary.get("grand_total"),
+            "total_product_price": summary.get("total_product_price"),
+            "total_taxes": summary.get("total_taxes"),
+            "total_shipping_charges": summary.get("total_shipping_charges"),
+            "total_items": summary.get("total_items"),
+        },
+        "payments": payments,
+        "packages": packages,
+    }
+    if store_address:
+        result["store_address"] = store_address
+    return result
+
+
 @target_mcp.tool
-async def get_purchases_online() -> dict[str, Any]:
+async def get_purchases() -> dict[str, Any]:
     """Get online purchase history from a user's Target account."""
 
     async def action(page: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
@@ -77,7 +159,7 @@ async def get_purchases_online() -> dict[str, Any]:
 
         order_numbers: list[str] = []
 
-        async with page.expect_response("*/guest_order_aggregations/v1/order_history*") as resp:
+        async with page.expect_response(".*/guest_order_aggregations/v1/order_history.*") as resp:
             await zen_navigate_with_retry(page, f"{BASE_URL}/orders", wait_for_ready=False)
             page1: dict[str, Any] = await parse_response_json(resp, {}, "target order list page 1")
 
@@ -103,7 +185,7 @@ async def get_purchases_online() -> dict[str, Any]:
             logger.warning("Target: detail fetch timed out")
             details = []
 
-        return {"target_purchases": details}
+        return {"target_purchases": [_curate_order(d) for d in details]}
 
     return await remote_zen_dpage_with_action(
         f"{BASE_URL}/orders",

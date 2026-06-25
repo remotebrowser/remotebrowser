@@ -1,4 +1,4 @@
-"""Tests for Target Tools: login, get_purchases_online."""
+"""Tests for Target Tools: login, get_purchases."""
 
 import json
 import os
@@ -13,11 +13,11 @@ from mcp.types import TextContent
 @pytest.mark.mcp
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="flaky")
-async def test_target_login_and_get_purchases_online(mcp_config: dict[str, Any]) -> None:
+async def test_target_login_and_get_purchases(mcp_config: dict[str, Any]) -> None:
     """Test login to Target and get online purchase history."""
     client = Client(mcp_config, timeout=120)
     async with client:
-        mcp_call_tool = await client.call_tool("target_get_purchases_online")
+        mcp_call_tool = await client.call_tool("target_get_purchases")
         assert isinstance(mcp_call_tool.content[0], TextContent), (
             f"Expected TextContent, got {type(mcp_call_tool.content[0])}"
         )
@@ -62,7 +62,7 @@ async def test_target_login_and_get_purchases_online(mcp_config: dict[str, Any])
             assert mcp_call_check_signin_result.get("completed") is True
             assert "result" not in mcp_call_check_signin_result
 
-            mcp_call_get_purchases = await client.call_tool("target_get_purchases_online")
+            mcp_call_get_purchases = await client.call_tool("target_get_purchases")
             assert isinstance(mcp_call_get_purchases.content[0], TextContent)
             parsed = json.loads(mcp_call_get_purchases.content[0].text)
             purchases = parsed.get("target_purchases")
