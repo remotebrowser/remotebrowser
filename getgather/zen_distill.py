@@ -597,8 +597,8 @@ async def run_distillation_loop(
 
     # Only report when nothing matched at all. A non-terminating match (e.g. a sign-in
     # page) is the expected sign-in fallthrough, not an error worth reporting.
-    matched_any = current.name != ""
-    if error_reporter is not None and not matched_any:
+    nothing_matched = current.name == ""
+    if error_reporter is not None and nothing_matched:
         await error_reporter(
             error=ValueError("No matched pattern found"),
             page=page,
