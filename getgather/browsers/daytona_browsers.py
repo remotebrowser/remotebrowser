@@ -8,6 +8,7 @@ from daytona import (
     AsyncSandbox,
     CreateSandboxFromSnapshotParams,
     DaytonaConfig,
+    DaytonaConflictError,
     DaytonaNotFoundError,
     ListSandboxesQuery,
 )
@@ -274,20 +275,24 @@ class DaytonaBackend:
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> AsyncSandbox:
         n = settings.DAYTONA_BEST_OF_N
+        stagger = settings.DAYTONA_BEST_OF_N_STAGGER_SECONDS
         handles: list[AsyncSandbox] = []
         # (loop_time, sandbox) — for proxy-fail fallback; populated once sandbox reaches started
         started_at: list[tuple[float, AsyncSandbox]] = []
 
-        async def candidate() -> AsyncSandbox:
+        async def candidate(index: int) -> AsyncSandbox:
+            if index > 0 and stagger > 0:
+                await asyncio.sleep(index * stagger)
             sandbox = await self._create(browser_id)
             handles.append(sandbox)
-            await sandbox.start()
+            if sandbox.state != "started":
+                await sandbox.start()
             started_at.append((asyncio.get_running_loop().time(), sandbox))
             await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
             return sandbox
 
         tasks: set[asyncio.Task[AsyncSandbox]] = {
-            asyncio.create_task(candidate()) for _ in range(n)
+            asyncio.create_task(candidate(i)) for i in range(n)
         }
         winner: AsyncSandbox | None = None
         pending = set(tasks)
@@ -326,21 +331,34 @@ class DaytonaBackend:
 
         return winner
 
+    async def _delete_with_retry(
+        self, sandbox: AsyncSandbox, *, retries: int = 5, delay: float = 3.0
+    ) -> None:
+        """Delete a sandbox, retrying on DaytonaConflictError (sandbox mid-state-change)."""
+        for attempt in range(1, retries + 1):
+            try:
+                await sandbox.delete()
+                logger.info(f"Deleted sandbox {sandbox.name}")
+                return
+            except DaytonaConflictError as e:
+                if attempt == retries:
+                    logger.warning(f"Delete {sandbox.name} failed after {retries} attempts: {e}")
+                    return
+                logger.debug(
+                    f"Delete {sandbox.name} conflict (attempt {attempt}/{retries}), "
+                    f"retrying in {delay}s: {e}"
+                )
+                await asyncio.sleep(delay)
+            except Exception as e:
+                logger.warning(f"Delete {sandbox.name} failed: {type(e).__name__}: {e}")
+                return
+
     async def _teardown_losers(
         self, browser_id: str, winner_name: str, handles: list[AsyncSandbox]
     ) -> None:
         losers = [s for s in handles if s.name != winner_name]
 
-        async def _delete_one(sandbox: AsyncSandbox) -> None:
-            try:
-                await sandbox.delete()
-                logger.info(f"Deleted loser sandbox {sandbox.name}")
-            except Exception as e:
-                logger.warning(
-                    f"Failed to delete loser sandbox {sandbox.name}: {type(e).__name__}: {e}"
-                )
-
-        await asyncio.gather(*(_delete_one(s) for s in losers), return_exceptions=True)
+        await asyncio.gather(*(self._delete_with_retry(s) for s in losers), return_exceptions=True)
 
         # Post-winner reconcile: re-query by label; delete any non-winner sandbox regardless of state.
         # Catches sandboxes created but cancelled before appending to handles.
@@ -355,12 +373,9 @@ class DaytonaBackend:
                 f"Reconcile sweep for {browser_id}: winner={winner_name} "
                 f"orphans={[s.name for s in orphans]}"
             )
-            for s in orphans:
-                try:
-                    await s.delete()
-                    logger.info(f"Reconcile deleted orphan {s.name}")
-                except Exception as e:
-                    logger.warning(f"Reconcile delete failed for {s.name}: {type(e).__name__}: {e}")
+            await asyncio.gather(
+                *(self._delete_with_retry(s) for s in orphans), return_exceptions=True
+            )
         except Exception as e:
             logger.warning(
                 f"Label reconcile sweep failed for {browser_id}: {type(e).__name__}: {e}"
