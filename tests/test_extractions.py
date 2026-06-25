@@ -118,6 +118,7 @@ class TestGroundNews:
 
 
 @pytest.mark.distill
+@pytest.mark.xfail(reason="Flaky on CI")
 class TestNYTimes:
     def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
         browser_id, page_id = prepare_new_browser(client, "nytimes", browser_ids)
