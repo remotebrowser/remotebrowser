@@ -6,8 +6,10 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from loguru import logger
 
+from getgather.browser import find_browser_tab, get_remote_browser
 from getgather.browsers.router import strip_browser_id_from_target_id
 from getgather.cdp_client import PageNotFoundError, open_cdp
+from getgather.mcp.dpage import distill_post_loop
 from getgather.zen_distill import convert, distill, load_distillation_patterns
 
 router = APIRouter()
@@ -105,6 +107,28 @@ async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse | HT
             raise HTTPException(status_code=502, detail=f"Failed to distill page: {e}")
     finally:
         await client.aclose()
+
+
+@router.post("/api/v1/browsers/{browser_id}/pages/{page_id}/distill")
+async def post_page_distill(
+    browser_id: str,
+    page_id: str,
+    request: Request,
+) -> HTMLResponse:
+    page_id = strip_browser_id_from_target_id(page_id)
+    browser = await get_remote_browser(browser_id)
+    if browser is None:
+        raise HTTPException(status_code=404, detail=f"Browser {browser_id} not found!")
+
+    page = find_browser_tab(browser, page_id)
+    if page is None:
+        raise HTTPException(status_code=404, detail=f"Page {page_id} not found in browser")
+
+    logger.info(f"POST /distill for browser: {browser_id}  page: {page_id}")
+    form_data = await request.form()
+    fields: dict[str, str] = {k: str(v) for k, v in form_data.items()}
+    action = f"/api/v1/browsers/{browser_id}/pages/{page_id}/distill"
+    return await distill_post_loop(page, page_id, fields, action, timeout=15)
 
 
 @router.post("/api/v1/browsers/{browser_id}/pages/{page_id}/navigate")

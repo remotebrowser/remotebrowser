@@ -77,6 +77,9 @@ jobs:
 
       - name: Run the extraction tests
         run: uv run pytest -v -s tests/test_extractions.py
+        env:
+          ACME_EMAIL: joe@example.com
+          ACME_PASSWORD: trustno1
 
   extraction-tests-wheel:
     needs: setup
@@ -132,6 +135,9 @@ jobs:
 
       - name: Run the extraction tests
         run: uv run pytest -v -s tests/test_extractions.py
+        env:
+          ACME_EMAIL: joe@example.com
+          ACME_PASSWORD: trustno1
 
   extraction-tests-fleet:
     runs-on: ubuntu-24.04
@@ -167,3 +173,6 @@ jobs:
 
       - name: Run the extraction tests
         run: uv run pytest -v -s tests/test_extractions.py
+        env:
+          ACME_EMAIL: joe@example.com
+          ACME_PASSWORD: trustno1

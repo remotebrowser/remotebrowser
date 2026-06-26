@@ -65,6 +65,27 @@ def navigate_page(client: httpx.Client, browser_id: str, page_id: str, url: str)
     return navigate
 
 
+def distill_page(
+    client: httpx.Client,
+    browser_id: str,
+    page_id: str,
+    fields: dict[str, str] | None = None,
+) -> httpx.Response:
+    distilled: httpx.Response | None = None
+    for _ in range(RETRY_TIMEOUT):
+        response = client.post(
+            f"/api/v1/browsers/{browser_id}/pages/{page_id}/distill",
+            data=fields or {},
+        )
+        if response.status_code == 200:
+            distilled = response
+            break
+        time.sleep(1)
+    assert distilled is not None, "Distill POST never returned 200"
+    assert distilled.status_code == 200
+    return distilled
+
+
 def get_distilled_json(client: httpx.Client, browser_id: str, page_id: str) -> list[object]:
     distilled: httpx.Response | None = None
     for _ in range(RETRY_TIMEOUT):
@@ -77,6 +98,19 @@ def get_distilled_json(client: httpx.Client, browser_id: str, page_id: str) -> l
     assert distilled.status_code == 200
     data: list[object] = distilled.json()
     return data
+
+
+def get_distilled_html(client: httpx.Client, browser_id: str, page_id: str) -> str:
+    distilled: httpx.Response | None = None
+    for _ in range(RETRY_TIMEOUT):
+        response = client.get(f"/api/v1/browsers/{browser_id}/pages/{page_id}/distilled")
+        if response.status_code == 200:
+            distilled = response
+            break
+        time.sleep(1)
+    assert distilled is not None, "Distilled endpoint never returned 200"
+    assert distilled.status_code == 200
+    return distilled.text
 
 
 @pytest.mark.distill
@@ -220,3 +254,40 @@ class TestCBC:
         assert "link" in first
         assert isinstance(first["link"], str)
         assert first["link"]
+
+
+@pytest.mark.distill
+def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str]) -> None:
+    acme_login_pattern = """<html gg-domain="acme">
+  <body>
+    <h1 gg-match="h1">Login</h1>
+    <input name="email" type="email" placeholder="Email" gg-match="input[type=email]" />
+    <input name="password" type="password" placeholder="Password" gg-match="input[type=password]" />
+    <button gg-autoclick gg-match="button[type=submit]"></button>
+  </body>
+</html>
+"""
+    acme_success_pattern = """<html gg-domain="acme">
+  <body>
+    <h1 gg-stop gg-match="//h1[contains(text(), 'successful')]">Success</h1>
+  </body>
+</html>
+"""
+    client.post("/api/v1/patterns/acme-login", json={"content": acme_login_pattern})
+    client.post("/api/v1/patterns/acme-success", json={"content": acme_success_pattern})
+    try:
+        email = os.getenv("ACME_EMAIL")
+        password = os.getenv("ACME_PASSWORD")
+        assert email, "ACME_EMAIL environment variable must be set"
+        assert password, "ACME_PASSWORD environment variable must be set"
+
+        browser_id, page_id = prepare_new_browser(client, "acme", browser_ids)
+
+        navigate_page(client, browser_id, page_id, "https://acme.fly.dev/auth/email-and-password")
+        distill_page(client, browser_id, page_id, fields={"email": email, "password": password})
+
+        message = get_distilled_html(client, browser_id, page_id)
+        assert "Login successful!" in message
+    finally:
+        client.delete("/api/v1/patterns/acme-login")
+        client.delete("/api/v1/patterns/acme-success")

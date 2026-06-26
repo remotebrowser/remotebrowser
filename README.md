@@ -147,6 +147,12 @@ _Example_: `curl -X POST 'localhost:23456/api/v1/browsers/test/pages/96FDE4162B8
 
 _Example_: `curl localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/distilled`
 
+### Submit distilled page form
+
+`POST /api/v1/browsers/{browser_id}/pages/{page_id}/distill` submits form field values for the specified page and continues the distillation loop, returning the next rendered distilled HTML form. The request body is form-encoded (`application/x-www-form-urlencoded` or `multipart/form-data`); each field is mapped by its `name` to the corresponding form input. Returns HTTP 404 if the browser or page is not found.
+
+_Example_: `curl -X POST localhost:23456/api/v1/browsers/test/pages/96FDE4162B8EEEBF98E26756D21CF0C5/distill -d 'email=user@example.com&password=secret'` returns the next distilled HTML page.
+
 ### List all patterns
 
 `GET /api/v1/patterns` returns a JSON array of all pattern filenames (sorted alphabetically), including the extension (`.html` or `.json`).
