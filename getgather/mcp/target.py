@@ -4,6 +4,7 @@ import json
 from typing import Any, cast
 
 import zendriver as zd
+from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
 
 from getgather.browser import zen_navigate_with_retry
@@ -15,7 +16,6 @@ target_mcp = MCPTool.registry["target"]
 
 BASE_URL = "https://www.target.com"
 API_BASE = "https://api.target.com"
-X_API_KEY = "ff457966e64d5e877fdbad070f276d18ecec4a01"
 LIST_PAGE_SIZE = 10
 
 _LIST_URL = (
@@ -26,7 +26,7 @@ _LIST_URL = (
 _DETAIL_BASE = f"{API_BASE}/post_orders/v1"
 
 
-async def _fetch_list_page(page: zd.Tab, page_number: int) -> dict[str, Any]:
+async def _fetch_list_page(page: zd.Tab, page_number: int, x_api_key: str) -> dict[str, Any]:
     url = f"{_LIST_URL}&page_number={page_number}"
     js_code = f"""
         (async () => {{
@@ -34,7 +34,7 @@ async def _fetch_list_page(page: zd.Tab, page_number: int) -> dict[str, Any]:
                 credentials: 'include',
                 headers: {{
                     'accept': 'application/json',
-                    'x-api-key': '{X_API_KEY}',
+                    'x-api-key': '{x_api_key}',
                 }},
             }});
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -44,7 +44,9 @@ async def _fetch_list_page(page: zd.Tab, page_number: int) -> dict[str, Any]:
     return cast(dict[str, Any], await page.evaluate(js_code, True))
 
 
-async def _fetch_all_details(page: zd.Tab, order_numbers: list[str]) -> list[dict[str, Any]]:
+async def _fetch_all_details(
+    page: zd.Tab, order_numbers: list[str], x_api_key: str
+) -> list[dict[str, Any]]:
     numbers_json = json.dumps(order_numbers)
     js_code = f"""
         (async () => {{
@@ -54,7 +56,7 @@ async def _fetch_all_details(page: zd.Tab, order_numbers: list[str]) -> list[dic
                     credentials: 'include',
                     headers: {{
                         'accept': 'application/json',
-                        'x-api-key': '{X_API_KEY}',
+                        'x-api-key': '{x_api_key}',
                     }},
                 }})
                 .then(r => r.ok ? r.json() : null)
@@ -154,6 +156,8 @@ def _curate_order(raw: dict[str, Any]) -> dict[str, Any]:
 async def get_purchases() -> dict[str, Any]:
     """Get online purchase history from a user's Target account."""
 
+    x_api_key = get_http_headers(include_all=True).get("x-api-key", "")
+
     async def action(page: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
         logger.info("Target: signed in, fetching online purchase history")
 
@@ -169,7 +173,7 @@ async def get_purchases() -> dict[str, Any]:
 
         for page_num in range(2, total_pages + 1):
             try:
-                page_data = await _fetch_list_page(page, page_num)
+                page_data = await _fetch_list_page(page, page_num, x_api_key)
                 order_numbers.extend(
                     o["order_number"] for o in page_data.get("orders", []) if "order_number" in o
                 )
@@ -180,7 +184,9 @@ async def get_purchases() -> dict[str, Any]:
             return {"target_purchases": []}
 
         try:
-            details = await asyncio.wait_for(_fetch_all_details(page, order_numbers), timeout=60.0)
+            details = await asyncio.wait_for(
+                _fetch_all_details(page, order_numbers, x_api_key), timeout=60.0
+            )
         except asyncio.TimeoutError:
             logger.warning("Target: detail fetch timed out")
             details = []
