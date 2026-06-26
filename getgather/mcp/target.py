@@ -78,8 +78,10 @@ async def get_purchases() -> dict[str, Any]:
         order_numbers: list[str] = []
 
         await zen_navigate_with_retry(page, f"{BASE_URL}/orders", wait_for_ready=False)
-        intercept_result = cast(dict[str, Any], await page.evaluate(
-            """
+        intercept_result = cast(
+            dict[str, Any],
+            await page.evaluate(
+                """
             (async () => {
                 const httpRequest = await new Promise(resolve => {
                     const originalFetch = window.fetch;
@@ -98,8 +100,9 @@ async def get_purchases() -> dict[str, Any]:
                 };
             })()
             """,
-            True,
-        ))
+                True,
+            ),
+        )
 
         page1 = cast(dict[str, Any], intercept_result.get("page1", {}))
         x_api_key = str(intercept_result.get("x_api_key", ""))
