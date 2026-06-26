@@ -193,17 +193,6 @@
       url: https://www.chewy.com/app/account/orderhistory
       result_key: chewy_orders
 
-- id: cnn
-  name: CNN MCP
-  tools:
-    - function_name: get_latest_stories
-      description: Get the latest stories from CNN.
-      url: https://lite.cnn.com
-      pattern_wildcard: "**/cnn-*.html"
-      result_key: stories
-      hostname: cnn.com
-      short_lived: true
-
 - id: containerstore
   name: Container Store MCP
   tools:
@@ -237,17 +226,6 @@
       description: Get the list of items in the cart from Ebay
       url: https://cart.ebay.com/
       result_key: ebay_cart
-
-- id: espn
-  name: ESPN MCP
-  tools:
-    - function_name: get_schedule
-      description: Get the week's college football schedule from ESPN.
-      url: https://www.espn.com/college-football/schedule
-      pattern_wildcard: "**/espn-*.html"
-      result_key: college_football_schedule
-      hostname: espn.com
-      short_lived: true
 
 - id: expedia
   name: Expedia MCP
@@ -297,17 +275,6 @@
       description: Get the list of activity from Google
       url: https://myactivity.google.com/myactivity
       result_key: google_activity
-
-- id: groundnews
-  name: Ground News MCP
-  tools:
-    - function_name: get_stories
-      description: Get the latest news stories from Ground News.
-      url: https://ground.news
-      pattern_wildcard: "**/groundnews-*.html"
-      result_key: stories
-      hostname: ground.news
-      short_lived: true
 
 - id: hardcover
   name: Hardcover MCP
@@ -455,28 +422,6 @@
   tools:
     - function_name: get_order_history
       description: Get the details of an order from Nordstrom.
-
-- id: npr
-  name: NPR MCP
-  tools:
-    - function_name: get_headlines
-      description: Get the current news headlines from NPR.
-      url: https://text.npr.org
-      pattern_wildcard: "**/npr-*.html"
-      result_key: headlines
-      hostname: npr.org
-      short_lived: true
-
-- id: nytimes
-  name: NYTimes MCP
-  tools:
-    - function_name: get_bestsellers_list
-      description: Get the bestsellers list from NY Times.
-      url: https://www.nytimes.com/books/best-sellers/
-      pattern_wildcard: "**/nytimes-*.html"
-      result_key: best_sellers
-      hostname: nytimes.com
-      short_lived: true
 
 - id: petsmart
   name: Petsmart MCP

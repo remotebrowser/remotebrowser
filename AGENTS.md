@@ -52,9 +52,7 @@ Adding a new brand requires: (1) add a YAML entry in `mcp-tools.yaml` with `id`,
 
 All brands are declared in YAML at `getgather/mcp/mcp-tools.yaml`. `declarative_mcp.create_declarative_mcp_tools()` runs at module level and creates `MCPTool` instances from YAML for every brand. Two registration modes:
 
-- **Declarative** (no `custom: true`): tools are auto-generated from YAML config. Two tool kinds:
-  - default: `remote_zen_dpage_mcp_tool(url, result_key, timeout)` — full sign-in flow via dpage
-  - `short_lived: true`: `short_lived_mcp_tool(location, pattern_wildcard, result_key, hostname)` — one-off scrape for public pages (CNN, ESPN, Ground News, NPR, NYTimes)
+- **Declarative** (no `custom: true`): tools are auto-generated from YAML config. The default kind is `remote_zen_dpage_mcp_tool(url, result_key, timeout)` — full sign-in flow via dpage.
 
 - **Custom** (`custom: true`, `module: <name>`): declarative_mcp creates the MCPTool, then dynamically imports the brand module. The module looks up `MCPTool.registry["<brand_id>"]` and uses `@brand_mcp.tool` to register tools with custom logic (post-signin actions, JSON response interception, multi-page flows) via `remote_zen_dpage_with_action(initial_url, action)` where `action` is an `async (page, browser) -> dict`.
 
