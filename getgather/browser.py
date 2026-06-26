@@ -171,10 +171,30 @@ async def _create_browser_from_cdp_websocket(
 
 
 def find_browser_tab(browser: zd.Browser, target_id: str) -> zd.Tab | None:
-    """Find a browser tab by its target ID."""
-    for tab in browser.tabs:
-        if tab.target_id == target_id:
-            return tab
+    """Find a browser tab by its target ID.
+
+    zendriver's ``Browser.update_targets`` populates ``self.targets`` with plain
+    ``Connection`` objects for targets that already existed when the browser was
+    attached (e.g. via ChromeFleet CDP), instead of ``Tab`` objects. Only targets
+    created later through a ``TargetCreated`` event get promoted to ``Tab``.
+    Since ``evaluate`` (and most page-level helpers) live on ``Tab`` and not on
+    ``Connection``, calling ``page.evaluate(...)`` on such a target fails with
+    ``'Connection' object has no attribute 'evaluate'``.
+
+    Here we upgrade any matched ``Connection`` to a ``Tab`` (mirroring what
+    ``_handle_target_update`` does for newly created targets) and replace it in
+    ``browser.targets`` so subsequent lookups return the ``Tab`` as well.
+    """
+    for idx, target in enumerate(browser.targets):
+        if target.target_id != target_id:
+            continue
+        if isinstance(target, zd.Tab):
+            return target
+        if target.target is None:
+            return None
+        tab = zd.Tab(target.websocket_url, target=target.target, browser=browser)
+        browser.targets[idx] = tab
+        return tab
     return None
 
 

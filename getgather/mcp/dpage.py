@@ -311,19 +311,23 @@ def is_incognito_request(headers: dict[str, str]) -> bool:
     return headers.get("x-incognito", "0") == "1"
 
 
-async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLResponse:
-    form_data = await request.form()
-    fields: dict[str, str] = {k: str(v) for k, v in form_data.items()}
-
-    path = os.path.join(os.path.dirname(__file__), "patterns", "**/*.html")
-    patterns = load_distillation_patterns(path)
+async def distill_post_loop(
+    page: zd.Tab,
+    id: str,
+    fields: dict[str, str],
+    action: str,
+    patterns: list[Pattern] | None = None,
+    timeout: int = DEFAULT_DPAGE_POST_POLL_TIMEOUT,
+) -> HTMLResponse:
+    if patterns is None:
+        path = os.path.join(os.path.dirname(__file__), "patterns", "**/*.html")
+        patterns = load_distillation_patterns(path)
 
     logger.info(f"Continuing distillation for page {id}...")
     logger.debug(f"Available distillation patterns: {len(patterns)}")
 
     TICK = 1  # seconds
-    TIMEOUT = DEFAULT_DPAGE_POST_POLL_TIMEOUT
-    max = TIMEOUT // TICK
+    max = timeout // TICK
 
     current = Match(name="", priority=-1, distilled="")
 
@@ -358,7 +362,6 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
 
         title_element = BeautifulSoup(distilled, "html.parser").find("title")
         title = title_element.get_text() if title_element is not None else DEFAULT_TITLE
-        action = f"/dpage/{id}"
         options = {"title": title, "action": action}
         inputs = document.find_all("input")
         pending_actions: list[dict[str, str]] = []
@@ -565,10 +568,10 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
             results = action_results if isinstance(action_results, dict) else {}
 
             # Fallback for failed/unexecuted actions to preserve behavior.
-            for i, action in enumerate(pending_actions):
-                key = action.get("key")
-                kind = action.get("kind")
-                selector = action.get("selector")
+            for i, pending_action in enumerate(pending_actions):
+                key = pending_action.get("key")
+                kind = pending_action.get("kind")
+                selector = pending_action.get("selector")
                 if (
                     not isinstance(key, str)
                     or not isinstance(kind, str)
@@ -585,7 +588,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
                 if kind == "click":
                     await element.click()
                 elif kind == "set_value":
-                    value = action.get("value")
+                    value = pending_action.get("value")
                     await element.type_text(value if isinstance(value, str) else "")
 
             await asyncio.sleep(0.25)
@@ -595,7 +598,7 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
 
     hostname_attr: str | None = getattr(page, "hostname", None)  # type: ignore[assignment]
     location = getattr(page, "url", "unknown")  # type: ignore[assignment]
-    timeout_error = TimeoutError("Timeout reached in zen_post_dpage")
+    timeout_error = TimeoutError("Timeout reached in distill_post_loop")
 
     await zen_report_distill_error(
         error=timeout_error,
@@ -606,6 +609,12 @@ async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLRespons
         iteration=max,
     )
     raise HTTPException(status_code=503, detail="Timeout reached")
+
+
+async def zen_post_dpage(page: zd.Tab, id: str, request: Request) -> HTMLResponse:
+    form_data = await request.form()
+    fields: dict[str, str] = {k: str(v) for k, v in form_data.items()}
+    return await distill_post_loop(page, id, fields, f"/dpage/{id}")
 
 
 async def remote_zen_dpage_mcp_tool(
