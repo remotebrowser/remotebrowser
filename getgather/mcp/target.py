@@ -3,13 +3,11 @@ import json
 from typing import Any, cast
 
 import zendriver as zd
-from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
 
 from getgather.browser import zen_navigate_with_retry
 from getgather.mcp.dpage import remote_zen_dpage_with_action
 from getgather.mcp.registry import MCPTool
-from getgather.zen_actions import parse_response_json
 
 target_mcp = MCPTool.registry["target"]
 
@@ -74,16 +72,37 @@ async def _fetch_all_details(
 async def get_purchases() -> dict[str, Any]:
     """Get online purchase history from a user's Target account."""
 
-    x_api_key = get_http_headers(include_all=True).get("x-api-key", "")
-
     async def action(page: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
         logger.info("Target: signed in, fetching online purchase history")
 
         order_numbers: list[str] = []
 
-        async with page.expect_response(".*/guest_order_aggregations/v1/order_history.*") as resp:
-            await zen_navigate_with_retry(page, f"{BASE_URL}/orders", wait_for_ready=False)
-            page1: dict[str, Any] = await parse_response_json(resp, {}, "target order list page 1")
+        await zen_navigate_with_retry(page, f"{BASE_URL}/orders", wait_for_ready=False)
+        intercept_result = cast(dict[str, Any], await page.evaluate(
+            """
+            (async () => {
+                const httpRequest = await new Promise(resolve => {
+                    const originalFetch = window.fetch;
+                    window.fetch = async function (...args) {
+                        if (typeof args[0] === 'string' && args[0].includes('/guest_order_aggregations/v1/order_history')) {
+                            window.fetch = originalFetch;
+                            resolve(args);
+                        }
+                        return originalFetch.apply(this, args);
+                    };
+                });
+                const res = await fetch(httpRequest[0], {...httpRequest[1], credentials: 'include'});
+                return {
+                    page1: await res.json(),
+                    x_api_key: (httpRequest[1].headers || {})['x-api-key'] ?? ''
+                };
+            })()
+            """,
+            True,
+        ))
+
+        page1 = cast(dict[str, Any], intercept_result.get("page1", {}))
+        x_api_key = str(intercept_result.get("x_api_key", ""))
 
         orders_page1 = page1.get("orders", [])
         order_numbers.extend(o["order_number"] for o in orders_page1 if "order_number" in o)
