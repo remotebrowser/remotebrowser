@@ -53,7 +53,7 @@ class LocationProxyMiddleware(Middleware):
 
 
 MCP_BUNDLES: dict[str, list[str]] = {
-    "media": ["bbc", "cnn", "espn", "groundnews", "npr", "nytimes"],
+    "media": ["bbc"],
     "books": ["goodreads"],
     "shopping": ["amazon", "amazonca", "shopee", "wayfair", "kroger", "target"],
     "sports": ["garmin"],

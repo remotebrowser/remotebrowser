@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import re
 import urllib.parse
 from copy import deepcopy
@@ -9,7 +8,6 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import Any, Callable, Coroutine, cast
-from urllib.parse import urlunparse
 
 import sentry_sdk
 import zendriver as zd
@@ -19,15 +17,13 @@ from loguru import logger
 from nanoid import generate
 
 from getgather.browser import (
-    create_remote_browser,
     get_new_page,
     page_batch_extract,
     page_query_selector,
-    terminate_remote_browser,
     wait_for_ready_state,
     zen_navigate_with_retry,
 )
-from getgather.config import FRIENDLY_CHARS, settings
+from getgather.config import settings
 
 
 @dataclass
@@ -606,42 +602,3 @@ async def run_distillation_loop(
             iteration=max,
         )
     return (False, current.distilled, None)
-
-
-async def short_lived_mcp_tool(
-    location: str,
-    pattern_wildcard: str,
-    result_key: str,
-    url_hostname: str,
-    timeout: int = 15,
-) -> tuple[bool, dict[str, Any]]:
-    browser = await create_remote_browser(browser_id=generate(FRIENDLY_CHARS, 6))
-
-    path = os.path.join(os.path.dirname(__file__), "mcp", "patterns", pattern_wildcard)
-    patterns = load_distillation_patterns(path)
-    try:
-        terminated, distilled, converted = await run_distillation_loop(
-            location=location, patterns=patterns, browser=browser, timeout=timeout
-        )
-    finally:
-        await terminate_remote_browser(browser)
-
-    result: dict[str, Any] = {result_key: converted if converted else distilled}
-    if result_key in result:
-        items_value = result[result_key]
-        if isinstance(items_value, list):
-            for item in cast(list[dict[str, Any]], items_value):
-                if "link" in item:
-                    link = cast(str, item["link"])
-                    parsed = urllib.parse.urlparse(link)
-                    netloc: str = parsed.netloc if parsed.netloc else url_hostname
-                    url: str = urlunparse((
-                        "https",
-                        netloc,
-                        parsed.path,
-                        parsed.params,
-                        parsed.query,
-                        parsed.fragment,
-                    ))
-                    item["url"] = url
-    return terminated, result

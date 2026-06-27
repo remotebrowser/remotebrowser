@@ -14,6 +14,7 @@ import sentry_sdk
 import websockets
 import zendriver as zd
 from loguru import logger
+from nanoid import generate
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from zendriver.core import util
 from zendriver.core._contradict import ContraDict
@@ -21,7 +22,7 @@ from zendriver.core.config import Config
 from zendriver.core.connection import Connection, ProtocolException
 
 from getgather.browsers.fleet_browsers import build_chromefleet_headers, call_chromefleet_api
-from getgather.config import settings
+from getgather.config import FRIENDLY_CHARS, settings
 
 _ws_extra_headers_var: ContextVar[dict[str, str] | None] = ContextVar(
     "_ws_extra_headers_var", default=None
@@ -226,13 +227,15 @@ async def get_remote_browser(browser_id: str) -> zd.Browser | None:
 
 
 async def create_remote_browser(
-    browser_id: str,
+    browser_id: str = "",
     target_domain: str | None = None,
 ) -> zd.Browser:
     """
     Connect to a remote Chrome via ChromeFleet CDP.
     ChromeFleet auto-starts the browser on first CDP access if it doesn't exist.
     """
+    if not browser_id:
+        browser_id = generate(FRIENDLY_CHARS, 6)
     logger.info(f"Connecting to ChromeFleet browser: {browser_id}")
     cdp_websocket_url = _setup_cdp_url(browser_id)
     logger.debug(f"Connecting to ChromeFleet CDP at {cdp_websocket_url}")

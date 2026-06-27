@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import os
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime
 from typing import Awaitable, Callable
@@ -15,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from getgather.auth.auth import setup_mcp_auth
+from getgather.browser import create_remote_browser, terminate_remote_browser
 from getgather.browsers.router import backend, router as browsers_router
 from getgather.config import PROJECT_DIR, settings
 from getgather.logs import MCPLoggingContextMiddleware
@@ -23,7 +25,7 @@ from getgather.mcp.main import MCPDoc, create_mcp_apps, mcp_app_docs
 from getgather.pages_api_router import router as pages_router
 from getgather.patterns_api_router import router as patterns_router
 from getgather.tracing import MCPSessionTraceMiddleware, instrument_fastapi
-from getgather.zen_distill import short_lived_mcp_tool
+from getgather.zen_distill import load_distillation_patterns, run_distillation_loop
 
 # Create MCP apps once and reuse for lifespan and mounting
 mcp_apps = create_mcp_apps()
@@ -87,24 +89,30 @@ def health():
 
 @app.get("/extended-health")
 async def extended_health():
+    # A fresh ephemeral browser per probe, terminated when done
+    browser = await create_remote_browser()
     try:
-        # A fresh short-lived browser per probe, terminated when done: the probe never touches
-        # the shared noauth browser (which holds real sessions in noauth deployments) and leaves
-        # no sandbox behind for a later run on the same hostname to inherit.
-        _, result = await short_lived_mcp_tool(
+        patterns = load_distillation_patterns(
+            os.path.join(os.path.dirname(__file__), "mcp", "patterns", "ip-fly.html")
+        )
+        terminated, distilled, converted = await run_distillation_loop(
             location="https://ip.fly.dev/ip",
-            pattern_wildcard="ip-fly.html",
-            result_key="ip_address",
-            url_hostname="ip.fly.dev",
+            patterns=patterns,
+            browser=browser,
             timeout=3,
         )
-        ip_text = str(result.get("ip_address", "Unknown"))[:100]
+        if not terminated:
+            raise ValueError("Distillation did not terminate for ip.fly.dev")
+        payload = converted if converted is not None else distilled
+        ip_text = str(payload)[:100]
         ip_list = ast.literal_eval(ip_text)
         ip_address = ip_list[0]["ip_address"]
         logger.debug(f"IP address: {ip_address}")
         return PlainTextResponse(content=f"OK IP: {ip_address}")
     except Exception as e:
         return PlainTextResponse(content=f"Error: {e}")
+    finally:
+        await terminate_remote_browser(browser)
 
 
 @app.middleware("http")
