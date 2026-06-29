@@ -1,14 +1,13 @@
 <html gg-domain="target" gg-priority="-2">
   <head>
-    <title>Target Order Error</title>
+    <title>Target Sign In Error</title>
   </head>
   <body>
-    <div gg-match=".styles_ndsAlertCard__YtwCK.styles_warning__u2sW1" gg-error="signin_error"></div>
-    <button
-      gg-match="//button[@type='submit' and contains(normalize-space(.), 'Sign in with password')]"
-      data-testid="signin-method-password"
-    >
-      Sign in with password
-    </button>
+    <div
+      gg-stop
+      gg-error="signin_error"
+      gg-match="//div[contains(., 'Something went wrong on our end')]"
+    ></div>
+    <input gg-match="input[data-test='login-password']" type="password" />
   </body>
 </html>
