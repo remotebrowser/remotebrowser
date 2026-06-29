@@ -69,13 +69,15 @@ async def _fetch_all_details(
 
 
 @target_mcp.tool
-async def get_purchases() -> dict[str, Any]:
-    """Get online purchase history from a user's Target account."""
+async def get_purchases(page_number: int = 1) -> dict[str, Any]:
+    """Get online purchase history from a user's Target account.
+
+    Args:
+        page_number: Page to fetch (1-indexed). Default 1.
+    """
 
     async def action(page: zd.Tab, browser: zd.Browser) -> dict[str, Any]:
-        logger.info("Target: signed in, fetching online purchase history")
-
-        order_numbers: list[str] = []
+        logger.info(f"Target: signed in, fetching online purchase history (page {page_number})")
 
         await zen_navigate_with_retry(page, f"{BASE_URL}/orders", wait_for_ready=False)
         intercept_result = cast(
@@ -104,24 +106,26 @@ async def get_purchases() -> dict[str, Any]:
             ),
         )
 
-        page1 = cast(dict[str, Any], intercept_result.get("page1", {}))
+        page1_data = cast(dict[str, Any], intercept_result.get("page1", {}))
         x_api_key = str(intercept_result.get("x_api_key", ""))
+        total_pages = int(page1_data.get("total_pages", 1))
 
-        orders_page1 = page1.get("orders", [])
-        order_numbers.extend(o["order_number"] for o in orders_page1 if "order_number" in o)
-        total_pages = int(page1.get("total_pages", 1))
+        if page_number == 1:
+            page_data = page1_data
+        else:
+            page_data = await _fetch_list_page(page, page_number, x_api_key)
 
-        for page_num in range(2, total_pages + 1):
-            try:
-                page_data = await _fetch_list_page(page, page_num, x_api_key)
-                order_numbers.extend(
-                    o["order_number"] for o in page_data.get("orders", []) if "order_number" in o
-                )
-            except Exception as e:
-                logger.warning(f"Target: failed to fetch list page {page_num}: {e}")
+        orders = page_data.get("orders", [])
+        order_numbers = [o["order_number"] for o in orders if "order_number" in o]
+
+        pagination = {
+            "current_page": page_number,
+            "total_pages": total_pages,
+            "page_size": LIST_PAGE_SIZE,
+        }
 
         if not order_numbers:
-            return {"target_purchases": []}
+            return {"target_purchases": [], "pagination": pagination}
 
         try:
             details = await asyncio.wait_for(
@@ -131,7 +135,7 @@ async def get_purchases() -> dict[str, Any]:
             logger.warning("Target: detail fetch timed out")
             details = []
 
-        return {"target_purchases": details}
+        return {"target_purchases": details, "pagination": pagination}
 
     return await remote_zen_dpage_with_action(
         f"{BASE_URL}/orders",
