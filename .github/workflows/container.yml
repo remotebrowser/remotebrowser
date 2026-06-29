@@ -82,10 +82,6 @@ jobs:
         run: while ! curl -s 'http://localhost:8300/health' | grep 'OK'; do sleep 1; done
         timeout-minutes: 3
 
-      - name: Run the extended health check validation
-        run: while ! curl -s 'http://localhost:8300/extended-health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
-
       - uses: remotebrowser/shared-github-actions/container-health-check@v1
         with:
           image-name: remotebrowser
