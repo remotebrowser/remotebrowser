@@ -1,4 +1,4 @@
-"""Logfire/OpenTelemetry tracing for mcp-getgather.
+"""Logfire/OpenTelemetry tracing for remote-browser.
 
 Owns all observability wiring:
 - Logfire configuration and FastAPI/httpx instrumentation
@@ -62,12 +62,12 @@ def setup_logfire() -> None:
 
     logger.info("Initializing Logfire")
     logfire.configure(
-        service_name="mcp-getgather",
+        service_name="remote-browser",
         send_to_logfire="if-token-present",
         token=settings.LOGFIRE_TOKEN,
         environment=settings.ENVIRONMENT,
         code_source=logfire.CodeSource(
-            repository="https://github.com/remotebrowser/mcp", revision="main"
+            repository="https://github.com/remotebrowser/remotebrowser", revision="main"
         ),
         distributed_tracing=True,
         console=False,
