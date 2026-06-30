@@ -9,9 +9,11 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketState
 from loguru import logger
+from nanoid import generate
 from websockets.exceptions import ConnectionClosed
 
 from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
+from getgather.config import FRIENDLY_CHARS
 
 router = APIRouter()
 
@@ -205,6 +207,22 @@ async def websocket_proxy(
         logger.error(f"[CDP] Unexpected error: {type(e).__name__}: {e}")
         if client_ws.client_state == WebSocketState.CONNECTED:
             await client_ws.close(code=4500, reason="Internal proxy error")
+
+
+@router.post("/api/v1/browsers")
+async def create_browser_auto(request: Request) -> dict[str, Any]:
+    browser_id = "B" + generate(FRIENDLY_CHARS, 8)
+    logger.info(f"Starting browser {browser_id}...")
+    try:
+        origin_ip = request.headers.get("x-origin-ip")
+        target_domain = request.headers.get("x-target-domains")
+        result = await backend.create_browser(browser_id, origin_ip, target_domain)
+        logger.info(f"Browser {browser_id} is started.")
+        return {"browser_id": browser_id, **result}
+    except Exception as e:
+        detail = f"Unable to start browser {browser_id}!"
+        logger.error(f"{detail} Exception={e}")
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @router.post("/api/v1/browsers/{browser_id}")
