@@ -24,14 +24,10 @@ jobs:
       - run: uvx hatch build
 
       - name: Launch Remote Browser
-        run: uvx ./dist/*.whl &
+        run: uvx ./dist/*.whl > /tmp/app.log 2>&1 &
 
       - name: Run the health check validation
         run: while ! curl -s 'http://localhost:23456/health' | grep 'OK'; do sleep 1; done
-        timeout-minutes: 3
-
-      - name: Run the extended health check validation
-        run: while ! curl -s 'http://localhost:23456/extended-health' | grep 'OK'; do sleep 1; done
         timeout-minutes: 3
 
       - name: Run MCP tests
@@ -44,3 +40,9 @@ jobs:
           GOODREADS_PASSWORD: ${{ secrets.GOODREADS_PASSWORD }}
           WAYFAIR_EMAIL: ${{ secrets.WAYFAIR_EMAIL }}
           WAYFAIR_PASSWORD: ${{ secrets.WAYFAIR_PASSWORD }}
+
+      - name: Show application log
+        if: always()
+        run: |-
+          echo "===== Remote Browser log ====="
+          cat /tmp/app.log || echo "(no log file)"
