@@ -1,6 +1,7 @@
 from pytest import MonkeyPatch
 
 from getgather.browser import _setup_cdp_url  # pyright: ignore[reportPrivateUsage]
+from getgather.browsers import router as browsers_router
 from getgather.browsers.backend import create_backend
 from getgather.browsers.fleet_browsers import FleetBackend
 from getgather.browsers.podman_browsers import PodmanBackend
@@ -37,3 +38,28 @@ def test_fleet_relay_url_matches_internal_cdp_url(monkeypatch: MonkeyPatch) -> N
 def test_local_backend_opts_out_of_relay() -> None:
     # None signals the router to use the per-browser /json/version flow instead of a relay.
     assert PodmanBackend().cdp_websocket_base() is None
+
+
+def test_create_browser_auto_name_starts_with_b(monkeypatch: MonkeyPatch) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    async def fake_create_browser(
+        browser_id: str, origin_ip: str | None, target_domain: str | None
+    ):
+        return {
+            "container_name": f"chromium-{browser_id}",
+            "status": "created",
+            "ip": "1.2.3.4",
+        }
+
+    monkeypatch.setattr(browsers_router.backend, "create_browser", fake_create_browser)
+
+    app = FastAPI()
+    app.include_router(browsers_router.router)
+    client = TestClient(app)
+
+    response = client.post("/api/v1/browsers")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["browser_id"].startswith("B")
