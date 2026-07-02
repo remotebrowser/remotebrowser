@@ -356,7 +356,7 @@
   module: target
   tools:
     - function_name: get_purchases
-      description: Get purchase history from a user's Target account.
+      description: Get online purchase history from a user's Target account.
 
 - id: lazada
   name: Lazada MCP
