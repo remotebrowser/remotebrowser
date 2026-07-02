@@ -12,7 +12,7 @@
         }
       }
     </style>
-    <p id="message" gg-optional gg-match="form#otc-submit-form span:nth-child(2)" />
+    <p id="message" gg-optional gg-match-html="form#otc-submit-form > span:nth-of-type(1)" />
     <div
       id="doordash-otc"
       style="
@@ -91,6 +91,11 @@
       />
     </div>
     <script>
+      const button = document.querySelector("button[kind='BUTTON/LINK']");
+      if (button) {
+        button.remove();
+      }
+
       const box = document.getElementById("doordash-otc");
       const inputs = [...box.querySelectorAll("input")];
 
