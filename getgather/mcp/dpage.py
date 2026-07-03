@@ -29,6 +29,7 @@ from getgather.browser import (
 )
 from getgather.config import settings
 from getgather.mcp.html_renderer import DEFAULT_TITLE, render_form
+from getgather.recording import start_recording, stop_recording
 from getgather.zen_distill import (
     Match,
     Pattern,
@@ -221,6 +222,7 @@ async def dpage_check(id: str):
 
 
 async def dpage_finalize(id: str):
+    await stop_recording(id)
     browser_id = SignInId.from_str(id).browser_id
     if browser := await get_remote_browser(browser_id):
         await terminate_remote_browser(browser)
@@ -388,6 +390,7 @@ async def distill_post_loop(
 
         if await terminate(distilled):
             logger.info("Finished!")
+            await stop_recording(id)
 
             error = await get_error(distilled)
             if error is not None:
@@ -670,6 +673,9 @@ async def remote_zen_dpage_mcp_tool(
     logger.info(f"Navigating remote browser to {initial_url}")
     await zen_navigate_with_retry(page, initial_url)
 
+    if headers.get("x-record") == "1":
+        await start_recording(str(signin_id), signin_id.browser_id, page)
+
     error_reporter = make_error_reporter(browser, initial_url) if not incognito else None
     terminated, distilled, converted = await run_distillation_loop(
         location=initial_url,
@@ -680,9 +686,13 @@ async def remote_zen_dpage_mcp_tool(
         error_reporter=error_reporter,
     )
     if terminated:
+        recording = await stop_recording(str(signin_id))
         await safe_close_page(page)
         distillation_result = converted if converted is not None else distilled
-        return {result_key: distillation_result}
+        result: dict[str, object] = {result_key: distillation_result}
+        if recording and recording.storage_key:
+            result["recording_id"] = recording.recording_id
+        return result
 
     page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
 
@@ -762,6 +772,9 @@ async def remote_zen_dpage_with_action(
 
     await zen_navigate_with_retry(page, initial_url)
 
+    if headers.get("x-record") == "1":
+        await start_recording(str(signin_id), signin_id.browser_id, page)
+
     error_reporter = make_error_reporter(browser, initial_url) if not incognito else None
     terminated, _, _ = await run_distillation_loop(
         location=initial_url,
@@ -772,9 +785,12 @@ async def remote_zen_dpage_with_action(
         error_reporter=error_reporter,
     )
     if terminated:
-        result = await action(page, browser)
+        action_result = await action(page, browser)
+        recording = await stop_recording(str(signin_id))
         await safe_close_page(page)
-        return result
+        if recording and recording.storage_key and isinstance(action_result, dict):
+            action_result["recording_id"] = recording.recording_id
+        return action_result  # pyright: ignore[reportUnknownVariableType]
 
     page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
 
