@@ -1,12 +1,13 @@
 import asyncio
 import html
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
 import websockets
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketState
 from loguru import logger
 from nanoid import generate
@@ -386,6 +387,63 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
     logger.info(f"[CDP] Connecting to {remote_url}")
     await websocket_proxy(client_ws, remote_url, browser_id)
     logger.debug("[CDP] cdp_devtools_websocket_proxy exiting")
+
+
+_WEBUI_DIR = Path(__file__).parent.parent / "webui"
+
+
+@router.get("/tabview.js")
+async def tab_live_viewer_js() -> FileResponse:
+    # Served via a route (not the StaticFiles "/" mount) so /tab works in fleet mode too, where the
+    # webui static mount is replaced by the Chrome Fleet iframe homepage.
+    return FileResponse(_WEBUI_DIR / "tabview.js", media_type="text/javascript")
+
+
+# A signin_id is `browser_id--target_id[--mcp_session_id]` (see SignInId in getgather/mcp/dpage.py).
+# We parse it inline here to avoid importing the dpage module (and its zendriver chain) into the
+# browsers router. Kept in sync with SIGN_IN_ID_DELIMITER.
+_SIGNIN_ID_DELIMITER = "--"
+
+
+@router.get("/tab/{id}", response_model=None)
+async def tab_live_viewer(id: str) -> HTMLResponse:
+    # Active-tab-only live view + input control. Unlike /live (noVNC, whole X display on port 8080),
+    # this streams just one tab's page viewport via CDP Page.startScreencast and forwards
+    # mouse/keyboard via the CDP Input domain. The client talks to the /cdp/<browser_id> proxy
+    # below, so the backend's CDP credential (e.g. the Daytona signed token) stays server-side.
+    #
+    # `id` is either a bare browser_id (stream that browser's first page) or a signin_id
+    # (`browser_id--target_id--...`), in which case we pin the stream to that exact tab/target.
+    if _SIGNIN_ID_DELIMITER in id:
+        parts = id.split(_SIGNIN_ID_DELIMITER)
+        # The signin_id's target_id is the namespaced form (`browser_id@rawTargetId`). The /cdp
+        # proxy speaks raw CDP target ids, so strip the prefix before pinning the screencast to it.
+        browser_id, target_id = parts[0], strip_browser_id_from_target_id(parts[1])
+    else:
+        browser_id, target_id = id, ""
+
+    safe_browser_id = html.escape(browser_id, quote=True)
+    safe_target_id = html.escape(target_id, quote=True)
+    page = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{safe_browser_id} - Tab View</title>
+    <style>
+        html, body {{ margin: 0; height: 100%; overflow: hidden; background: #000; }}
+        #screen {{ display: block; width: 100vw; height: 100vh; object-fit: contain; cursor: default; }}
+        #status {{
+            position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            color: #aaa; font-family: system-ui, sans-serif; font-size: 0.9rem; pointer-events: none;
+        }}
+    </style>
+</head>
+<body data-browser-id="{safe_browser_id}" data-target-id="{safe_target_id}">
+    <img id="screen" tabindex="0" alt="">
+    <div id="status">Connecting…</div>
+    <script type="module" src="/tabview.js"></script>
+</body>
+</html>"""
+    return HTMLResponse(page)
 
 
 @router.get("/live/{browser_id}", response_model=None)

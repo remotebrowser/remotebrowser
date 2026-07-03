@@ -112,13 +112,18 @@ def _signin_flow_response(signin_id: SignInId) -> dict[str, Any]:
     base_url = get_base_url()
     signin_id_str = str(signin_id)
     url = f"{base_url}/dpage/{signin_id_str}"
+    # Active-tab live view of this exact sign-in tab: /tab parses the signin_id and pins the CDP
+    # screencast to its target_id (see tab_live_viewer in getgather/browsers/router.py).
+    live_view_url = f"{base_url}/tab/{signin_id_str}"
     return {
         "url": url,
         "message": f"Continue to sign in in your browser at {url}.",
         "signin_id": signin_id_str,
+        "live_view_url": live_view_url,
         "system_message": (
             f"Try open the url {url} in a browser with a tool if available. "
             "Give the url to the user so the user can open it manually in their browser. "
+            f"To watch the sign-in live (the active tab, with mouse/keyboard control), open {live_view_url}. "
             "Then call check_signin with the signin_id to see when sign-in finished (it does not return tool data). "
             "Call the same MCP tool again to get the result. "
             "For incognito or explicit session flows, send the x-signin-id header on the retry. "
