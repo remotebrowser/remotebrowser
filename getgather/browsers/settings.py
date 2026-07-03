@@ -46,6 +46,13 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+    # Best-of-N sandbox creation: on cold-create, launch N candidates and take the first to fully
+    # pass (started + verified proxy). N=1 disables best-of-N (single path).
+    DAYTONA_BEST_OF_N: int = 3
+    # Stagger delay between candidate launches (seconds). Candidate i starts after i * stagger.
+    # On a healthy cluster only candidate 0 ever runs; backups fire only when candidate 0 is slow.
+    # Set to 0 to launch all N simultaneously (original behavior).
+    DAYTONA_BEST_OF_N_STAGGER_SECONDS: float = 15.0
 
     @property
     def effective_chromefleet_url(self) -> str:

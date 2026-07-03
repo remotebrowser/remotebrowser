@@ -1,6 +1,7 @@
 import asyncio
 import time
 from typing import Any
+from uuid import uuid4
 
 from daytona import (
     AsyncDaytona,
@@ -53,10 +54,11 @@ SIGNED_URL_TTL_SECONDS = 3600
 LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
+LABEL_BROWSER_ID = "browser_id"
 
 
-def _sandbox_name(browser_id: str) -> str:
-    return f"{BROWSER_NAME_PREFIX}{browser_id}"
+def _random_sandbox_name(browser_id: str) -> str:
+    return f"{BROWSER_NAME_PREFIX}{browser_id}-{uuid4().hex[:8]}"
 
 
 async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> bool:
@@ -82,9 +84,9 @@ async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> boo
 
 
 async def _get_sandbox_public_ip(
-    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
+    sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0, timeout: int = 10
 ) -> str | None:
-    cmd = "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+    cmd = f"curl -s --max-time {timeout} --proxy http://127.0.0.1:8119 https://ip.fly.dev"
     for attempt in range(1, retries + 1):
         try:
             response = await sandbox.process.exec(cmd)
@@ -104,6 +106,8 @@ async def _configure_remote_sandbox(
     browser_id: str,
     origin_ip: str | None,
     target_domain: str | None,
+    *,
+    ip_check_retries: int = 5,
 ) -> None:
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
@@ -111,14 +115,14 @@ async def _configure_remote_sandbox(
     if not proxy_url:
         return
 
-    ip_before = await _get_sandbox_public_ip(sandbox)
+    ip_before = await _get_sandbox_public_ip(sandbox, retries=ip_check_retries)
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
     ok = await _configure_sandbox_proxy(sandbox, proxy_url)
     if not ok:
         return
 
-    ip_after = await _get_sandbox_public_ip(sandbox)
+    ip_after = await _get_sandbox_public_ip(sandbox, retries=ip_check_retries)
     if ip_before and ip_after and ip_before != ip_after:
         logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
     elif ip_before == ip_after:
@@ -127,22 +131,19 @@ async def _configure_remote_sandbox(
         )
 
 
-def _browser_id_from_name(name: str) -> str:
-    return name.removeprefix(BROWSER_NAME_PREFIX)
-
-
 class DaytonaBackend:
     """Launch a Daytona sandbox per browser on demand (no pool).
 
-    The browser_id -> sandbox mapping is the deterministic sandbox name plus labels, so there is
-    no local state. CDP is reached over a Daytona signed preview URL: a public, internet-reachable,
-    self-authenticating HTTPS reverse proxy to port 9222 (no inbound networking into the sandbox is
-    required). Live view embeds the snapshot's built-in noVNC on port 8080 via a signed preview URL.
-    Residential proxy/geo-IP are supported via tinyproxy (preconfigured in the snapshot, same as podman).
+    Identity is label-based: all sandboxes carry labels `fleet=1` and `browser_id=<id>`.
+    Names are random (cosmetic prefix + uuid suffix) so N candidates can coexist during
+    best-of-N cold-create. CDP is reached over a Daytona signed preview URL: a public,
+    internet-reachable, self-authenticating HTTPS reverse proxy to port 9222. Live view
+    embeds noVNC on port 8080 via a signed preview URL. Residential proxy/geo-IP are
+    supported via tinyproxy (preconfigured in the snapshot, same as podman).
 
     Sandbox teardown is owned by Daytona: auto_stop_interval stops idle sandboxes and
-    auto_delete_interval deletes them once continuously stopped past the TTL (both set at create
-    time in _create).
+    auto_delete_interval deletes them once continuously stopped past the TTL (both set at
+    create time in _create). Best-of-N loser teardown is fire-and-forget via asyncio task.
     """
 
     def __init__(self, api_key: str, api_url: str, snapshot: str) -> None:
@@ -158,17 +159,31 @@ class DaytonaBackend:
     ) -> dict[str, Any]:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
-            sandbox = await self._ensure(browser_id)
-            try:
-                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
-            except ProxyVerificationError as e:
-                logger.warning(str(e))
+            # Pre-create check: if a started sandbox already exists, configure and return.
+            existing = await self._get(browser_id)
+            if existing is not None and existing.state == "started":
+                try:
+                    await _configure_remote_sandbox(existing, browser_id, origin_ip, target_domain)
+                except ProxyVerificationError as e:
+                    logger.warning(str(e))
+                return await self._get_info(existing)
+
+            n = settings.DAYTONA_BEST_OF_N
+            if n > 1:
+                sandbox = await self._best_of_n(browser_id, origin_ip, target_domain)
+            else:
+                sandbox = await self._ensure(browser_id)
+                try:
+                    await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+                except ProxyVerificationError as e:
+                    logger.warning(str(e))
+
             return await self._get_info(sandbox)
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
-        sandbox = await self._get(_sandbox_name(browser_id))
+        sandbox = await self._get(browser_id)
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if origin_ip:
@@ -179,8 +194,7 @@ class DaytonaBackend:
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
-        name = _sandbox_name(browser_id)
-        sandbox = await self._get(name)
+        sandbox = await self._get(browser_id)
         self._locks.pop(browser_id, None)
         if sandbox is None:
             return {"status": "not found"}
@@ -188,14 +202,17 @@ class DaytonaBackend:
         return {"status": "deleted"}
 
     async def browser_exists(self, browser_id: str) -> bool:
-        return await self._get(_sandbox_name(browser_id)) is not None
+        return await self._get(browser_id) is not None
 
     async def list_browser_ids(self) -> list[str]:
         browser_ids: list[str] = []
+        seen: set[str] = set()
         async for sandbox in self.client.list(ListSandboxesQuery(labels={LABEL_FLEET: "1"})):
-            # A just-deleted sandbox lingers briefly as `DESTROYED_<name>_<ts>`; only our names count.
-            if sandbox.name and sandbox.name.startswith(BROWSER_NAME_PREFIX):
-                browser_ids.append(_browser_id_from_name(sandbox.name))
+            labels = sandbox.labels or {}
+            bid = labels.get(LABEL_BROWSER_ID)
+            if bid and bid not in seen:
+                seen.add(bid)
+                browser_ids.append(bid)
         return browser_ids
 
     async def cleanup_idle(self) -> list[str]:
@@ -204,7 +221,7 @@ class DaytonaBackend:
         return []
 
     async def get_cdp_base_url(self, browser_id: str) -> str:
-        sandbox = await self._get(_sandbox_name(browser_id))
+        sandbox = await self._get(browser_id)
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         signed = await sandbox.create_signed_preview_url(
@@ -221,7 +238,7 @@ class DaytonaBackend:
         return None  # no raw VNC port; live view uses get_live_view_url (noVNC on VNC_PORT)
 
     async def get_live_view_url(self, browser_id: str) -> str | None:
-        sandbox = await self._get(_sandbox_name(browser_id))
+        sandbox = await self._get(browser_id)
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if sandbox.state != "started":
@@ -246,16 +263,128 @@ class DaytonaBackend:
         return signed.url
 
     async def _ensure(self, browser_id: str) -> AsyncSandbox:
-        name = _sandbox_name(browser_id)
-        sandbox = await self._get(name)
+        sandbox = await self._get(browser_id)
         if sandbox is None:
-            sandbox = await self._create(name)
+            sandbox = await self._create(browser_id)
 
         if sandbox.state != "started":
-            logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
+            logger.info(f"Starting Daytona sandbox {sandbox.name} (state={sandbox.state})")
             await sandbox.start()
 
         return sandbox
+
+    async def _best_of_n(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> AsyncSandbox:
+        n = settings.DAYTONA_BEST_OF_N
+        stagger = settings.DAYTONA_BEST_OF_N_STAGGER_SECONDS
+        handles: list[AsyncSandbox] = []
+        # (loop_time, sandbox) — for proxy-fail fallback; populated once sandbox reaches started
+        started_at: list[tuple[float, AsyncSandbox]] = []
+
+        async def candidate(index: int) -> AsyncSandbox:
+            if index > 0 and stagger > 0:
+                await asyncio.sleep(index * stagger)
+            sandbox = await self._create(browser_id)
+            handles.append(sandbox)
+            if sandbox.state != "started":
+                await sandbox.start()
+            started_at.append((asyncio.get_running_loop().time(), sandbox))
+            # Fail fast on IP checks so a slow candidate doesn't block the race.
+            await _configure_remote_sandbox(
+                sandbox, browser_id, origin_ip, target_domain, ip_check_retries=2
+            )
+            return sandbox
+
+        tasks: set[asyncio.Task[AsyncSandbox]] = {
+            asyncio.create_task(candidate(i)) for i in range(n)
+        }
+        winner: AsyncSandbox | None = None
+        pending = set(tasks)
+
+        while pending and winner is None:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if not task.cancelled() and task.exception() is None:
+                    winner = task.result()
+                    for t in pending:
+                        t.cancel()
+                    break
+
+        if winner is None:
+            if not handles:
+                raise RuntimeError(
+                    f"Best-of-{n}: all candidates failed to create for browser_id={browser_id}"
+                )
+            if not started_at:
+                raise RuntimeError(
+                    f"Best-of-{n}: all candidates failed to start for browser_id={browser_id}"
+                )
+            started_at.sort(key=lambda x: x[0])
+            winner = started_at[0][1]
+            logger.warning(
+                f"Best-of-{n}: all proxy verifications failed for {browser_id}; "
+                f"falling back to fastest started: {winner.name}"
+            )
+
+        winner_name = winner.name
+        logger.info(
+            f"Best-of-{n} winner for {browser_id}: {winner_name}; "
+            f"scheduling teardown for {[s.name for s in handles if s.name != winner_name]}"
+        )
+        asyncio.create_task(self._teardown_losers(browser_id, winner_name, list(handles)))
+
+        return winner
+
+    async def _delete_with_retry(
+        self, sandbox: AsyncSandbox, *, retries: int = 5, delay: float = 3.0
+    ) -> None:
+        """Delete a sandbox, retrying on DaytonaConflictError (sandbox mid-state-change)."""
+        for attempt in range(1, retries + 1):
+            try:
+                await sandbox.delete()
+                logger.info(f"Deleted sandbox {sandbox.name}")
+                return
+            except DaytonaConflictError as e:
+                if attempt == retries:
+                    logger.warning(f"Delete {sandbox.name} failed after {retries} attempts: {e}")
+                    return
+                logger.debug(
+                    f"Delete {sandbox.name} conflict (attempt {attempt}/{retries}), "
+                    f"retrying in {delay}s: {e}"
+                )
+                await asyncio.sleep(delay)
+            except Exception as e:
+                logger.warning(f"Delete {sandbox.name} failed: {type(e).__name__}: {e}")
+                return
+
+    async def _teardown_losers(
+        self, browser_id: str, winner_name: str, handles: list[AsyncSandbox]
+    ) -> None:
+        losers = [s for s in handles if s.name != winner_name]
+
+        await asyncio.gather(*(self._delete_with_retry(s) for s in losers), return_exceptions=True)
+
+        # Post-winner reconcile: re-query by label; delete any non-winner sandbox regardless of state.
+        # Catches sandboxes created but cancelled before appending to handles.
+        try:
+            orphans: list[AsyncSandbox] = []
+            async for sandbox in self.client.list(
+                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_BROWSER_ID: browser_id})
+            ):
+                if sandbox.name != winner_name:
+                    orphans.append(sandbox)
+            logger.debug(
+                f"Reconcile sweep for {browser_id}: winner={winner_name} "
+                f"orphans={[s.name for s in orphans]}"
+            )
+            await asyncio.gather(
+                *(self._delete_with_retry(s) for s in orphans), return_exceptions=True
+            )
+        except Exception as e:
+            logger.warning(
+                f"Label reconcile sweep failed for {browser_id}: {type(e).__name__}: {e}"
+            )
 
     async def _get_info(self, sandbox: AsyncSandbox) -> dict[str, Any]:
         signed = await sandbox.create_signed_preview_url(
@@ -299,29 +428,32 @@ class DaytonaBackend:
             return None
         return (chromium_time / 1_000_000) - CHROMIUM_EPOCH_OFFSET_SECONDS
 
-    async def _get(self, name: str) -> AsyncSandbox | None:
+    async def _get(self, browser_id: str) -> AsyncSandbox | None:
+        candidates: list[AsyncSandbox] = []
         try:
-            return await self.client.get(name)
+            async for sandbox in self.client.list(
+                ListSandboxesQuery(labels={LABEL_FLEET: "1", LABEL_BROWSER_ID: browser_id})
+            ):
+                candidates.append(sandbox)
         except DaytonaNotFoundError:
             return None
+        if not candidates:
+            return None
+        started = [s for s in candidates if s.state == "started"]
+        pool = started if started else candidates
+        pool.sort(key=lambda s: (s.created_at is None, s.created_at))
+        return pool[0]
 
-    async def _create(self, name: str) -> AsyncSandbox:
+    async def _create(self, browser_id: str) -> AsyncSandbox:
+        name = _random_sandbox_name(browser_id)
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
-            labels={LABEL_FLEET: "1"},
+            labels={LABEL_FLEET: "1", LABEL_BROWSER_ID: browser_id},
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown
             auto_delete_interval=TTL_MINUTES,
         )
-        logger.info(f"Creating Daytona sandbox {name} from snapshot {self.snapshot}")
-        try:
-            return await self.client.create(params, timeout=400)
-        except DaytonaConflictError:
-            # Lost a concurrent create race (same deterministic name); adopt the winner.
-            logger.info(f"Daytona sandbox {name} already exists, adopting")
-            existing = await self._get(name)
-            if existing is None:
-                raise
-            return existing
+        logger.info(f"Creating Daytona sandbox {name} for browser {browser_id}")
+        return await self.client.create(params, timeout=400)
