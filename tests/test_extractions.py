@@ -134,6 +134,39 @@ class TestNPR:
 
 @pytest.mark.distill
 class TestGroundNews:
+    @pytest.fixture(autouse=True)
+    def upload_groundnews_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
+        html_content = """<html gg-domain="ground.news">
+  <head>
+    <title>Ground News</title>
+  </head>
+  <body>
+    <div
+      gg-stop
+      gg-convert="groundnews-latest-stories.json"
+      gg-match-html="[data-testid=latest-stories-homepage]"
+    ></div>
+  </body>
+</html>
+"""
+        json_content = """{
+  "rows": "[data-testid=story-item]",
+  "columns": [
+    { "name": "title", "selector": "h4" },
+    { "name": "link", "selector": "a", "attribute": "href" }
+  ]
+}
+"""
+        client.post("/api/v1/patterns/groundnews-latest-stories", json={"content": html_content})
+        client.post(
+            "/api/v1/patterns/groundnews-latest-stories",
+            params={"ext": "json"},
+            json={"content": json_content},
+        )
+        yield
+        client.delete("/api/v1/patterns/groundnews-latest-stories")
+        client.delete("/api/v1/patterns/groundnews-latest-stories", params={"ext": "json"})
+
     def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
         browser_id, page_id = prepare_new_browser(client, "groundnews", browser_ids)
 
@@ -191,6 +224,36 @@ class TestESPN:
 
 @pytest.mark.distill
 class TestCNN:
+    @pytest.fixture(autouse=True)
+    def upload_cnn_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
+        html_content = """<html gg-domain="cnn">
+  <head>
+    <title>CNN Latest Stories</title>
+  </head>
+  <body>
+    <div gg-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
+    <div gg-stop gg-convert="cnn-latest-stories.json" gg-match-html="div[data-uri^=cms]"></div>
+  </body>
+</html>
+"""
+        json_content = """{
+  "rows": "section.active ul li",
+  "columns": [
+    { "name": "title", "selector": "a" },
+    { "name": "link", "selector": "a", "attribute": "href" }
+  ]
+}
+"""
+        client.post("/api/v1/patterns/cnn-latest-stories", json={"content": html_content})
+        client.post(
+            "/api/v1/patterns/cnn-latest-stories",
+            params={"ext": "json"},
+            json={"content": json_content},
+        )
+        yield
+        client.delete("/api/v1/patterns/cnn-latest-stories")
+        client.delete("/api/v1/patterns/cnn-latest-stories", params={"ext": "json"})
+
     def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
         browser_id, page_id = prepare_new_browser(client, "cnn", browser_ids)
 
