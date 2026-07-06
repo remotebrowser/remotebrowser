@@ -396,11 +396,10 @@ async def distill_post_loop(
                     f"Distillation reported page error pattern; sign-in still marked complete for polling. Pattern name: {match.name}"
                 )
                 options["error_code"] = error
-                captcha_type = await report_captcha(
-                    page, error_code=error, pattern_name=match.name, hostname=hostname or ""
-                )
-                if captcha_type is not None:
-                    options["captcha_type"] = captcha_type
+                if error == "captcha":
+                    options["captcha_type"] = await report_captcha(
+                        page, pattern_name=match.name, hostname=hostname or ""
+                    )
 
             return HTMLResponse(render(FINISHED_MSG, options))
 

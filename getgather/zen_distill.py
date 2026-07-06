@@ -239,17 +239,13 @@ async def classify_captcha(page: zd.Tab) -> str:
     return "unknown"
 
 
-async def report_captcha(
-    page: zd.Tab, *, error_code: str | None, pattern_name: str, hostname: str
-) -> str | None:
+async def report_captcha(page: zd.Tab, *, pattern_name: str, hostname: str) -> str:
     """Classify and record a CAPTCHA encounter for per-type analytics.
 
-    No-op unless the terminating pattern error is "captcha". Emits a Logfire
-    event (when a token is configured) so encounters can be counted by
-    `captcha_type`. Returns the classified type, or None when not a captcha.
+    Emits a Logfire event (when a token is configured) so encounters can be
+    counted by `captcha_type`. Returns the classified type. Callers should only
+    invoke this once they know the terminating pattern error is "captcha".
     """
-    if error_code != "captcha":
-        return None
     captcha_type = await classify_captcha(page)
     logger.info(f"Captcha detected: type={captcha_type} hostname={hostname} pattern={pattern_name}")
     if settings.LOGFIRE_TOKEN:
@@ -655,9 +651,8 @@ async def run_distillation_loop(
 
                 if await terminate(distilled):
                     error_code = await get_error(distilled)
-                    await report_captcha(
-                        page, error_code=error_code, pattern_name=match.name, hostname=hostname
-                    )
+                    if error_code == "captcha":
+                        await report_captcha(page, pattern_name=match.name, hostname=hostname)
                     converted = await convert(distilled, pattern_path=match.name)
                     return (True, distilled, converted)
 
