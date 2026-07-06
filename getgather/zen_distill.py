@@ -66,6 +66,18 @@ def get_selector(input_selector: str | None) -> tuple[str | None, str | None]:
     return match.group(2), match.group(1)
 
 
+def find_match_elements(pattern: BeautifulSoup) -> list[Tag]:
+    """Return elements carrying gg-match or gg-match-html, deduped in document order."""
+    seen: set[int] = set()
+    out: list[Tag] = []
+    for name in ("gg-match", "gg-match-html"):
+        for el in pattern.find_all(attrs={name: True}):
+            if isinstance(el, Tag) and id(el) not in seen:
+                seen.add(id(el))
+                out.append(el)
+    return out
+
+
 def extract_value(item: Tag, attribute: str | None = None) -> str:
     """Extract text or attribute value from a BeautifulSoup Tag."""
     if attribute:
@@ -353,9 +365,7 @@ async def distill(
 
         logger.debug(f"Checking {name} with priority {priority}")
 
-        targets = pattern.find_all(attrs={"gg-match": True}) + pattern.find_all(
-            attrs={"gg-match-html": True}
-        )
+        targets = find_match_elements(pattern)
         target_specs: list[dict[str, object]] = []
 
         for target in targets:
