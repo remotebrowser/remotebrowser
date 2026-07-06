@@ -369,9 +369,6 @@ async def distill(
         target_specs: list[dict[str, object]] = []
 
         for target in targets:
-            if not isinstance(target, Tag):
-                continue
-
             html_attr = target.get("gg-match-html")
             selector, iframe_selector = get_selector(
                 str(html_attr if html_attr else target.get("gg-match"))
