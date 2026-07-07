@@ -657,7 +657,7 @@ async def remote_zen_dpage_mcp_tool(
         logger.info(f"Start with an ephemeral browser {browser_id}")
     else:
         user_id = get_auth_user().user_id
-        browser_id: str = user_id
+        browser_id: str = mcp_session_id or user_id
         browser = await get_remote_browser(browser_id)
         if browser is None:
             browser = await create_remote_browser(
@@ -715,7 +715,7 @@ async def remote_zen_dpage_with_action(
     if incoming:
         probe_browser = await get_remote_browser(incoming.browser_id)
     elif not incognito:
-        probe_browser = await get_remote_browser(str(get_auth_user().user_id))
+        probe_browser = await get_remote_browser(mcp_session_id or get_auth_user().user_id)
     if probe_browser is not None:
         result = await _try_action_with_probe(probe_browser, initial_url, action, timeout)
         if result is not None:
@@ -750,7 +750,7 @@ async def remote_zen_dpage_with_action(
         logger.info(f"Start with ephemeral remote browser {browser_id}")
     else:
         user_id = get_auth_user().user_id
-        browser_id = user_id
+        browser_id = mcp_session_id or user_id
         browser = await get_remote_browser(browser_id)
         if browser is None:
             browser = await create_remote_browser(
