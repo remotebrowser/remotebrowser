@@ -66,6 +66,27 @@ def get_selector(input_selector: str | None) -> tuple[str | None, str | None]:
     return match.group(2), match.group(1)
 
 
+def _first_str(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        items = cast(list[Any], value)
+        for item in items:
+            if isinstance(item, str):
+                return item
+    return None
+
+
+def get_match_attr(el: Tag) -> str | None:
+    """Return the gg-match selector value, coerced to a single string."""
+    return _first_str(el.get("gg-match"))
+
+
+def get_match_html_attr(el: Tag) -> str | None:
+    """Return the gg-match-html selector value, coerced to a single string."""
+    return _first_str(el.get("gg-match-html"))
+
+
 def find_match_elements(pattern: BeautifulSoup) -> list[Tag]:
     """Return elements carrying gg-match or gg-match-html, deduped in document order."""
     seen: set[int] = set()
@@ -369,9 +390,9 @@ async def distill(
         target_specs: list[dict[str, object]] = []
 
         for target in targets:
-            html_attr = target.get("gg-match-html")
+            html_attr = get_match_html_attr(target)
             selector, iframe_selector = get_selector(
-                str(html_attr if html_attr else target.get("gg-match"))
+                str(html_attr if html_attr else get_match_attr(target))
             )
             if not selector:
                 continue
@@ -518,7 +539,7 @@ async def autoclick(page: zd.Tab, distilled: str, expr: str):
     document = BeautifulSoup(distilled, "html.parser")
     elements = document.select(expr)
     for el in elements:
-        selector, iframe_selector = get_selector(str(el.get("gg-match")))
+        selector, iframe_selector = get_selector(str(get_match_attr(el)))
         if selector:
             target = await page_query_selector(page, selector, iframe_selector=iframe_selector)
             if target:
