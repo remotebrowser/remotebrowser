@@ -1,7 +1,0 @@
-{
-  "rows": "section.active ul li",
-  "columns": [
-    { "name": "title", "selector": "a" },
-    { "name": "link", "selector": "a", "attribute": "href" }
-  ]
-}
