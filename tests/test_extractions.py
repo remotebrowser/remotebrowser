@@ -144,7 +144,7 @@ class TestGroundNews:
     <div
       gg-stop
       gg-convert="groundnews-latest-stories.json"
-      gg-match-html="[data-testid=latest-stories-homepage]"
+      rb-match-html="[data-testid=latest-stories-homepage]"
     ></div>
   </body>
 </html>
@@ -231,8 +231,8 @@ class TestCNN:
     <title>CNN Latest Stories</title>
   </head>
   <body>
-    <div gg-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
-    <div gg-stop gg-convert="cnn-latest-stories.json" gg-match-html="div[data-uri^=cms]"></div>
+    <div rb-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
+    <div gg-stop gg-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
   </body>
 </html>
 """
@@ -280,7 +280,7 @@ class TestCBC:
     <title>CBC Headlines</title>
   </head>
   <body>
-    <ul gg-stop gg-convert="cbc-headlines.json" gg-match-html="main ul"></ul>
+    <ul gg-stop gg-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
   </body>
 </html>
 """
@@ -323,16 +323,16 @@ class TestCBC:
 def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str]) -> None:
     acme_login_pattern = """<html gg-domain="acme">
   <body>
-    <h1 gg-match="h1">Login</h1>
-    <input name="email" type="email" placeholder="Email" gg-match="input[type=email]" />
-    <input name="password" type="password" placeholder="Password" gg-match="input[type=password]" />
-    <button gg-autoclick gg-match="button[type=submit]"></button>
+    <h1 rb-match="h1">Login</h1>
+    <input name="email" type="email" placeholder="Email" rb-match="input[type=email]" />
+    <input name="password" type="password" placeholder="Password" rb-match="input[type=password]" />
+    <button gg-autoclick rb-match="button[type=submit]"></button>
   </body>
 </html>
 """
     acme_success_pattern = """<html gg-domain="acme">
   <body>
-    <h1 gg-stop gg-match="//h1[contains(text(), 'successful')]">Success</h1>
+    <h1 gg-stop rb-match="//h1[contains(text(), 'successful')]">Success</h1>
   </body>
 </html>
 """
