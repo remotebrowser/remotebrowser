@@ -92,6 +92,11 @@ def get_domain_attr(el: Tag) -> str | None:
     return _first_str(el.get("rb-domain")) or _first_str(el.get("gg-domain"))
 
 
+def get_convert_attr(el: Tag) -> str | None:
+    """Return the rb-convert (or gg-convert) value, coerced to a single string."""
+    return _first_str(el.get("rb-convert")) or _first_str(el.get("gg-convert"))
+
+
 def get_stop_attr(el: Tag) -> str | None:
     """Return the rb-stop (or gg-stop) value, coerced to a single string.
 
@@ -158,8 +163,8 @@ async def convert(distilled: str, pattern_path: str | None = None):
     if pattern_path:
         stops = find_stop_elements(document)
         for stop in stops:
-            gg_convert = stop.get("gg-convert")
-            if isinstance(gg_convert, str) and gg_convert.strip():
+            gg_convert = get_convert_attr(stop)
+            if gg_convert and gg_convert.strip():
                 pattern_dir = Path(pattern_path).parent
                 json_path = pattern_dir / gg_convert.strip()
                 logger.info(f"Loading converter from gg-convert: {json_path}")
