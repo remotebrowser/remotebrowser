@@ -92,6 +92,29 @@ def get_domain_attr(el: Tag) -> str | None:
     return _first_str(el.get("rb-domain")) or _first_str(el.get("gg-domain"))
 
 
+def get_stop_attr(el: Tag) -> str | None:
+    """Return the rb-stop (or gg-stop) value, coerced to a single string.
+
+    Unlike value-bearing attributes, stop is a flag (valueless when present),
+    so presence is checked via ``el.attrs`` rather than truthiness.
+    """
+    if "rb-stop" in el.attrs:
+        return _first_str(el.get("rb-stop"))
+    return _first_str(el.get("gg-stop"))
+
+
+def find_stop_elements(pattern: BeautifulSoup) -> list[Tag]:
+    """Return elements carrying rb-stop (or gg-stop), deduped in document order."""
+    seen: set[int] = set()
+    out: list[Tag] = []
+    for name in ("rb-stop", "gg-stop"):
+        for el in pattern.find_all(attrs={name: True}):
+            if isinstance(el, Tag) and id(el) not in seen:
+                seen.add(id(el))
+                out.append(el)
+    return out
+
+
 def find_match_elements(pattern: BeautifulSoup) -> list[Tag]:
     """Return elements carrying rb-match/rb-match-html (or gg-match/gg-match-html), deduped in document order."""
     seen: set[int] = set()
@@ -133,18 +156,17 @@ async def convert(distilled: str, pattern_path: str | None = None):
     converter = None
 
     if pattern_path:
-        stops = document.find_all(attrs={"gg-stop": True})
+        stops = find_stop_elements(document)
         for stop in stops:
-            if isinstance(stop, Tag):
-                gg_convert = stop.get("gg-convert")
-                if isinstance(gg_convert, str) and gg_convert.strip():
-                    pattern_dir = Path(pattern_path).parent
-                    json_path = pattern_dir / gg_convert.strip()
-                    logger.info(f"Loading converter from gg-convert: {json_path}")
-                    converter = _load_converter_from_file(json_path)
-                    if converter:
-                        logger.info(f"Loaded converter from {json_path}")
-                        break
+            gg_convert = stop.get("gg-convert")
+            if isinstance(gg_convert, str) and gg_convert.strip():
+                pattern_dir = Path(pattern_path).parent
+                json_path = pattern_dir / gg_convert.strip()
+                logger.info(f"Loading converter from gg-convert: {json_path}")
+                converter = _load_converter_from_file(json_path)
+                if converter:
+                    logger.info(f"Loaded converter from {json_path}")
+                    break
 
     if converter is None:
         snippet = document.find("script", {"type": "application/json"})
@@ -211,7 +233,7 @@ async def convert(distilled: str, pattern_path: str | None = None):
 
 async def terminate(distilled: str) -> bool:
     document = BeautifulSoup(distilled, "html.parser")
-    stops = document.find_all(attrs={"gg-stop": True})
+    stops = find_stop_elements(document)
     if len(stops) > 0:
         logger.info("Found stop elements, terminating session...")
         return True
