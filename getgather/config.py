@@ -2,7 +2,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from getgather.auth.settings import AuthSettings
 from getgather.browsers.settings import BrowserSettings
 
 FRIENDLY_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
@@ -10,7 +9,7 @@ FRIENDLY_CHARS = "23456789abcdefghijkmnpqrstuvwxyz"
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 
-class Settings(AuthSettings, BrowserSettings, BaseSettings):
+class Settings(BrowserSettings, BaseSettings):
     model_config = SettingsConfigDict(
         env_file=PROJECT_DIR / ".env", env_ignore_empty=True, extra="ignore"
     )

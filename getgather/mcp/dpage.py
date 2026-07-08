@@ -1,6 +1,8 @@
 import asyncio
 import ipaddress
 import os
+import re
+import socket
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Self
@@ -13,7 +15,6 @@ from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
 from nanoid import generate
 
-from getgather.auth.auth import get_auth_user
 from getgather.browser import (
     ElementConfig,
     create_remote_browser,
@@ -54,6 +55,13 @@ DEFAULT_DPAGE_POST_POLL_TIMEOUT = 60
 FRIENDLY_CHARS: str = "23456789abcdefghijkmnpqrstuvwxyz"
 
 SIGN_IN_ID_DELIMITER = "--"
+
+
+def get_host_id() -> str:
+    """Stable per-host id, used as the fallback browser key when no mcp-session-id is present."""
+    hostname = socket.gethostname()
+    logger.warning(f"Hostname is {hostname}")
+    return re.sub(r"[^a-z0-9-]", "", hostname.lower().removesuffix(".local")) + "-noauth"
 
 
 @dataclass(frozen=True)
@@ -657,8 +665,7 @@ async def remote_zen_dpage_mcp_tool(
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
         logger.info(f"Start with an ephemeral browser {browser_id}")
     else:
-        user_id = get_auth_user().user_id
-        browser_id: str = user_id
+        browser_id: str = mcp_session_id or get_host_id()
         browser = await get_remote_browser(browser_id)
         if browser is None:
             browser = await create_remote_browser(
@@ -666,7 +673,7 @@ async def remote_zen_dpage_mcp_tool(
             )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
-        logger.info(f"For user {user_id}: using browser {browser_id}")
+        logger.info(f"Using browser {browser_id}")
 
     logger.info(f"Navigating remote browser to {initial_url}")
     await zen_navigate_with_retry(page, initial_url)
@@ -716,7 +723,7 @@ async def remote_zen_dpage_with_action(
     if incoming:
         probe_browser = await get_remote_browser(incoming.browser_id)
     elif not incognito:
-        probe_browser = await get_remote_browser(str(get_auth_user().user_id))
+        probe_browser = await get_remote_browser(mcp_session_id or get_host_id())
     if probe_browser is not None:
         result = await _try_action_with_probe(probe_browser, initial_url, action, timeout)
         if result is not None:
@@ -750,8 +757,7 @@ async def remote_zen_dpage_with_action(
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
         logger.info(f"Start with ephemeral remote browser {browser_id}")
     else:
-        user_id = get_auth_user().user_id
-        browser_id = user_id
+        browser_id = mcp_session_id or get_host_id()
         browser = await get_remote_browser(browser_id)
         if browser is None:
             browser = await create_remote_browser(
@@ -759,7 +765,7 @@ async def remote_zen_dpage_with_action(
             )
         page = await get_new_page(browser)
         signin_id = SignInId(browser_id, str(page.target_id), mcp_session_id)
-        logger.info(f"For user {user_id}: using remote browser {browser_id}")
+        logger.info(f"Using remote browser {browser_id}")
 
     await zen_navigate_with_retry(page, initial_url)
 

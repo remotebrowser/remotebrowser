@@ -15,7 +15,6 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from getgather.auth.auth import setup_mcp_auth
 from getgather.browser import create_remote_browser, terminate_remote_browser
 from getgather.browsers.router import backend, router as browsers_router
 from getgather.config import PROJECT_DIR, settings
@@ -136,8 +135,6 @@ app.include_router(dpage_router)
 
 for mcp_app in mcp_apps:
     app.mount(mcp_app.route, mcp_app.app)
-
-setup_mcp_auth(app, [mcp_app.route for mcp_app in mcp_apps])
 
 
 @app.get("/docs-mcp")
