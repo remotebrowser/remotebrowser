@@ -78,20 +78,20 @@ def _first_str(value: Any) -> str | None:
 
 
 def get_match_attr(el: Tag) -> str | None:
-    """Return the gg-match selector value, coerced to a single string."""
-    return _first_str(el.get("gg-match"))
+    """Return the rb-match (or gg-match) selector value, coerced to a single string."""
+    return _first_str(el.get("rb-match")) or _first_str(el.get("gg-match"))
 
 
 def get_match_html_attr(el: Tag) -> str | None:
-    """Return the gg-match-html selector value, coerced to a single string."""
-    return _first_str(el.get("gg-match-html"))
+    """Return the rb-match-html (or gg-match-html) selector value, coerced to a single string."""
+    return _first_str(el.get("rb-match-html")) or _first_str(el.get("gg-match-html"))
 
 
 def find_match_elements(pattern: BeautifulSoup) -> list[Tag]:
-    """Return elements carrying gg-match or gg-match-html, deduped in document order."""
+    """Return elements carrying rb-match/rb-match-html (or gg-match/gg-match-html), deduped in document order."""
     seen: set[int] = set()
     out: list[Tag] = []
-    for name in ("gg-match", "gg-match-html"):
+    for name in ("rb-match", "rb-match-html", "gg-match", "gg-match-html"):
         for el in pattern.find_all(attrs={name: True}):
             if isinstance(el, Tag) and id(el) not in seen:
                 seen.add(id(el))
