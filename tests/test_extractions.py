@@ -134,6 +134,39 @@ class TestNPR:
 
 @pytest.mark.distill
 class TestGroundNews:
+    @pytest.fixture(autouse=True)
+    def upload_groundnews_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
+        html_content = """<html gg-domain="ground.news">
+  <head>
+    <title>Ground News</title>
+  </head>
+  <body>
+    <div
+      gg-stop
+      gg-convert="groundnews-latest-stories.json"
+      rb-match-html="[data-testid=latest-stories-homepage]"
+    ></div>
+  </body>
+</html>
+"""
+        json_content = """{
+  "rows": "[data-testid=story-item]",
+  "columns": [
+    { "name": "title", "selector": "h4" },
+    { "name": "link", "selector": "a", "attribute": "href" }
+  ]
+}
+"""
+        client.post("/api/v1/patterns/groundnews-latest-stories", json={"content": html_content})
+        client.post(
+            "/api/v1/patterns/groundnews-latest-stories",
+            params={"ext": "json"},
+            json={"content": json_content},
+        )
+        yield
+        client.delete("/api/v1/patterns/groundnews-latest-stories")
+        client.delete("/api/v1/patterns/groundnews-latest-stories", params={"ext": "json"})
+
     def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
         browser_id, page_id = prepare_new_browser(client, "groundnews", browser_ids)
 
@@ -191,6 +224,36 @@ class TestESPN:
 
 @pytest.mark.distill
 class TestCNN:
+    @pytest.fixture(autouse=True)
+    def upload_cnn_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
+        html_content = """<html gg-domain="cnn">
+  <head>
+    <title>CNN Latest Stories</title>
+  </head>
+  <body>
+    <div rb-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
+    <div gg-stop gg-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
+  </body>
+</html>
+"""
+        json_content = """{
+  "rows": "section.active ul li",
+  "columns": [
+    { "name": "title", "selector": "a" },
+    { "name": "link", "selector": "a", "attribute": "href" }
+  ]
+}
+"""
+        client.post("/api/v1/patterns/cnn-latest-stories", json={"content": html_content})
+        client.post(
+            "/api/v1/patterns/cnn-latest-stories",
+            params={"ext": "json"},
+            json={"content": json_content},
+        )
+        yield
+        client.delete("/api/v1/patterns/cnn-latest-stories")
+        client.delete("/api/v1/patterns/cnn-latest-stories", params={"ext": "json"})
+
     def test_navigate_and_distill(self, client: httpx.Client, browser_ids: list[str]) -> None:
         browser_id, page_id = prepare_new_browser(client, "cnn", browser_ids)
 
@@ -217,7 +280,7 @@ class TestCBC:
     <title>CBC Headlines</title>
   </head>
   <body>
-    <ul gg-stop gg-convert="cbc-headlines.json" gg-match-html="main ul"></ul>
+    <ul gg-stop gg-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
   </body>
 </html>
 """
@@ -260,16 +323,16 @@ class TestCBC:
 def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str]) -> None:
     acme_login_pattern = """<html gg-domain="acme">
   <body>
-    <h1 gg-match="h1">Login</h1>
-    <input name="email" type="email" placeholder="Email" gg-match="input[type=email]" />
-    <input name="password" type="password" placeholder="Password" gg-match="input[type=password]" />
-    <button gg-autoclick gg-match="button[type=submit]"></button>
+    <h1 rb-match="h1">Login</h1>
+    <input name="email" type="email" placeholder="Email" rb-match="input[type=email]" />
+    <input name="password" type="password" placeholder="Password" rb-match="input[type=password]" />
+    <button gg-autoclick rb-match="button[type=submit]"></button>
   </body>
 </html>
 """
     acme_success_pattern = """<html gg-domain="acme">
   <body>
-    <h1 gg-stop gg-match="//h1[contains(text(), 'successful')]">Success</h1>
+    <h1 gg-stop rb-match="//h1[contains(text(), 'successful')]">Success</h1>
   </body>
 </html>
 """

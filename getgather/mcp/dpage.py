@@ -37,6 +37,7 @@ from getgather.zen_distill import (
     capture_page_artifacts,
     distill,
     get_error,
+    get_match_attr,
     get_selector,
     load_distillation_patterns,
     make_error_reporter,
@@ -443,7 +444,7 @@ async def distill_post_loop(
                     if not isinstance(radio, Tag):
                         logger.warning(f"No radio button found for group {name_str} value {value}")
                         continue
-                    rgm = radio.get("gg-match")
+                    rgm = get_match_attr(radio)
                     if not rgm:
                         continue
                     selector, frame_selector = get_selector(str(rgm))
@@ -465,7 +466,7 @@ async def distill_post_loop(
                     continue
 
                 expected_field_count += 1
-                gg_match = input.get("gg-match")
+                gg_match = get_match_attr(input)
                 selector, frame_selector = get_selector(
                     str(gg_match) if gg_match is not None else ""
                 )
@@ -509,7 +510,7 @@ async def distill_post_loop(
                                 continue
                             logger.info(f"Handling radio button group {name}")
                             logger.info(f"Using form data {name}={value}")
-                            radio_gg_match = str(radio.get("gg-match"))
+                            radio_gg_match = str(get_match_attr(radio))
                             selector, frame_selector = get_selector(radio_gg_match)
                             config = getattr(page, "element_config", None)
                             radio_element = await page_query_selector(
@@ -544,7 +545,7 @@ async def distill_post_loop(
 
         # Queue non-button auto-clicks so they can run in the same batch as field updates.
         for auto_click_target in document.select("[gg-autoclick]:not(button)"):
-            auto_click_selector, _ = get_selector(str(auto_click_target.get("gg-match")))
+            auto_click_selector, _ = get_selector(str(get_match_attr(auto_click_target)))
             if auto_click_selector:
                 pending_actions.append({
                     "key": f"click:auto:{len(pending_actions)}",
@@ -558,7 +559,7 @@ async def distill_post_loop(
             if len(names) > 0 and expected_field_count == len(names):
                 logger.info("Submitting form, all fields are filled...")
                 for submit_button in document.select(SUBMIT_BUTTON):
-                    submit_selector, _ = get_selector(str(submit_button.get("gg-match")))
+                    submit_selector, _ = get_selector(str(get_match_attr(submit_button)))
                     if submit_selector:
                         pending_actions.append({
                             "key": f"click:submit:{len(pending_actions)}",
