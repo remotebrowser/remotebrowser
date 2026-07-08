@@ -87,6 +87,11 @@ def get_match_html_attr(el: Tag) -> str | None:
     return _first_str(el.get("rb-match-html")) or _first_str(el.get("gg-match-html"))
 
 
+def get_domain_attr(el: Tag) -> str | None:
+    """Return the rb-domain (or gg-domain) value, coerced to a single string."""
+    return _first_str(el.get("rb-domain")) or _first_str(el.get("gg-domain"))
+
+
 def find_match_elements(pattern: BeautifulSoup) -> list[Tag]:
     """Return elements carrying rb-match/rb-match-html (or gg-match/gg-match-html), deduped in document order."""
     seen: set[int] = set()
@@ -376,11 +381,11 @@ async def distill(
             priority = int(str(gg_priority).lstrip("= "))
         except ValueError:
             priority = -1
-        domain = root.get("gg-domain") if isinstance(root, Tag) else None
+        domain = get_domain_attr(root) if isinstance(root, Tag) else None
 
         if domain and hostname:
             local = "localhost" in hostname or "127.0.0.1" in hostname
-            if isinstance(domain, str) and not local and domain.lower() not in hostname.lower():
+            if not local and domain.lower() not in hostname.lower():
                 logger.trace(f"Skipping {name} due to mismatched domain {domain}")
                 continue
 

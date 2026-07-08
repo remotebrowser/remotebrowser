@@ -136,7 +136,7 @@ class TestNPR:
 class TestGroundNews:
     @pytest.fixture(autouse=True)
     def upload_groundnews_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
-        html_content = """<html gg-domain="ground.news">
+        html_content = """<html rb-domain="ground.news">
   <head>
     <title>Ground News</title>
   </head>
@@ -226,7 +226,7 @@ class TestESPN:
 class TestCNN:
     @pytest.fixture(autouse=True)
     def upload_cnn_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
-        html_content = """<html gg-domain="cnn">
+        html_content = """<html rb-domain="cnn">
   <head>
     <title>CNN Latest Stories</title>
   </head>
@@ -275,7 +275,7 @@ class TestCNN:
 class TestCBC:
     @pytest.fixture(autouse=True)
     def upload_cbc_patterns(self, client: httpx.Client) -> Generator[None, None, None]:
-        html_content = """<html gg-domain="cbc">
+        html_content = """<html rb-domain="cbc">
   <head>
     <title>CBC Headlines</title>
   </head>
@@ -321,7 +321,7 @@ class TestCBC:
 
 @pytest.mark.distill
 def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str]) -> None:
-    acme_login_pattern = """<html gg-domain="acme">
+    acme_login_pattern = """<html rb-domain="acme">
   <body>
     <h1 rb-match="h1">Login</h1>
     <input name="email" type="email" placeholder="Email" rb-match="input[type=email]" />
@@ -330,7 +330,7 @@ def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str])
   </body>
 </html>
 """
-    acme_success_pattern = """<html gg-domain="acme">
+    acme_success_pattern = """<html rb-domain="acme">
   <body>
     <h1 gg-stop rb-match="//h1[contains(text(), 'successful')]">Success</h1>
   </body>
