@@ -1,6 +1,8 @@
 import asyncio
 import ipaddress
 import os
+import re
+import socket
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Self
@@ -13,7 +15,6 @@ from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
 from nanoid import generate
 
-from getgather.auth.auth import get_host_id
 from getgather.browser import (
     ElementConfig,
     create_remote_browser,
@@ -53,6 +54,13 @@ DEFAULT_DPAGE_POST_POLL_TIMEOUT = 60
 FRIENDLY_CHARS: str = "23456789abcdefghijkmnpqrstuvwxyz"
 
 SIGN_IN_ID_DELIMITER = "--"
+
+
+def get_host_id() -> str:
+    """Stable per-host id, used as the fallback browser key when no mcp-session-id is present."""
+    hostname = socket.gethostname()
+    logger.warning(f"Hostname is {hostname}")
+    return re.sub(r"[^a-z0-9-]", "", hostname.lower().removesuffix(".local")) + "-noauth"
 
 
 @dataclass(frozen=True)

@@ -21,7 +21,7 @@ app = App(help="Manual end-to-end test of the mcp server.")
 async def call_tool(
     server_url: Annotated[str, Parameter(help="URL of the mcp server")] = "http://localhost:23456",
     mcp: Annotated[str, Parameter(help="name of the mcp server")] = "media",
-    tool: Annotated[str, Parameter(help="name of the tool")] = "get_user_info",
+    tool: Annotated[str, Parameter(help="name of the tool")] = "get_browser_ip_address",
     token: Annotated[str, Parameter(help="OAuth token to skip full auth flow")] | None = None,
 ):
     url = f"{server_url}/mcp-{mcp}"

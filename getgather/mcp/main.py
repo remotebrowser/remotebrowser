@@ -10,7 +10,6 @@ from loguru import logger
 from pydantic import BaseModel
 
 import getgather.mcp.declarative_mcp  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from getgather.auth.auth import get_host_id
 from getgather.mcp.dpage import (
     dpage_check,
     dpage_finalize,
@@ -113,11 +112,6 @@ def _create_mcp_app(bundle_name: str, brand_ids: list[str]):
     """
     mcp = FastMCP[Context](name=f"Getgather {bundle_name} MCP")
     mcp.add_middleware(LocationProxyMiddleware())
-
-    @mcp.tool(tags={"general_tool"})
-    def get_user_info():  # type: ignore[reportUnusedFunction]
-        """Get information about the current host (no auth is configured)."""
-        return {"host_id": get_host_id()}
 
     @mcp.tool(tags={"general_tool"})
     async def check_signin(ctx: Context, signin_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
