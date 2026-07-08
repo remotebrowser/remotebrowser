@@ -142,7 +142,7 @@ class TestGroundNews:
   </head>
   <body>
     <div
-      gg-stop
+      rb-stop
       gg-convert="groundnews-latest-stories.json"
       rb-match-html="[data-testid=latest-stories-homepage]"
     ></div>
@@ -232,7 +232,7 @@ class TestCNN:
   </head>
   <body>
     <div rb-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
-    <div gg-stop gg-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
+    <div rb-stop gg-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
   </body>
 </html>
 """
@@ -280,7 +280,7 @@ class TestCBC:
     <title>CBC Headlines</title>
   </head>
   <body>
-    <ul gg-stop gg-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
+    <ul rb-stop gg-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
   </body>
 </html>
 """
@@ -332,7 +332,7 @@ def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str])
 """
     acme_success_pattern = """<html rb-domain="acme">
   <body>
-    <h1 gg-stop rb-match="//h1[contains(text(), 'successful')]">Success</h1>
+    <h1 rb-stop rb-match="//h1[contains(text(), 'successful')]">Success</h1>
   </body>
 </html>
 """
