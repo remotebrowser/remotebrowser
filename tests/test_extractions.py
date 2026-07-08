@@ -143,7 +143,7 @@ class TestGroundNews:
   <body>
     <div
       rb-stop
-      gg-convert="groundnews-latest-stories.json"
+      rb-convert="groundnews-latest-stories.json"
       rb-match-html="[data-testid=latest-stories-homepage]"
     ></div>
   </body>
@@ -232,7 +232,7 @@ class TestCNN:
   </head>
   <body>
     <div rb-match="//p[@class='title' and contains(text(), 'Latest Stories')]"></div>
-    <div rb-stop gg-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
+    <div rb-stop rb-convert="cnn-latest-stories.json" rb-match-html="div[data-uri^=cms]"></div>
   </body>
 </html>
 """
@@ -280,7 +280,7 @@ class TestCBC:
     <title>CBC Headlines</title>
   </head>
   <body>
-    <ul rb-stop gg-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
+    <ul rb-stop rb-convert="cbc-headlines.json" rb-match-html="main ul"></ul>
   </body>
 </html>
 """
