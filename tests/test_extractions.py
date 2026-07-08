@@ -326,7 +326,7 @@ def test_acme_login_email_password(client: httpx.Client, browser_ids: list[str])
     <h1 rb-match="h1">Login</h1>
     <input name="email" type="email" placeholder="Email" rb-match="input[type=email]" />
     <input name="password" type="password" placeholder="Password" rb-match="input[type=password]" />
-    <button gg-autoclick rb-match="button[type=submit]"></button>
+    <button rb-autoclick rb-match="button[type=submit]"></button>
   </body>
 </html>
 """
