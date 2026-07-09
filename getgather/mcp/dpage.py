@@ -544,7 +544,8 @@ async def distill_post_loop(
                         logger.info(f"No form data found for {name}")
 
         # Queue non-button auto-clicks so they can run in the same batch as field updates.
-        for auto_click_target in document.select("[gg-autoclick]:not(button)"):
+        AUTOCLICK_NON_BUTTON_SELECTOR = "[rb-autoclick]:not(button), [gg-autoclick]:not(button)"
+        for auto_click_target in document.select(AUTOCLICK_NON_BUTTON_SELECTOR):
             auto_click_selector, _ = get_selector(str(get_match_attr(auto_click_target)))
             if auto_click_selector:
                 pending_actions.append({
@@ -554,7 +555,7 @@ async def distill_post_loop(
                 })
 
         should_submit = False
-        SUBMIT_BUTTON = "button[gg-autoclick], button[type=submit]"
+        SUBMIT_BUTTON = "button[rb-autoclick], button[gg-autoclick], button[type=submit]"
         if document.select(SUBMIT_BUTTON):
             if len(names) > 0 and expected_field_count == len(names):
                 logger.info("Submitting form, all fields are filled...")
