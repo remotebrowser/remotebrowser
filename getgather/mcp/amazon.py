@@ -265,7 +265,7 @@ async def get_browsing_history() -> dict[str, Any]:
                     f"Converted batch {start_index}-{end_index}: found {len(converted)} items"
                 )
                 for item in converted:
-                    item["url"] = f"https://www.amazon.com{item['url']}"
+                    item["url"] = f"https://www.amazon.com{item.get('url', '')}"
             else:
                 logger.warning(f"Conversion returned None for batch {start_index}-{end_index}")
             return converted
@@ -434,7 +434,7 @@ async def remote_get_browsing_history() -> dict[str, Any]:
                     f"Converted batch {start_index}-{end_index}: found {len(converted)} items"
                 )
                 for item in converted:
-                    item["url"] = f"https://www.amazon.com{item['url']}"
+                    item["url"] = f"https://www.amazon.com{item.get('url', '')}"
             else:
                 logger.warning(f"Conversion returned None for batch {start_index}-{end_index}")
             return converted
