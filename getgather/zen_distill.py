@@ -102,6 +102,11 @@ def get_convert_attr(el: Tag) -> str | None:
     return _first_str(el.get("rb-convert")) or _first_str(el.get("gg-convert"))
 
 
+def get_error_attr(el: Tag) -> str | None:
+    """Return the rb-error (or gg-error) value, coerced to a single string."""
+    return _first_str(el.get("rb-error")) or _first_str(el.get("gg-error"))
+
+
 def get_stop_attr(el: Tag) -> str | None:
     """Return the rb-stop (or gg-stop) value, coerced to a single string.
 
@@ -129,6 +134,18 @@ def find_stop_elements(pattern: BeautifulSoup) -> list[Tag]:
     seen: set[int] = set()
     out: list[Tag] = []
     for name in ("rb-stop", "gg-stop"):
+        for el in pattern.find_all(attrs={name: True}):
+            if isinstance(el, Tag) and id(el) not in seen:
+                seen.add(id(el))
+                out.append(el)
+    return out
+
+
+def find_error_elements(pattern: BeautifulSoup) -> list[Tag]:
+    """Return elements carrying rb-error (or gg-error), deduped in document order."""
+    seen: set[int] = set()
+    out: list[Tag] = []
+    for name in ("rb-error", "gg-error"):
         for el in pattern.find_all(attrs={name: True}):
             if isinstance(el, Tag) and id(el) not in seen:
                 seen.add(id(el))
@@ -263,11 +280,11 @@ async def terminate(distilled: str) -> bool:
 
 async def get_error(distilled: str) -> str | None:
     document = BeautifulSoup(distilled, "html.parser")
-    error_element = document.find(attrs={"gg-error": True})
-    if error_element and isinstance(error_element, Tag):
-        error_value = error_element.get("gg-error")
-        logger.info(f"Found error element: {error_value}")
-        if isinstance(error_value, str):
+    error_elements = find_error_elements(document)
+    for error_element in error_elements:
+        error_value = get_error_attr(error_element)
+        if error_value:
+            logger.info(f"Found error element: {error_value}")
             return error_value
     return None
 
