@@ -92,6 +92,11 @@ def get_domain_attr(el: Tag) -> str | None:
     return _first_str(el.get("rb-domain")) or _first_str(el.get("gg-domain"))
 
 
+def get_priority_attr(el: Tag) -> str | None:
+    """Return the rb-priority (or gg-priority) value, coerced to a single string."""
+    return _first_str(el.get("rb-priority")) or _first_str(el.get("gg-priority"))
+
+
 def get_convert_attr(el: Tag) -> str | None:
     """Return the rb-convert (or gg-convert) value, coerced to a single string."""
     return _first_str(el.get("rb-convert")) or _first_str(el.get("gg-convert"))
@@ -403,9 +408,9 @@ async def distill(
         pattern = deepcopy(item.pattern)
 
         root = pattern.find("html")
-        gg_priority = root.get("gg-priority", "-1") if isinstance(root, Tag) else "-1"
+        gg_priority = get_priority_attr(root) if isinstance(root, Tag) else None
         try:
-            priority = int(str(gg_priority).lstrip("= "))
+            priority = int(str(gg_priority or "-1").lstrip("= "))
         except ValueError:
             priority = -1
         domain = get_domain_attr(root) if isinstance(root, Tag) else None

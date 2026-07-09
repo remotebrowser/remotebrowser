@@ -249,7 +249,7 @@ async def test_distill_uses_page_batch_extract(monkeypatch: MonkeyPatch):
         name="batched-login.html",
         pattern=BeautifulSoup(
             """
-            <html gg-priority="1">
+            <html rb-priority="1">
                 <button rb-match="button.login"></button>
                 <div rb-match-html="//section[@data-role='content']"></div>
                 <input rb-match="iframe.auth input[name='email']" />
@@ -295,7 +295,7 @@ async def test_distill_rejects_pattern_when_required_batched_target_missing(
     pattern = Pattern(
         name="required-login.html",
         pattern=BeautifulSoup(
-            '<html gg-priority="1"><button rb-match="button.login"></button></html>',
+            '<html rb-priority="1"><button rb-match="button.login"></button></html>',
             "html.parser",
         ),
     )
@@ -345,7 +345,7 @@ async def test_distill_allows_optional_batched_target_to_be_missing(monkeypatch:
         name="optional-helper.html",
         pattern=BeautifulSoup(
             """
-            <html gg-priority="1">
+            <html rb-priority="1">
                 <button rb-match="button.login"></button>
                 <span rb-match=".helper" gg-optional></span>
             </html>
