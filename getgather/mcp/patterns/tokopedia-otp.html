@@ -1,11 +1,11 @@
-<html gg-domain="tokopedia" gg-priority="1">
+<html rb-domain="tokopedia" rb-priority="1">
   <head>
     <title>Tokopedia Verification</title>
   </head>
   <body>
-    <p gg-optional gg-match="//span[contains(text(), 'Kode yang kamu masukkan salah.')]"></p>
-    <div gg-match="//div[contains(text(), 'Masukkan Kode Verifikasi')]"></div>
-    <input name="otp" type="tel" data-testid="otp" gg-match="input[type=tel]" placeholder="OTP" />
+    <p rb-optional rb-match="//span[contains(text(), 'Kode yang kamu masukkan salah.')]"></p>
+    <div rb-match="//div[contains(text(), 'Masukkan Kode Verifikasi')]"></div>
+    <input name="otp" type="tel" data-testid="otp" rb-match="input[type=tel]" placeholder="OTP" />
     <button type="submit" data-testid="submit">Submit</button>
   </body>
 </html>

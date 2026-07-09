@@ -1,28 +1,28 @@
-<html gg-domain="horizonhobby" gg-priority="2">
+<html rb-domain="horizonhobby" rb-priority="2">
   <head>
     <title>Horizon Hobby Sign In</title>
   </head>
   <body>
-    <p gg-optional gg-match="form[data-test='login-form'] div.alert__root"></p>
+    <p rb-optional rb-match="form[data-test='login-form'] div.alert__root"></p>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="email"
-      gg-match="input#email"
+      rb-match="input#email"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
     />
     <button
       type="submit"
-      gg-autoclick
-      gg-match="//button[@type='submit' and .//p[contains(text(), 'Sign In')]]"
+      rb-autoclick
+      rb-match="//button[@type='submit' and .//p[contains(text(), 'Sign In')]]"
     >
       Sign in
     </button>

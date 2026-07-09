@@ -1,24 +1,24 @@
-<html gg-domain="garmin">
+<html rb-domain="garmin">
   <head>
     <title>Garmin Sign In</title>
   </head>
   <body>
-    <h1 gg-match="//h1[contains(text(), 'Sign In')]">Sign In</h1>
+    <h1 rb-match="//h1[contains(text(), 'Sign In')]">Sign In</h1>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email Address"
       data-testid="email"
-      gg-match="input#email[name='email'][type='email']"
+      rb-match="input#email[name='email'][type='email']"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input#password[name='password'][type='password']"
+      rb-match="input#password[name='password'][type='password']"
     />
-    <button type="submit" data-testid="submit" gg-match="button[type='submit']">Sign In</button>
+    <button type="submit" data-testid="submit" rb-match="button[type='submit']">Sign In</button>
   </body>
 </html>

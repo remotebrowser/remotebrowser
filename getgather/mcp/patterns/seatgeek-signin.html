@@ -1,23 +1,23 @@
-<html gg-domain="seatgeek">
+<html rb-domain="seatgeek">
   <head>
     <title>SeatGeek Signin</title>
   </head>
   <body>
     <div>
-      <h3 gg-match="h3#login-heading"></h3>
-      <p gg-optional gg-match="div[data-testid='error']"></p>
+      <h3 rb-match="h3#login-heading"></h3>
+      <p rb-optional rb-match="div[data-testid='error']"></p>
       <input
         autofocus
         placeholder="Email"
         data-testid="email"
-        gg-match="input[data-uniform-id='input-email']"
+        rb-match="input[data-uniform-id='input-email']"
         type="email"
         name="email"
       />
       <button
         type="submit"
         data-testid="submit"
-        gg-match="//button/span/span[contains(text(), 'Instantly log in with email')]"
+        rb-match="//button/span/span[contains(text(), 'Instantly log in with email')]"
       >
         Sign in
       </button>

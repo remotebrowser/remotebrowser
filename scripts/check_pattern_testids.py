@@ -41,7 +41,7 @@ def allowed(testid: str) -> bool:
 
 
 def is_exempt(el: Tag) -> bool:
-    if el.has_attr("gg-autoclick"):
+    if el.has_attr("gg-autoclick") or el.has_attr("rb-autoclick"):
         return True
     style = re.sub(r"\s", "", str(el.get("style") or ""))
     if "display:none" in style:

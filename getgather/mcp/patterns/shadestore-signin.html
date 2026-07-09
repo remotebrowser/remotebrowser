@@ -1,25 +1,25 @@
-<html gg-domain="theshadestore" gg-priority="1">
+<html rb-domain="theshadestore" rb-priority="1">
   <head>
     <title>Shade Store</title>
   </head>
 
   <body>
-    <p gg-optional gg-match="div[class='errors red']"></p>
+    <p rb-optional rb-match="div[class='errors red']"></p>
 
     <input
       type="text"
       name="username"
       data-testid="username"
-      gg-match="input#login_username"
+      rb-match="input#login_username"
       placeholder="Email Address"
     />
     <input
       type="password"
       name="password"
       data-testid="password"
-      gg-match="input#login_password"
+      rb-match="input#login_password"
       placeholder="Password"
     />
-    <button type="submit" data-testid="submit" gg-match="input#login">Login to My Account</button>
+    <button type="submit" data-testid="submit" rb-match="input#login">Login to My Account</button>
   </body>
 </html>

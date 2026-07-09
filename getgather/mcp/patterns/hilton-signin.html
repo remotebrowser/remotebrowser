@@ -1,28 +1,28 @@
-<html gg-domain="hilton" gg-priority="2">
+<html rb-domain="hilton" rb-priority="2">
   <head>
     <title>Hilton Signin</title>
   </head>
   <body>
-    <div gg-optional gg-match="div[data-testid='bannerNotification']"></div>
+    <div rb-optional rb-match="div[data-testid='bannerNotification']"></div>
     <input
       placeholder="Username or Hilton Honors #"
       autofocus
       type="text"
       name="username"
       data-testid="username"
-      gg-match="input[name='username']"
+      rb-match="input[name='username']"
     />
     <input
       placeholder="Password"
       type="password"
       name="password"
       data-testid="password"
-      gg-match="input[name='password']"
+      rb-match="input[name='password']"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button[data-e2e='signInButton']:not([disabled])"
+      rb-match="button[data-e2e='signInButton']:not([disabled])"
     >
       Sign in
     </button>

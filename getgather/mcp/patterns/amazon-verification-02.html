@@ -1,14 +1,14 @@
-<html gg-domain="amazon" gg-priority="9">
+<html rb-domain="amazon" rb-priority="9">
   <head>
     <title>Amazon Verification</title>
   </head>
   <body>
-    <h1 gg-match="//h1[contains(normalize-space(.), 'Verify mobile number')]">
+    <h1 rb-match="//h1[contains(normalize-space(.), 'Verify mobile number')]">
       Verify mobile number
     </h1>
     <span
-      gg-optional
-      gg-match="//div[@id='instruction_text']//span[contains(normalize-space(.), 'your mobile number')]"
+      rb-optional
+      rb-match="//div[@id='instruction_text']//span[contains(normalize-space(.), 'your mobile number')]"
     ></span>
     <input
       autofocus
@@ -16,8 +16,8 @@
       type="tel"
       placeholder="Enter code"
       data-testid="otp"
-      gg-match="input[name='code']"
+      rb-match="input[name='code']"
     />
-    <button type="submit" data-testid="submit" gg-match="input[type=submit]">Sign in</button>
+    <button type="submit" data-testid="submit" rb-match="input[type=submit]">Sign in</button>
   </body>
 </html>

@@ -1,13 +1,13 @@
-<html gg-domain="aa" gg-priority="1">
+<html rb-domain="aa" rb-priority="1">
   <head>
     <title>American Airlines OTP</title>
   </head>
   <body>
-    <span gg-optional gg-match="adc-inline-notification#adcNotification_0 span"></span>
+    <span rb-optional rb-match="adc-inline-notification#adcNotification_0 span"></span>
     <div>
-      <span gg-match="span[class*='_mfaheader_']">Enter verification code</span>
-      <span gg-optional gg-match="span[class*='_info_']"></span>
-      <strong gg-optional gg-match="span[class*='_email_']"></strong>
+      <span rb-match="span[class*='_mfaheader_']">Enter verification code</span>
+      <span rb-optional rb-match="span[class*='_info_']"></span>
+      <strong rb-optional rb-match="span[class*='_email_']"></strong>
     </div>
     <span>6 Digit Verification Code:</span>
     <div class="otp-container">
@@ -17,46 +17,46 @@
         type="text"
         inputmode="numeric"
         data-testid="otp-0"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(1)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(1)"
       />
       <input
         name="otp-2"
         type="text"
         inputmode="numeric"
         data-testid="otp-1"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(2)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(2)"
       />
       <input
         name="otp-3"
         type="text"
         inputmode="numeric"
         data-testid="otp-2"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(3)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(3)"
       />
       <input
         name="otp-4"
         type="text"
         inputmode="numeric"
         data-testid="otp-3"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(4)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(4)"
       />
       <input
         name="otp-5"
         type="text"
         inputmode="numeric"
         data-testid="otp-4"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(5)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(5)"
       />
       <input
         name="otp-6"
         type="text"
         inputmode="numeric"
         data-testid="otp-5"
-        gg-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(6)"
+        rb-match="div[class*='_otpinputgroup_'] adc-text-input:nth-of-type(6)"
       />
     </div>
 
-    <button type="submit" data-testid="submit" gg-match="div[class*='_verify_'] adc-button">
+    <button type="submit" data-testid="submit" rb-match="div[class*='_verify_'] adc-button">
       Verify
     </button>
     <style>

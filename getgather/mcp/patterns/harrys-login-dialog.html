@@ -1,25 +1,25 @@
-<html gg-domain="harrys" gg-priority="1">
+<html rb-domain="harrys" rb-priority="1">
   <body>
-    <span gg-optional gg-match="dialog[open] form div.pb-2xs span.body-2m"></span>
+    <span rb-optional rb-match="dialog[open] form div.pb-2xs span.body-2m"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="email"
-      gg-match="dialog[open] form input[type=email]"
+      rb-match="dialog[open] form input[type=email]"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="dialog[open] form input[type=password]"
+      rb-match="dialog[open] form input[type=password]"
     />
     <button
       type="submit"
-      gg-autoclick
-      gg-match="//dialog[@open]//form//button[@type='submit' and contains(., 'Login') and not(@disabled)]"
+      rb-autoclick
+      rb-match="//dialog[@open]//form//button[@type='submit' and contains(., 'Login') and not(@disabled)]"
     >
       Login
     </button>

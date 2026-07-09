@@ -1,25 +1,25 @@
-<html gg-domain="containerstore" priority="2">
+<html rb-domain="containerstore" priority="2">
   <body>
-    <p gg-optional gg-match="div.error"></p>
+    <p rb-optional rb-match="div.error"></p>
     <input
       autofocus
       name="email"
       type="email"
       data-testid="username"
-      gg-match="input#signInName"
+      rb-match="input#signInName"
       placeholder="Email"
     />
     <input
       name="password"
       type="password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
       placeholder="Password"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//button[@id='next' and contains(text(), 'Sign in')]"
+      rb-match="//button[@id='next' and contains(text(), 'Sign in')]"
     >
       Sign in
     </button>

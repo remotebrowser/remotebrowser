@@ -1,20 +1,20 @@
-<html gg-domain="shein" gg-priority="1">
+<html rb-domain="shein" rb-priority="1">
   <body>
-    <p gg-match="div.sui-dialog__body div.head"></p>
+    <p rb-match="div.sui-dialog__body div.head"></p>
     <div>
-      <span gg-match="div.sui-dialog__body div.email span:nth-of-type(1)"></span>
-      <span gg-match="div.sui-dialog__body div.email span:nth-of-type(2)"></span>
+      <span rb-match="div.sui-dialog__body div.email span:nth-of-type(1)"></span>
+      <span rb-match="div.sui-dialog__body div.email span:nth-of-type(2)"></span>
     </div>
-    <p gg-optional gg-match="p.error-tip"></p>
+    <p rb-optional rb-match="p.error-tip"></p>
     <input
       autofocus
       name="code"
       type="text"
       maxlength="5"
       data-testid="otp"
-      gg-match="div.code-input input[maxlength='5']"
+      rb-match="div.code-input input[maxlength='5']"
     />
-    <button type="submit" data-testid="submit" gg-match="div.sui-dialog__body button.confirm-btn">
+    <button type="submit" data-testid="submit" rb-match="div.sui-dialog__body button.confirm-btn">
       SUBMIT
     </button>
   </body>

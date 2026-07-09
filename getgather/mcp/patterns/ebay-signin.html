@@ -1,22 +1,22 @@
-<html gg-domain="ebay">
+<html rb-domain="ebay">
   <head>
     <title>Sign In to Ebay</title>
   </head>
   <body>
-    <h1 gg-match="//h1[contains(text(), 'Sign in to your account')]">Sign in to your account</h1>
-    <p gg-optional gg-match="p#signin-error-msg"></p>
+    <h1 rb-match="//h1[contains(text(), 'Sign in to your account')]">Sign in to your account</h1>
+    <p rb-optional rb-match="p#signin-error-msg"></p>
     <input
       autofocus
       name="userid"
       type="text"
       data-testid="username"
-      gg-match="input#userid"
+      rb-match="input#userid"
       placeholder="Email or username"
     />
     <button
       type="submit"
-      gg-autoclick
-      gg-match="//button[@data-testid='signin-continue-btn' and not(@disabled)]"
+      rb-autoclick
+      rb-match="//button[@data-testid='signin-continue-btn' and not(@disabled)]"
     >
       Sign in
     </button>

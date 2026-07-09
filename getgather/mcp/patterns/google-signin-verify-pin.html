@@ -1,20 +1,20 @@
-<html gg-domain="google">
+<html rb-domain="google">
   <head>
     <title>Google Activity</title>
   </head>
   <body>
-    <span gg-match="//h1[contains(normalize-space(.), 'Verify it')]"></span>
+    <span rb-match="//h1[contains(normalize-space(.), 'Verify it')]"></span>
     <input
       type="tel"
       name="pin"
       placeholder="Enter code"
       data-testid="otp"
-      gg-match="//input[@id='idvAnyPhonePin']"
+      rb-match="//input[@id='idvAnyPhonePin']"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//div[@id='idvanyphoneverifyNext']//button"
+      rb-match="//div[@id='idvanyphoneverifyNext']//button"
     >
       Next
     </button>

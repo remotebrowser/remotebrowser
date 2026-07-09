@@ -1,11 +1,11 @@
-<html gg-domain="amazon">
+<html rb-domain="amazon">
   <head>
     <title>Amazon Sign In - Email</title>
   </head>
   <body>
-    <span gg-optional gg-match="div#auth-email-missing-alert"></span>
-    <span gg-optional gg-match="div#auth-email-invalid-claim-alert"></span>
-    <span gg-optional gg-match="div#auth-error-message-box div.a-alert-content"></span>
+    <span rb-optional rb-match="div#auth-email-missing-alert"></span>
+    <span rb-optional rb-match="div#auth-email-invalid-claim-alert"></span>
+    <span rb-optional rb-match="div#auth-error-message-box div.a-alert-content"></span>
 
     <input
       autofocus
@@ -13,9 +13,9 @@
       type="email"
       placeholder="Email or mobile phone number"
       data-testid="email"
-      gg-match="input#ap_email"
+      rb-match="input#ap_email"
     />
-    <button type="submit" data-testid="submit" gg-match="input#continue[type=submit]">
+    <button type="submit" data-testid="submit" rb-match="input#continue[type=submit]">
       Continue
     </button>
   </body>

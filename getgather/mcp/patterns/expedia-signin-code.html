@@ -1,21 +1,21 @@
-<html gg-domain="expedia" gg-priority="2">
+<html rb-domain="expedia" rb-priority="2">
   <head>
     <title>Expedia Sign In Code</title>
   </head>
   <body>
-    <p gg-optional gg-match="div.uitk-banner-critical"></p>
+    <p rb-optional rb-match="div.uitk-banner-critical"></p>
     <input
       placeholder="Code"
       type="text"
       name="code"
       autofocus
       data-testid="otp"
-      gg-match="input#verify-sms-one-time-passcode-input"
+      rb-match="input#verify-sms-one-time-passcode-input"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button#verifyOtpFormSubmitButton:not([disabled])"
+      rb-match="button#verifyOtpFormSubmitButton:not([disabled])"
     >
       Continue
     </button>

@@ -1,10 +1,10 @@
-<html gg-domain="safeway">
+<html rb-domain="safeway">
   <head>
     <title>Safeway Sign In</title>
   </head>
 
   <body>
-    <p id="error" style="color: red" gg-optional gg-match="div.input-field__help-text--error"></p>
+    <p id="error" style="color: red" rb-optional rb-match="div.input-field__help-text--error"></p>
 
     <input
       autofocus
@@ -12,12 +12,12 @@
       type="text"
       placeholder="Email or mobile number"
       data-testid="username"
-      gg-match="form input#enterUsername"
+      rb-match="form input#enterUsername"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//form//button[@type='submit' and not(.//div[contains(@class, 'pp-loading-spinner')])]"
+      rb-match="//form//button[@type='submit' and not(.//div[contains(@class, 'pp-loading-spinner')])]"
     >
       Sign in
     </button>

@@ -1,9 +1,9 @@
-<html gg-domain="target">
+<html rb-domain="target">
   <head>
     <title>Target Sign In - OTP</title>
   </head>
   <body>
-    <h1 gg-match="//h1[contains(normalize-space(.), 'Verification code sent')]">
+    <h1 rb-match="//h1[contains(normalize-space(.), 'Verification code sent')]">
       Verification code sent
     </h1>
     <input
@@ -12,8 +12,8 @@
       type="tel"
       placeholder="Enter your code"
       data-testid="otp"
-      gg-match="input.styles_input__8Dfzg"
+      rb-match="input.styles_input__8Dfzg"
     />
-    <button type="submit" data-testid="submit" gg-match="button#verify">Verify</button>
+    <button type="submit" data-testid="submit" rb-match="button#verify">Verify</button>
   </body>
 </html>

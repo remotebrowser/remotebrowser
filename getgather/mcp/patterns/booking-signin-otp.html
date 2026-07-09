@@ -1,10 +1,10 @@
-<html gg-domain="booking" gg-priority="1">
+<html rb-domain="booking" rb-priority="1">
   <head>
     <title>Booking OTP</title>
   </head>
   <body>
-    <p gg-optional gg-match="p.nw-step-description"></p>
-    <p gg-optional gg-match="span.error-block"></p>
+    <p rb-optional rb-match="p.nw-step-description"></p>
+    <p rb-optional rb-match="span.error-block"></p>
     <span>6 Digit Verification Code:</span>
     <div class="otp-container">
       <input
@@ -13,45 +13,45 @@
         type="text"
         inputmode="numeric"
         data-testid="otp-0"
-        gg-match="input[name='code_0']"
+        rb-match="input[name='code_0']"
       />
       <input
         name="otp-2"
         type="text"
         inputmode="numeric"
         data-testid="otp-1"
-        gg-match="input[name='code_1']"
+        rb-match="input[name='code_1']"
       />
       <input
         name="otp-3"
         type="text"
         inputmode="numeric"
         data-testid="otp-2"
-        gg-match="input[name='code_2']"
+        rb-match="input[name='code_2']"
       />
       <input
         name="otp-4"
         type="text"
         inputmode="numeric"
         data-testid="otp-3"
-        gg-match="input[name='code_3']"
+        rb-match="input[name='code_3']"
       />
       <input
         name="otp-5"
         type="text"
         inputmode="numeric"
         data-testid="otp-4"
-        gg-match="input[name='code_4']"
+        rb-match="input[name='code_4']"
       />
       <input
         name="otp-6"
         type="text"
         inputmode="numeric"
         data-testid="otp-5"
-        gg-match="input[name='code_5']"
+        rb-match="input[name='code_5']"
       />
     </div>
-    <button type="submit" data-testid="submit" gg-match="form button[type='submit']">
+    <button type="submit" data-testid="submit" rb-match="form button[type='submit']">
       Verify email
     </button>
 

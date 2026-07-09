@@ -1,21 +1,21 @@
-<html gg-domain="google" gg-priority="3">
+<html rb-domain="google" rb-priority="3">
   <head>
     <title>Google Activity</title>
   </head>
   <body>
     <div
-      gg-match="//div[@class='dMNVAe' and contains(normalize-space(.), 'Google Authenticator')]"
+      rb-match="//div[@class='dMNVAe' and contains(normalize-space(.), 'Google Authenticator')]"
     ></div>
     <input
       autofocus
       name="totpPin"
       type="tel"
       data-testid="otp"
-      gg-match="input[name='totpPin']"
+      rb-match="input[name='totpPin']"
       placeholder="Enter code"
       aria-label="Enter code"
     />
-    <button type="submit" data-testid="submit" gg-match="#totpNext button:not([disabled])">
+    <button type="submit" data-testid="submit" rb-match="#totpNext button:not([disabled])">
       Next
     </button>
   </body>

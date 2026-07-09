@@ -1,27 +1,27 @@
-<html gg-domain="bedbathandbeyond">
+<html rb-domain="bedbathandbeyond">
   <head>
     <title>Bed Bath and Beyond Sign In</title>
   </head>
   <body>
     <p
-      gg-optional
-      gg-match="//div[contains(@class, 'gq') and contains(., 'Email and/or password incorrect')]"
+      rb-optional
+      rb-match="//div[contains(@class, 'gq') and contains(., 'Email and/or password incorrect')]"
     ></p>
     <input
       type="email"
       data-testid="email"
-      gg-match="input#login-email"
+      rb-match="input#login-email"
       placeholder="Email"
       name="email"
     />
     <input
       type="password"
       data-testid="password"
-      gg-match="input#login-password"
+      rb-match="input#login-password"
       placeholder="Password"
       name="password"
     />
-    <button type="submit" data-testid="submit" gg-match="form#login-form button[type=submit]">
+    <button type="submit" data-testid="submit" rb-match="form#login-form button[type=submit]">
       Sign In
     </button>
   </body>

@@ -1,10 +1,10 @@
-<html gg-domain="kroger">
+<html rb-domain="kroger">
   <head>
     <title>Kroger Sign In</title>
   </head>
 
   <body>
-    <p gg-optional gg-match="div#claimVerificationServerError[aria-hidden='false']"></p>
+    <p rb-optional rb-match="div#claimVerificationServerError[aria-hidden='false']"></p>
 
     <input
       autofocus
@@ -12,19 +12,19 @@
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="form#attributeVerification input#signInName"
+      rb-match="form#attributeVerification input#signInName"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="form#attributeVerification input#password"
+      rb-match="form#attributeVerification input#password"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="form#attributeVerification button#continue:not([disabled])"
+      rb-match="form#attributeVerification button#continue:not([disabled])"
     >
       Sign in
     </button>

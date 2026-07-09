@@ -1,28 +1,28 @@
-<html gg-domain="aa" gg-priority="2">
+<html rb-domain="aa" rb-priority="2">
   <head>
     <title>American Airlines Signin</title>
   </head>
   <body>
     <div
-      gg-optional
-      gg-autoclick
-      gg-match="//button[contains(@class, 'ot-pc-refuse-all-handler') and contains(., 'Reject All')]"
+      rb-optional
+      rb-autoclick
+      rb-match="//button[contains(@class, 'ot-pc-refuse-all-handler') and contains(., 'Reject All')]"
     ></div>
-    <p gg-optional gg-match="adc-inline-notification[role='alert'][kind='error']"></p>
+    <p rb-optional rb-match="adc-inline-notification[role='alert'][kind='error']"></p>
     <input
       type="text"
       data-testid="username"
-      gg-match="adc-text-input[name='username']"
+      rb-match="adc-text-input[name='username']"
       placeholder="AAdvantage® # or username"
       name="username"
     />
     <input
       type="password"
       data-testid="password"
-      gg-match="adc-text-input[name='password']"
+      rb-match="adc-text-input[name='password']"
       placeholder="Password"
       name="password"
     />
-    <button type="submit" data-testid="submit" gg-match="div.loginButton adc-button">Log in</button>
+    <button type="submit" data-testid="submit" rb-match="div.loginButton adc-button">Log in</button>
   </body>
 </html>

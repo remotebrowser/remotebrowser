@@ -1,31 +1,31 @@
-<html gg-domain="starbucks">
+<html rb-domain="starbucks">
   <head>
     <title>Starbucks Sign In</title>
   </head>
   <body>
     <div
-      gg-optional
-      gg-autoclick
-      gg-match="xpath=//button[@id='truste-consent-button' and contains(text(), 'Agree')]"
+      rb-optional
+      rb-autoclick
+      rb-match="xpath=//button[@id='truste-consent-button' and contains(text(), 'Agree')]"
     >
       Agree
     </div>
-    <span gg-optional gg-match="div[class*='alert___']"></span>
+    <span rb-optional rb-match="div[class*='alert___']"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="input#username"
+      rb-match="input#username"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
     />
-    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Sign in</button>
+    <button type="submit" data-testid="submit" rb-match="button[type=submit]">Sign in</button>
   </body>
 </html>

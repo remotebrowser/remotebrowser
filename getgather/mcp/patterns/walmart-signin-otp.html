@@ -1,11 +1,11 @@
-<html gg-domain="walmart">
+<html rb-domain="walmart">
   <head>
     <title>Walmart Sign In - Enter Verification Code</title>
   </head>
   <body>
-    <h1 gg-match="h1.f3">Enter verification code</h1>
-    <span class="error-box" gg-optional gg-match="div#alert div.ld_u div"></span>
-    <p gg-optional gg-match="[data-testid='verifyotpform-description'] span[data-qm-mask='true']">
+    <h1 rb-match="h1.f3">Enter verification code</h1>
+    <span class="error-box" rb-optional rb-match="div#alert div.ld_u div"></span>
+    <p rb-optional rb-match="[data-testid='verifyotpform-description'] span[data-qm-mask='true']">
       Please enter the 6-digit verification code
     </p>
     <div
@@ -35,7 +35,7 @@
           padding: 0;
         "
         data-testid="otp-0"
-        gg-match="input#input-verificationCode"
+        rb-match="input#input-verificationCode"
       />
       <input
         name="otp-1"
@@ -54,7 +54,7 @@
           padding: 0;
         "
         data-testid="otp-1"
-        gg-match="input#input-verificationCode-1"
+        rb-match="input#input-verificationCode-1"
       />
       <input
         name="otp-2"
@@ -73,7 +73,7 @@
           padding: 0;
         "
         data-testid="otp-2"
-        gg-match="input#input-verificationCode-2"
+        rb-match="input#input-verificationCode-2"
       />
       <input
         name="otp-3"
@@ -92,7 +92,7 @@
           padding: 0;
         "
         data-testid="otp-3"
-        gg-match="input#input-verificationCode-3"
+        rb-match="input#input-verificationCode-3"
       />
       <input
         name="otp-4"
@@ -111,7 +111,7 @@
           padding: 0;
         "
         data-testid="otp-4"
-        gg-match="input#input-verificationCode-4"
+        rb-match="input#input-verificationCode-4"
       />
       <input
         name="otp-5"
@@ -130,7 +130,7 @@
           padding: 0;
         "
         data-testid="otp-5"
-        gg-match="input#input-verificationCode-5"
+        rb-match="input#input-verificationCode-5"
       />
     </div>
     <script>
@@ -182,7 +182,7 @@
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button[type='submit'][form$='-otp-form']:not([disabled])"
+      rb-match="button[type='submit'][form$='-otp-form']:not([disabled])"
     >
       Sign in
     </button>

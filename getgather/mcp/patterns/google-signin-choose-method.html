@@ -1,4 +1,4 @@
-<html gg-domain="google">
+<html rb-domain="google">
   <head>
     <title>Google Activity</title>
   </head>
@@ -11,32 +11,32 @@
     <button
       name="button"
       value="phone-tap-yes"
-      gg-optional
-      gg-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='39'][.//div[@jsname='fmcmS'][not(contains(., 'recovery'))]]"
+      rb-optional
+      rb-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='39'][.//div[@jsname='fmcmS'][not(contains(., 'recovery'))]]"
     ></button>
 
     <!-- Google Authenticator -->
     <button
       name="button"
       value="authenticator"
-      gg-optional
-      gg-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='6']"
+      rb-optional
+      rb-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='6']"
     ></button>
 
     <!-- SMS verification code -->
     <button
       name="button"
       value="sms"
-      gg-optional
-      gg-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='9']"
+      rb-optional
+      rb-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='9']"
     ></button>
 
     <!-- Tap Yes on recovery email device -->
     <button
       name="button"
       value="recovery-email-tap"
-      gg-optional
-      gg-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='39'][.//div[@jsname='fmcmS'][contains(., 'recovery')]]"
+      rb-optional
+      rb-match="//div[@jsname='EBHGs'][not(@aria-disabled='true')][@data-challengetype='39'][.//div[@jsname='fmcmS'][contains(., 'recovery')]]"
     ></button>
   </body>
 </html>

@@ -1,28 +1,28 @@
-<html gg-domain="linkedin">
+<html rb-domain="linkedin">
   <head>
     <title>Linkedin Sign In</title>
   </head>
   <body>
-    <span gg-optional gg-match="div#error-for-password"></span>
+    <span rb-optional rb-match="div#error-for-password"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="input#username"
+      rb-match="input#username"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button[data-litms-control-urn=login-submit]"
+      rb-match="button[data-litms-control-urn=login-submit]"
     >
       Sign in
     </button>

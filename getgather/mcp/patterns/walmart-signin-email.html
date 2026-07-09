@@ -1,17 +1,17 @@
-<html gg-domain="walmart" gg-action-delay="200">
+<html rb-domain="walmart" rb-action-delay="200">
   <head>
     <title>Walmart Sign In - Email or Phone</title>
   </head>
   <body>
     <span
       class="error-box"
-      gg-optional
-      gg-match="div[data-testid='dropdown'] section div span"
+      rb-optional
+      rb-match="div[data-testid='dropdown'] section div span"
     ></span>
     <span
       class="error-box"
-      gg-optional
-      gg-match="xpath=//span[contains(text(),'Please enter a valid number or email')]"
+      rb-optional
+      rb-match="xpath=//span[contains(text(),'Please enter a valid number or email')]"
     ></span>
     <input
       autofocus
@@ -19,12 +19,12 @@
       type="text"
       placeholder="Phone number or email (required)"
       data-testid="username"
-      gg-match="input[aria-label='Phone number or email (required)']"
+      rb-match="input[aria-label='Phone number or email (required)']"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button#login-continue-button:not([disabled])"
+      rb-match="button#login-continue-button:not([disabled])"
     >
       Continue
     </button>

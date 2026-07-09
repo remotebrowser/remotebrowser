@@ -1,11 +1,11 @@
-<html gg-domain="bestbuy">
+<html rb-domain="bestbuy">
   <head>
     <title>Best Buy Verification Code</title>
   </head>
   <body>
-    <p gg-optional gg-match="h1"></p>
-    <p gg-optional gg-match="div[role=alert]"></p>
-    <p gg-optional gg-match="form div.text-center"></p>
+    <p rb-optional rb-match="h1"></p>
+    <p rb-optional rb-match="div[role=alert]"></p>
+    <p rb-optional rb-match="form div.text-center"></p>
     <input
       autofocus
       name="verificationCode"
@@ -13,8 +13,8 @@
       inputmode="numeric"
       placeholder="Verification Code"
       data-testid="otp"
-      gg-match="input#verificationCode"
+      rb-match="input#verificationCode"
     />
-    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Confirm</button>
+    <button type="submit" data-testid="submit" rb-match="button[type=submit]">Confirm</button>
   </body>
 </html>
