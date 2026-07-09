@@ -25,6 +25,7 @@ from getgather.config import FRIENDLY_CHARS, settings
 from getgather.zen_distill import (
     Pattern,
     distill,
+    get_error,
     load_distillation_patterns,
     make_error_reporter,
     run_distillation_loop,
@@ -191,6 +192,32 @@ async def test_page_batch_extract_falls_back_to_none_on_invalid_result():
 
     assert result is None
     assert len(page.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_error_returns_rb_error_value():
+    distilled = '<html><body><div rb-stop rb-error="captcha"></div></body></html>'
+    assert await get_error(distilled) == "captcha"
+
+
+@pytest.mark.asyncio
+async def test_get_error_falls_back_to_gg_error():
+    distilled = '<html><body><div gg-stop gg-error="signin_error"></div></body></html>'
+    assert await get_error(distilled) == "signin_error"
+
+
+@pytest.mark.asyncio
+async def test_get_error_prefers_rb_error_over_gg_error():
+    distilled = (
+        '<html><body><div rb-stop rb-error="new_code" gg-error="old_code"></div></body></html>'
+    )
+    assert await get_error(distilled) == "new_code"
+
+
+@pytest.mark.asyncio
+async def test_get_error_returns_none_without_error_attr():
+    distilled = '<html><body><div rb-stop rb-match="h1"></div></body></html>'
+    assert await get_error(distilled) is None
 
 
 @pytest.mark.asyncio
