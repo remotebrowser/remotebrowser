@@ -113,6 +113,17 @@ def get_stop_attr(el: Tag) -> str | None:
     return _first_str(el.get("gg-stop"))
 
 
+def get_optional_attr(el: Tag) -> str | None:
+    """Return the rb-optional (or gg-optional) value, coerced to a single string.
+
+    Like stop, optional is a flag (valueless when present), so presence is
+    checked via ``el.attrs`` rather than truthiness.
+    """
+    if "rb-optional" in el.attrs:
+        return _first_str(el.get("rb-optional"))
+    return _first_str(el.get("gg-optional"))
+
+
 def find_stop_elements(pattern: BeautifulSoup) -> list[Tag]:
     """Return elements carrying rb-stop (or gg-stop), deduped in document order."""
     seen: set[int] = set()
@@ -437,7 +448,7 @@ async def distill(
             is_html = html_attr is not None
             query_key = str(next_query_key)
             next_query_key += 1
-            optional = target.get("gg-optional") is not None
+            optional = get_optional_attr(target) is not None
 
             target_specs.append({
                 "target": target,

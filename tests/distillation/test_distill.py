@@ -347,7 +347,7 @@ async def test_distill_allows_optional_batched_target_to_be_missing(monkeypatch:
             """
             <html rb-priority="1">
                 <button rb-match="button.login"></button>
-                <span rb-match=".helper" gg-optional></span>
+                <span rb-match=".helper" rb-optional></span>
             </html>
             """,
             "html.parser",
