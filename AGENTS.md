@@ -58,24 +58,24 @@ All brands are declared in YAML at `getgather/mcp/mcp-tools.yaml`. `declarative_
 
 ### Distillation engine (`zen_distill.py`)
 
-The extraction approach: HTML pattern files in `getgather/mcp/patterns/*.html` contain minimal skeletons with `gg-match="<selector>"` attributes. For each page load, `distill()` batch-extracts all selectors via CDP, finds the best-matching pattern by priority, and renders a "distilled" form. Key markers:
+The extraction approach: HTML pattern files in `getgather/mcp/patterns/*.html` contain minimal skeletons with `rb-match="<selector>"` attributes. For each page load, `distill()` batch-extracts all selectors via CDP, finds the best-matching pattern by priority, and renders a "distilled" form. Key markers:
 
-- `gg-match="selector"` — required selector
-- `gg-match-html="selector"` — capture inner HTML instead of text
-- `gg-optional` — don't fail the pattern if missing
-- `gg-priority="N"` — lower wins
-- `gg-domain="example.com"` — only try this pattern on matching hostnames
-- `gg-stop` — pattern signals the flow is finished (terminate)
-- `gg-error="code"` — pattern signals a known error
-- `gg-autoclick` — after fields fill, auto-click
-- `gg-convert="file.json"` — point at a sibling JSON converter for structured output
+- `rb-match="selector"` — required selector
+- `rb-match-html="selector"` — capture inner HTML instead of text
+- `rb-optional` — don't fail the pattern if missing
+- `rb-priority="N"` — lower wins
+- `rb-domain="example.com"` — only try this pattern on matching hostnames
+- `rb-stop` — pattern signals the flow is finished (terminate)
+- `rb-error="code"` — pattern signals a known error
+- `rb-autoclick` — after fields fill, auto-click
+- `rb-convert="file.json"` — point at a sibling JSON converter for structured output
 - An inline `<script type="application/json">` in the pattern can also define the converter (`rows` selector + `columns` list)
 
-The polling loop (`run_distillation_loop` / `zen_post_dpage`) re-distills repeatedly, autofilling inputs (mapped by `name` to form fields) and submitting when all expected fields are set, until a `gg-stop` pattern matches or timeout.
+The polling loop (`run_distillation_loop` / `zen_post_dpage`) re-distills repeatedly, autofilling inputs (mapped by `name` to form fields) and submitting when all expected fields are set, until a `rb-stop` pattern matches or timeout.
 
 ### dpage sign-in flow
 
-When a tool is called and the user isn't signed in, `remote_zen_dpage_mcp_tool` returns `{url, signin_id, message}`. The client opens the URL in a browser, which renders `dpage/{id}` — a server-proxied form driven by distillation patterns. After sign-in completes (a pattern with `gg-stop` matches), `check_signin` returns SUCCESS and the original tool can be re-called to fetch data. `x-incognito: 1` header opens an ephemeral browser; `x-signin-id` header resumes a specific sign-in browser.
+When a tool is called and the user isn't signed in, `remote_zen_dpage_mcp_tool` returns `{url, signin_id, message}`. The client opens the URL in a browser, which renders `dpage/{id}` — a server-proxied form driven by distillation patterns. After sign-in completes (a pattern with `rb-stop` matches), `check_signin` returns SUCCESS and the original tool can be re-called to fetch data. `x-incognito: 1` header opens an ephemeral browser; `x-signin-id` header resumes a specific sign-in browser.
 
 Browser identity: `browser_id` is derived from the auth user (`{sub}-{auth_provider}`) so each user has one persistent remote browser. Incognito browsers get an `E`-prefixed random ID.
 
