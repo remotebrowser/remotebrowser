@@ -185,14 +185,23 @@ class CDPPage:
             return str(html) if html is not None else ""
         return html
 
-    async def screenshot(self) -> bytes:
-        """Capture a full-page PNG screenshot and return the raw bytes."""
+    async def screenshot(self, *, full_page: bool = True) -> bytes:
+        """Capture a PNG screenshot and return the raw bytes."""
         result = await self._client.send(
             "Page.captureScreenshot",
-            {"format": "png", "captureBeyondViewport": True},
+            {"format": "png", "captureBeyondViewport": full_page},
             session_id=self._session_id,
         )
         data = result.get("data")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         if not isinstance(data, str):
             raise CDPError("Page.captureScreenshot returned no image data")
         return base64.b64decode(data)
+
+    async def save_screenshot(self, filename: str, full_page: bool = True) -> str:
+        """Capture a screenshot and write it to `filename`. Mirrors the
+        zendriver `Tab.save_screenshot` signature so both page types work with
+        `capture_page_artifacts`."""
+        data = await self.screenshot(full_page=full_page)
+        with open(filename, "wb") as f:
+            f.write(data)
+        return filename

@@ -11,6 +11,7 @@ from getgather.browsers.router import strip_browser_id_from_target_id
 from getgather.cdp_client import CDPPage, PageNotFoundError, open_cdp
 from getgather.mcp.dpage import distill_post_loop
 from getgather.zen_distill import (
+    capture_page_artifacts,
     convert,
     distill,
     load_distillation_patterns,
@@ -30,22 +31,22 @@ async def report_no_pattern_match(
 ) -> None:
     """Attach a screenshot + HTML of the page to Sentry when no distillation
     pattern matches, so the missing pattern can be triaged."""
-    screenshot: bytes | None = None
-    html: bytes | None = None
+    screenshot_path = None
+    html_path = None
     try:
-        screenshot = await page.screenshot()
+        screenshot_path, html_path, _ = await capture_page_artifacts(
+            page,  # type: ignore[arg-type]
+            identifier=browser_id,
+            prefix="no_pattern_match",
+        )
     except Exception as exc:
-        logger.warning(f"Failed to capture screenshot for no-pattern-match: {exc}")
-    try:
-        html = (await page.get_content()).encode("utf-8")
-    except Exception as exc:
-        logger.warning(f"Failed to capture HTML for no-pattern-match: {exc}")
+        logger.warning(f"Failed to capture no-pattern-match artifacts: {exc}")
 
     report_distill_error_to_sentry(
         error=error,
         context={"browser_id": browser_id, "hostname": hostname, "url": current_url},
-        screenshot=screenshot,
-        html=html,
+        screenshot=screenshot_path,
+        html=html_path,
     )
 
 
