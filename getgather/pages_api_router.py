@@ -10,7 +10,12 @@ from getgather.browser import find_browser_tab, get_remote_browser
 from getgather.browsers.router import strip_browser_id_from_target_id
 from getgather.cdp_client import PageNotFoundError, open_cdp
 from getgather.mcp.dpage import distill_post_loop
-from getgather.zen_distill import convert, distill, load_distillation_patterns
+from getgather.zen_distill import (
+    convert,
+    distill,
+    load_distillation_patterns,
+    zen_report_distill_error,
+)
 
 router = APIRouter()
 
@@ -93,7 +98,18 @@ async def get_page_distilled(browser_id: str, page_id: str) -> JSONResponse | HT
 
             match = await distill(hostname, page, patterns)  # type: ignore[arg-type]
             if not match:
-                raise HTTPException(status_code=502, detail="No matching pattern found for page")
+                error = HTTPException(status_code=502, detail="No matching pattern found for page")
+                browser = await get_remote_browser(browser_id)
+                tab = find_browser_tab(browser, page_id) if browser else None
+                await zen_report_distill_error(
+                    error=error,
+                    page=tab,
+                    profile_id=browser_id,
+                    location="get_page_distilled",
+                    hostname=hostname,
+                    iteration=0,
+                )
+                raise error
 
             converted = await convert(match.distilled, pattern_path=match.name)
             if converted:
