@@ -225,12 +225,12 @@ async def get_browsing_history() -> dict[str, Any]:
                                 }},
                                 {{
                                     "name": "url",
-                                    "selector": "div[class*='uncoverable-faceout'] > a[class='a-link-normal aok-block']",
+                                    "selector": "div[class*='uncoverable-faceout'] a[class='a-link-normal aok-block']",
                                     "attribute": "href"
                                 }},
                                 {{
                                     "name": "image_url",
-                                    "selector": "a > div > img.a-dynamic-image",
+                                    "selector": "a img.a-dynamic-image",
                                     "attribute": "src"
                                 }},
                                 {{
