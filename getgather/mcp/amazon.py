@@ -270,12 +270,12 @@ async def _get_browsing_history(country: AmazonCountry) -> dict[str, Any]:
                                 }},
                                 {{
                                     "name": "url",
-                                    "selector": "div[class*='uncoverable-faceout'] > a[class='a-link-normal aok-block']",
+                                    "selector": "div[class*='uncoverable-faceout'] a[class='a-link-normal aok-block']",
                                     "attribute": "href"
                                 }},
                                 {{
                                     "name": "image_url",
-                                    "selector": "a > div > img.a-dynamic-image",
+                                    "selector": "a img.a-dynamic-image",
                                     "attribute": "src"
                                 }},
                                 {{
@@ -310,7 +310,7 @@ async def _get_browsing_history(country: AmazonCountry) -> dict[str, Any]:
                     f"Converted batch {start_index}-{end_index}: found {len(converted)} items"
                 )
                 for item in converted:
-                    item["url"] = f"{country.base_url}{item['url']}"
+                    item["url"] = f"{country.base_url}{item.get('url', '')}"
             else:
                 logger.warning(f"Conversion returned None for batch {start_index}-{end_index}")
             return converted
