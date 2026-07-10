@@ -346,6 +346,36 @@ async def capture_page_artifacts(
     return screenshot_path, html_path, html_content
 
 
+def report_distill_error_to_sentry(
+    *,
+    error: Exception,
+    context: dict[str, Any],
+    screenshot: Path | bytes | None = None,
+    html: Path | bytes | None = None,
+) -> None:
+    """Attach a page screenshot + HTML to a Sentry event for distillation
+    triage. Each artifact may be a file `Path` (attached by path) or raw
+    `bytes` (attached inline). No-op when no Sentry DSN is configured."""
+    if not settings.SENTRY_DSN:
+        return
+
+    def _attach(
+        scope: Any, *, filename: str, source: Path | bytes | None, content_type: str
+    ) -> None:
+        if source is None:
+            return
+        if isinstance(source, Path):
+            scope.add_attachment(filename=source.name, path=str(source))
+        else:
+            scope.add_attachment(filename=filename, bytes=source, content_type=content_type)
+
+    with sentry_sdk.isolation_scope() as scope:
+        scope.set_context("distill", context)
+        _attach(scope, filename="page.png", source=screenshot, content_type="image/png")
+        _attach(scope, filename="page.html", source=html, content_type="text/html")
+        sentry_sdk.capture_exception(error)
+
+
 async def zen_report_distill_error(
     *,
     error: Exception,
@@ -384,21 +414,12 @@ async def zen_report_distill_error(
         },
     )
 
-    if settings.SENTRY_DSN:
-        with sentry_sdk.isolation_scope() as scope:
-            scope.set_context("distill", context)
-            if screenshot_path:
-                scope.add_attachment(
-                    filename=screenshot_path.name,
-                    path=str(screenshot_path),
-                )
-            if html_path:
-                scope.add_attachment(
-                    filename=html_path.name,
-                    path=str(html_path),
-                )
-
-            sentry_sdk.capture_exception(error)
+    report_distill_error_to_sentry(
+        error=error,
+        context=context,
+        screenshot=screenshot_path,
+        html=html_path,
+    )
 
 
 def make_error_reporter(browser: zd.Browser, location: str | None = None) -> ErrorReporter:

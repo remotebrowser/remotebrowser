@@ -2,7 +2,6 @@ import os
 import urllib.parse
 from typing import Any
 
-import sentry_sdk
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from loguru import logger
@@ -10,9 +9,13 @@ from loguru import logger
 from getgather.browser import find_browser_tab, get_remote_browser
 from getgather.browsers.router import strip_browser_id_from_target_id
 from getgather.cdp_client import CDPPage, PageNotFoundError, open_cdp
-from getgather.config import settings
 from getgather.mcp.dpage import distill_post_loop
-from getgather.zen_distill import convert, distill, load_distillation_patterns
+from getgather.zen_distill import (
+    convert,
+    distill,
+    load_distillation_patterns,
+    report_distill_error_to_sentry,
+)
 
 router = APIRouter()
 
@@ -27,34 +30,23 @@ async def report_no_pattern_match(
 ) -> None:
     """Attach a screenshot + HTML of the page to Sentry when no distillation
     pattern matches, so the missing pattern can be triaged."""
-    if not settings.SENTRY_DSN:
-        return
-
     screenshot: bytes | None = None
-    html: str | None = None
+    html: bytes | None = None
     try:
         screenshot = await page.screenshot()
     except Exception as exc:
         logger.warning(f"Failed to capture screenshot for no-pattern-match: {exc}")
     try:
-        html = await page.get_content()
+        html = (await page.get_content()).encode("utf-8")
     except Exception as exc:
         logger.warning(f"Failed to capture HTML for no-pattern-match: {exc}")
 
-    with sentry_sdk.isolation_scope() as scope:
-        scope.set_context(
-            "distill",
-            {"browser_id": browser_id, "hostname": hostname, "url": current_url},
-        )
-        if screenshot:
-            scope.add_attachment(filename="page.png", bytes=screenshot, content_type="image/png")
-        if html:
-            scope.add_attachment(
-                filename="page.html",
-                bytes=html.encode("utf-8"),
-                content_type="text/html",
-            )
-        sentry_sdk.capture_exception(error)
+    report_distill_error_to_sentry(
+        error=error,
+        context={"browser_id": browser_id, "hostname": hostname, "url": current_url},
+        screenshot=screenshot,
+        html=html,
+    )
 
 
 @router.get("/api/v1/browsers/{browser_id}/pages")
