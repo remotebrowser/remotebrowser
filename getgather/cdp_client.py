@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from typing import Any, cast
 
@@ -176,3 +177,22 @@ class CDPPage:
         if isinstance(remote_result, dict):
             return remote_result.get("value")  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportUnknownVariableType]
         return None
+
+    async def get_content(self) -> str:
+        """Return the full outer HTML of the page."""
+        html = await self.evaluate("document.documentElement.outerHTML")
+        if not isinstance(html, str):
+            return str(html) if html is not None else ""
+        return html
+
+    async def screenshot(self) -> bytes:
+        """Capture a full-page PNG screenshot and return the raw bytes."""
+        result = await self._client.send(
+            "Page.captureScreenshot",
+            {"format": "png", "captureBeyondViewport": True},
+            session_id=self._session_id,
+        )
+        data = result.get("data")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+        if not isinstance(data, str):
+            raise CDPError("Page.captureScreenshot returned no image data")
+        return base64.b64decode(data)
