@@ -7,22 +7,22 @@
     "npm": "10.8.2"
   },
   "scripts": {
-    "dev": "npm run dev:backend",
-    "dev:backend": "uv run -m uvicorn getgather.main:app --reload --host 127.0.0.1 --port 23456",
-    "frontend:check:format": "prettier --check \"**/*.{html,js,jsx,ts,tsx,css,json,md}\" \"!**/rfb.min.js\"",
-    "frontend:format": "prettier --write \"**/*.{html,js,jsx,ts,tsx,css,json,md}\" \"!**/rfb.min.js\"",
-    "backend:check:format": "uv run ruff check && uv run ruff format --check",
-    "backend:format": "uv run ruff format && uv run ruff check --fix",
-    "backend:check:type-safety": "uv run pyright .",
-    "yaml:check:format": "uv run yamlfix --check $(find . -type f -name '*.yml' -o -name '*.yaml' | grep -v -E '\\.venv/|node_modules/|mcp-tools\\.yaml')",
-    "yaml:format": "uv run yamlfix $(find . -type f -name '*.yml' -o -name '*.yaml' | grep -v -E '\\.venv/|node_modules/|mcp-tools\\.yaml')",
-    "patterns:check:testids": "uv run python scripts/check_pattern_testids.py",
-    "check:all": "npm run frontend:check:format && npm run backend:check:format && npm run backend:check:type-safety && npm run yaml:check:format && npm run patterns:check:testids",
-    "package": "uv run --group dev pyinstaller remotebrowser-mcp.spec",
+    "dev": "make dev",
+    "dev:backend": "make dev",
+    "frontend:check:format": "make check-frontend-format",
+    "frontend:format": "make format-frontend",
+    "backend:check:format": "make check-backend-format",
+    "backend:format": "make format-backend",
+    "backend:check:type-safety": "make typecheck",
+    "yaml:check:format": "make check-yaml-format",
+    "yaml:format": "make format-yaml",
+    "patterns:check:testids": "make check-patterns",
+    "check:all": "make check",
+    "format": "make format",
+    "package": "make package",
     "prepare": "husky"
   },
   "devDependencies": {
-    "husky": "^9.1.7",
-    "prettier": "^3.7.3"
+    "husky": "^9.1.7"
   }
 }

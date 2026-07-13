@@ -11,22 +11,21 @@ A FastAPI + FastMCP server (`getgather`) that exposes MCP tools for extracting p
 ## Common Commands
 
 ```bash
-# Dev server (requires CHROMEFLEET_URL)
-npm run dev                      # uvicorn on :23456, --reload
-# or: uv run -m uvicorn getgather.main:app --port 23456
+# Dev server
+make dev                                  # uvicorn on :23456, --reload
 
 # Static analysis (matches CI + pre-push hook)
-npm run check:all                # all of the below
-npm run backend:check:format     # ruff check + ruff format --check
-npm run backend:format           # ruff format + ruff check --fix
-npm run backend:check:type-safety # pyright . (strict mode)
-npm run frontend:check:format    # prettier check on html/js/ts/css/json/md
-npm run yaml:check:format        # yamlfix --check (skips mcp-tools.yaml)
+make check                                # all of the below
+make check-backend-format                 # ruff check + ruff format --check
+make format-backend                       # ruff format + ruff check --fix
+make typecheck                            # pyright . (strict mode)
+make check-frontend-format                # prettier check on html/js/ts/css/json/md
+make check-yaml-format                    # yamlfix --check (skips mcp-tools.yaml)
 
 # Tests (markers: mcp, distill; anything else = unit)
-uv run pytest -m "not api and not webui and not mcp and not distill"  # unit tests (CI)
-uv run pytest -m "mcp" -s -p no:xdist                                  # integration vs live server
-uv run pytest -m "distill" -s -p no:xdist                              # distillation vs Chrome Fleet
+make test                                 # unit tests (CI)
+uv run pytest -m "mcp" -s -p no:xdist     # integration vs live server
+uv run pytest -m "distill" -s -p no:xdist # distillation vs Chrome Fleet
 uv run pytest tests/mcp/test_goodreads.py                              # single test file
 uv run pytest tests/mcp/test_goodreads.py::test_goodreads_login_and_get_book_list
 
@@ -88,6 +87,6 @@ Browser identity: `browser_id` is derived from the auth user (`{sub}-{auth_provi
 - Python 3.11+, pyright **strict** mode — avoid `Any` drift, annotate returns
 - ruff lint selects `I, UP045, UP006, UP007` (isort + modern typing) with `line-length = 100`
 - `mcp-tools.yaml` is intentionally excluded from yamlfix — edit it hand-formatted
-- Pre-push hook runs `npm run check:all`; don't bypass with `--no-verify`
+- Pre-push hook runs `make check`; don't bypass with `--no-verify`.
 - Pattern files live beside patterns at `getgather/mcp/patterns/` — keep them minimal; they're parsed by BeautifulSoup, not rendered
 - Settings via pydantic `BaseSettings` reads `.env`; see `.env.template` for keys
