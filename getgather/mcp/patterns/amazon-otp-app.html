@@ -1,13 +1,13 @@
-<html gg-domain="amazon">
+<html rb-domain="amazon">
   <head>
     <title>Amazon Verification</title>
   </head>
   <body>
-    <span gg-optional gg-match="div#verifyAlerts"></span>
-    <h2 gg-match="//span[contains(normalize-space(.), 'Open your Amazon shopping app')]">
+    <span rb-optional rb-match="div#verifyAlerts"></span>
+    <h2 rb-match="//span[contains(normalize-space(.), 'Open your Amazon shopping app')]">
       Open your Amazon shopping app
     </h2>
-    <p gg-optional gg-match="div#signInPrompt span"></p>
+    <p rb-optional rb-match="div#signInPrompt span"></p>
     <input
       autofocus
       name="otp"
@@ -15,12 +15,12 @@
       inputmode="numeric"
       placeholder="Enter security code"
       data-testid="otp"
-      gg-match="input#input-box-otp"
+      rb-match="input#input-box-otp"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="span#cvf-submit-otp-button input[type=submit]"
+      rb-match="span#cvf-submit-otp-button input[type=submit]"
     >
       Verify
     </button>

@@ -1,24 +1,24 @@
-<html gg-domain="netflix">
+<html rb-domain="netflix">
   <head>
     <title>Netflix Sign In</title>
   </head>
   <body>
-    <span gg-optional gg-match="div[data-uia='alert-message']"></span>
+    <span rb-optional rb-match="div[data-uia='alert-message']"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="input[name='userLoginId']"
+      rb-match="input[name='userLoginId']"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input[name='password']"
+      rb-match="input[name='password']"
     />
-    <button type="submit" data-testid="submit" gg-match="button[type='submit']">Sign in</button>
+    <button type="submit" data-testid="submit" rb-match="button[type='submit']">Sign in</button>
   </body>
 </html>

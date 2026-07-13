@@ -1,14 +1,14 @@
-<html gg-domain="linkedin">
+<html rb-domain="linkedin">
   <head>
     <title>Linkedin Feed</title>
   </head>
   <body>
     <!-- Wait for feed items to load -->
-    <div gg-match="div[data-view-name='feed-full-update']"></div>
+    <div rb-match="div[data-view-name='feed-full-update']"></div>
     <div
-      gg-convert="linkedin-feed.json"
-      gg-match-html="div.scaffold-finite-scroll__content"
-      gg-stop
+      rb-convert="linkedin-feed.json"
+      rb-match-html="div.scaffold-finite-scroll__content"
+      rb-stop
     ></div>
   </body>
 </html>

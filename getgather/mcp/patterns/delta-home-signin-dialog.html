@@ -1,23 +1,23 @@
-<html gg-domain="delta" gg-priority="2">
+<html rb-domain="delta" rb-priority="2">
   <body>
-    <div gg-match="div.login-modal-container"></div>
-    <p gg-optional gg-match="idp-form-alert div p span"></p>
+    <div rb-match="div.login-modal-container"></div>
+    <p rb-optional rb-match="idp-form-alert div p span"></p>
     <input
       autofocus
       placeholder="SkyMiles Number Or Username"
       name="userid"
       type="text"
       data-testid="username"
-      gg-match="input#userId"
+      rb-match="input#userId"
     />
     <input
       placeholder="Password"
       name="password"
       type="password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
     />
-    <button type="submit" data-testid="submit" gg-match="button[data-cy='idp-button-Log In']">
+    <button type="submit" data-testid="submit" rb-match="button[data-cy='idp-button-Log In']">
       Log In
     </button>
   </body>

@@ -1,12 +1,12 @@
-<html gg-domain="seatgeek">
+<html rb-domain="seatgeek">
   <head>
     <title>SeatGeek Signin</title>
   </head>
   <body>
     <div>
-      <h3 gg-match="h3#login-heading"></h3>
-      <p gg-match="p#login-description"></p>
-      <p gg-optional gg-match="div[data-testid='error']"></p>
+      <h3 rb-match="h3#login-heading"></h3>
+      <p rb-match="p#login-description"></p>
+      <p rb-optional rb-match="div[data-testid='error']"></p>
       <div class="otp-container">
         <input
           autofocus
@@ -14,48 +14,48 @@
           type="text"
           inputmode="numeric"
           data-testid="otp-0"
-          gg-match="input[aria-label='6-digit code digit 1']"
+          rb-match="input[aria-label='6-digit code digit 1']"
         />
         <input
           name="otp-2"
           type="text"
           inputmode="numeric"
           data-testid="otp-1"
-          gg-match="input[aria-label='6-digit code digit 2']"
+          rb-match="input[aria-label='6-digit code digit 2']"
         />
         <input
           name="otp-3"
           type="text"
           inputmode="numeric"
           data-testid="otp-2"
-          gg-match="input[aria-label='6-digit code digit 3']"
+          rb-match="input[aria-label='6-digit code digit 3']"
         />
         <input
           name="otp-4"
           type="text"
           inputmode="numeric"
           data-testid="otp-3"
-          gg-match="input[aria-label='6-digit code digit 4']"
+          rb-match="input[aria-label='6-digit code digit 4']"
         />
         <input
           name="otp-5"
           type="text"
           inputmode="numeric"
           data-testid="otp-4"
-          gg-match="input[aria-label='6-digit code digit 5']"
+          rb-match="input[aria-label='6-digit code digit 5']"
         />
         <input
           name="otp-6"
           type="text"
           inputmode="numeric"
           data-testid="otp-5"
-          gg-match="input[aria-label='6-digit code digit 6']"
+          rb-match="input[aria-label='6-digit code digit 6']"
         />
       </div>
       <button
         type="submit"
         data-testid="submit"
-        gg-match="//button/span/span[contains(text(), 'Confirm')]"
+        rb-match="//button/span/span[contains(text(), 'Confirm')]"
       >
         Confirm
       </button>

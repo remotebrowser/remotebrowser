@@ -1,20 +1,20 @@
-<html gg-domain="gofood" gg-priority="3">
+<html rb-domain="gofood" rb-priority="3">
   <head>
     <title>GoFood Login</title>
   </head>
   <body>
-    <h1 gg-match="p.gf-heading-xl">Enter your phone number</h1>
-    <p gg-match="p.gf-body-m">You can log in or make an account</p>
+    <h1 rb-match="p.gf-heading-xl">Enter your phone number</h1>
+    <p rb-match="p.gf-body-m">You can log in or make an account</p>
     <div class="phone-input">
-      <label gg-match="p.gf-label-m">Phone number</label>
+      <label rb-match="p.gf-label-m">Phone number</label>
       <input
         type="tel"
         name="phone"
         data-testid="phone"
-        gg-match="input[data-testid='phone-number-field']"
+        rb-match="input[data-testid='phone-number-field']"
         placeholder="Phone number"
       />
     </div>
-    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Continue</button>
+    <button type="submit" data-testid="submit" rb-match="button[type=submit]">Continue</button>
   </body>
 </html>

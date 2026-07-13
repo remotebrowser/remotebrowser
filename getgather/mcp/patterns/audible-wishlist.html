@@ -1,12 +1,12 @@
-<html gg-domain="audible">
+<html rb-domain="audible">
   <body>
     <div>
       <div
-        gg-convert="audible-wishlist.json"
-        gg-match="//a[contains(text(), 'Wish List') and contains(@class, 'bc-tab-active')]"
-        gg-stop
+        rb-convert="audible-wishlist.json"
+        rb-match="//a[contains(text(), 'Wish List') and contains(@class, 'bc-tab-active')]"
+        rb-stop
       ></div>
-      <div gg-match-html="div#adbl-library-content-main" gg-stop></div>
+      <div rb-match-html="div#adbl-library-content-main" rb-stop></div>
     </div>
   </body>
 </html>

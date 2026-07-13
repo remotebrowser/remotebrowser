@@ -1,17 +1,17 @@
-<html gg-domain="marriott">
+<html rb-domain="marriott">
   <body>
-    <span gg-optional gg-match="div[data-testid='verify-your-code-form-error']"></span>
+    <span rb-optional rb-match="div[data-testid='verify-your-code-form-error']"></span>
     <input
       autofocus
       type="number"
       name="code"
       data-testid="otp"
-      gg-match="input[name='input-text-Verification Code']"
+      rb-match="input[name='input-text-Verification Code']"
     />
     <button
-      gg-autoclick
+      rb-autoclick
       type="submit"
-      gg-match="button[data-testid='verify-button']:not([disabled])"
+      rb-match="button[data-testid='verify-button']:not([disabled])"
     >
       Verify
     </button>

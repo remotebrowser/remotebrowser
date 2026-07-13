@@ -1,20 +1,20 @@
-<html gg-domain="jetblue" gg-priority="2">
+<html rb-domain="jetblue" rb-priority="2">
   <body>
-    <p gg-optional gg-match="div.infobox-error"></p>
-    <h2 gg-match="h2#first-focus"></h2>
-    <div gg-match="p.okta-form-subtitle"></div>
+    <p rb-optional rb-match="div.infobox-error"></p>
+    <h2 rb-match="h2#first-focus"></h2>
+    <div rb-match="p.okta-form-subtitle"></div>
     <input
       autofocus
       type="text"
       name="otp"
       placeholder="Verification code"
       data-testid="otp"
-      gg-match="input[name='credentials.passcode']"
+      rb-match="input[name='credentials.passcode']"
     />
     <button
       type="submit"
-      gg-autoclick
-      gg-match="div.o-form-button-bar input[type=submit]:not([disabled])"
+      rb-autoclick
+      rb-match="div.o-form-button-bar input[type=submit]:not([disabled])"
     >
       Verify
     </button>

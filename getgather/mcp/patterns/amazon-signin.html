@@ -1,27 +1,27 @@
-<html gg-domain="amazon">
+<html rb-domain="amazon">
   <head>
     <title>Amazon Sign In</title>
   </head>
   <body>
-    <span gg-optional gg-match="div#auth-email-missing-alert"></span>
-    <span gg-optional gg-match="div#auth-password-missing-alert"></span>
-    <span gg-optional gg-match="div#auth-error-message-box"></span>
+    <span rb-optional rb-match="div#auth-email-missing-alert"></span>
+    <span rb-optional rb-match="div#auth-password-missing-alert"></span>
+    <span rb-optional rb-match="div#auth-error-message-box"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email or mobile phone number"
       data-testid="email"
-      gg-match="//input[@id='ap_email' and not(@type='hidden')]"
+      rb-match="//input[@id='ap_email' and not(@type='hidden')]"
     />
     <input
       name="password"
       type="password"
       placeholder="Password"
       data-testid="password"
-      gg-match="input#ap_password"
+      rb-match="input#ap_password"
     />
-    <button type="submit" data-testid="submit" gg-match="input#signInSubmit[type=submit]">
+    <button type="submit" data-testid="submit" rb-match="input#signInSubmit[type=submit]">
       Sign in
     </button>
   </body>

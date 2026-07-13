@@ -1,11 +1,11 @@
-<html gg-domain="youtube" gg-priority="-2">
+<html rb-domain="youtube" rb-priority="-2">
   <body>
-    <h1 gg-match="ytd-channel-renderer"></h1>
+    <h1 rb-match="ytd-channel-renderer"></h1>
     <div
-      gg-convert="youtube-channel-subscriptions.json"
-      gg-match="ytd-channel-renderer a.channel-link[href^='/@']"
-      gg-stop
+      rb-convert="youtube-channel-subscriptions.json"
+      rb-match="ytd-channel-renderer a.channel-link[href^='/@']"
+      rb-stop
     ></div>
-    <div gg-match-html="ytd-section-list-renderer" gg-stop></div>
+    <div rb-match-html="ytd-section-list-renderer" rb-stop></div>
   </body>
 </html>

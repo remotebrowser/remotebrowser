@@ -1,12 +1,12 @@
-<html gg-domain="google">
+<html rb-domain="google">
   <head>
     <title>Google Activity</title>
   </head>
   <body>
-    <h2 gg-match="//div[contains(normalize-space(.), 'My Google Activity')]"></h2>
+    <h2 rb-match="//div[contains(normalize-space(.), 'My Google Activity')]"></h2>
     <p
-      gg-match="//p[contains(normalize-space(.), 'You can see and delete your activity using the controls on this page.')]"
+      rb-match="//p[contains(normalize-space(.), 'You can see and delete your activity using the controls on this page.')]"
     ></p>
-    <div gg-convert="google-activity.json" gg-match-html="body" gg-stop></div>
+    <div rb-convert="google-activity.json" rb-match-html="body" rb-stop></div>
   </body>
 </html>

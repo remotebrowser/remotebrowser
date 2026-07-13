@@ -1,24 +1,24 @@
-<html gg-domain="thriftbooks">
+<html rb-domain="thriftbooks">
   <head>
     <title>ThriftBooks Sign In</title>
   </head>
   <body>
-    <p gg-optional gg-match="div#emailErrorContainer"></p>
+    <p rb-optional rb-match="div#emailErrorContainer"></p>
     <input
       type="email"
       name="email"
       data-testid="email"
-      gg-match="input#ExistingAccount_EmailAddress"
+      rb-match="input#ExistingAccount_EmailAddress"
       placeholder="Email Address"
     />
     <input
       type="password"
       name="password"
       data-testid="password"
-      gg-match="input#ExistingAccount_Password"
+      rb-match="input#ExistingAccount_Password"
       placeholder="Password"
     />
-    <button type="submit" data-testid="submit" gg-match="div.LoginBox-submitArea input.Button">
+    <button type="submit" data-testid="submit" rb-match="div.LoginBox-submitArea input.Button">
       Log In
     </button>
   </body>

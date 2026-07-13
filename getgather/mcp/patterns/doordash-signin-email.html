@@ -1,4 +1,4 @@
-<html gg-domain="doordash">
+<html rb-domain="doordash">
   <head>
     <title>Doordash Sign In Email</title>
   </head>
@@ -9,16 +9,16 @@
       type="email"
       placeholder="Email"
       data-testid="email"
-      gg-match="form#login-form-guided-email input[type=email]"
+      rb-match="form#login-form-guided-email input[type=email]"
     />
-    <button type="submit" data-testid="submit" gg-match="button#guided-submit-button">
+    <button type="submit" data-testid="submit" rb-match="button#guided-submit-button">
       Continue to sign in
     </button>
     <p
       id="error"
       style="color: red"
-      gg-optional
-      gg-match="form#login-form-guided-email span[id$=:r2:-error]"
+      rb-optional
+      rb-match="form#login-form-guided-email span[id$=:r2:-error]"
     />
   </body>
 </html>

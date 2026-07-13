@@ -1,21 +1,21 @@
-<html gg-domain="ikea">
+<html rb-domain="ikea">
   <head>
     <title>Ikea Signin</title>
   </head>
   <body>
-    <span gg-optional gg-match="span.form-field__message"></span>
+    <span rb-optional rb-match="span.form-field__message"></span>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="//input[@id='email' or @id='passwordless-primary-login-form-username']"
+      rb-match="//input[@id='email' or @id='passwordless-primary-login-form-username']"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//button[@type='submit' and contains(., 'Continue') and not(.//span[contains(@class, 'btn__loader')])]"
+      rb-match="//button[@type='submit' and contains(., 'Continue') and not(.//span[contains(@class, 'btn__loader')])]"
     >
       Continue
     </button>

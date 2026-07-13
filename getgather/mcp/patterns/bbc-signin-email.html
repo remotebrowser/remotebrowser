@@ -1,18 +1,18 @@
-<html gg-domain="bbc">
+<html rb-domain="bbc">
   <head>
     <title>BBC Sign In</title>
   </head>
   <body>
-    <p gg-optional gg-match="p.sb-form-message__content__text"></p>
-    <label gg-optional gg-match="label#username-label">Email</label>
+    <p rb-optional rb-match="p.sb-form-message__content__text"></p>
+    <label rb-optional rb-match="label#username-label">Email</label>
     <input
       autofocus
       name="email"
       type="email"
       placeholder="Email"
       data-testid="username"
-      gg-match="input#username"
+      rb-match="input#username"
     />
-    <button type="submit" data-testid="submit" gg-match="button[type=submit]">Sign in</button>
+    <button type="submit" data-testid="submit" rb-match="button[type=submit]">Sign in</button>
   </body>
 </html>

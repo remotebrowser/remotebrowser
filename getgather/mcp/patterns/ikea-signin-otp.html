@@ -1,9 +1,9 @@
-<html gg-domain="ikea">
+<html rb-domain="ikea">
   <head>
     <title>Ikea Signin</title>
   </head>
   <body>
-    <span gg-optional gg-match="span.form-field__message"></span>
+    <span rb-optional rb-match="span.form-field__message"></span>
     <input
       autofocus
       name="otc"
@@ -11,19 +11,19 @@
       inputmode="numeric"
       placeholder="OTP"
       data-testid="otp"
-      gg-match="input#passwordless-otp-verification-form-otp"
+      rb-match="input#passwordless-otp-verification-form-otp"
     />
     <input
-      gg-autoclick
+      rb-autoclick
       name="remember-me"
       type="checkbox"
-      gg-match="input#remember-me"
+      rb-match="input#remember-me"
       style="display: none"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//button[@type='submit' and contains(., 'Continue') and not(.//span[contains(@class, 'btn__loader')])]"
+      rb-match="//button[@type='submit' and contains(., 'Continue') and not(.//span[contains(@class, 'btn__loader')])]"
     >
       Continue
     </button>

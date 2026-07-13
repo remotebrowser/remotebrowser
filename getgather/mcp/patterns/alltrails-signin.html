@@ -1,27 +1,27 @@
-<html gg-domain="alltrails">
+<html rb-domain="alltrails">
   <head>
     <title>AllTrails Sign In</title>
   </head>
   <body>
-    <p gg-optional gg-match="div[class*=serverError]"></p>
+    <p rb-optional rb-match="div[class*=serverError]"></p>
     <input
       type="email"
       data-testid="email"
-      gg-match="input#userEmail"
+      rb-match="input#userEmail"
       placeholder="Email Address"
       name="email"
     />
     <input
       type="password"
       data-testid="password"
-      gg-match="input#userPassword"
+      rb-match="input#userPassword"
       placeholder="Password"
       name="password"
     />
     <button
       type="submit"
       data-testid="submit"
-      gg-match="button[data-testid='email-password-login-button']"
+      rb-match="button[data-testid='email-password-login-button']"
     >
       Sign in
     </button>

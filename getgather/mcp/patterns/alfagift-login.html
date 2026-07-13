@@ -1,5 +1,5 @@
 <!-- getgather/mcp/patterns/alfagift-login.html -->
-<html gg-domain="alfagift">
+<html rb-domain="alfagift">
   <head>
     <title>Alfagift Sign In</title>
   </head>
@@ -8,22 +8,22 @@
       name="email"
       type="text"
       data-testid="email"
-      gg-match="input[id='email']"
+      rb-match="input[id='email']"
       placeholder="Ketik user Anda"
     />
     <input
       name="password"
       type="password"
       data-testid="password"
-      gg-match="input[type='password']"
+      rb-match="input[type='password']"
       placeholder="Password"
     />
-    <div gg-optional gg-match-html="div.alert.alert-danger"></div>
-    <div gg-optional gg-match="p.text-center.mb-4"></div>
+    <div rb-optional rb-match-html="div.alert.alert-danger"></div>
+    <div rb-optional rb-match="p.text-center.mb-4"></div>
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//button[contains(normalize-space(.),'Masuk') or contains(normalize-space(.),'Log in')]"
+      rb-match="//button[contains(normalize-space(.),'Masuk') or contains(normalize-space(.),'Log in')]"
     >
       Masuk
     </button>

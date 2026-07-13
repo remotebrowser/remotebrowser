@@ -4,13 +4,13 @@
   </head>
 
   <body>
-    <p id="error-password" style="color: red" gg-optional gg-match="div#errorMsg-pw"></p>
+    <p id="error-password" style="color: red" rb-optional rb-match="div#errorMsg-pw"></p>
 
-    <p id="error" style="color: red" gg-optional gg-match="div.input-field__help-text--error"></p>
+    <p id="error" style="color: red" rb-optional rb-match="div.input-field__help-text--error"></p>
 
     <div>
-      <div gg-match="h2.auth-styles__title"></div>
-      <p gg-match="div.auth-styles__subtitle"></p>
+      <div rb-match="h2.auth-styles__title"></div>
+      <p rb-match="div.auth-styles__subtitle"></p>
     </div>
 
     <div class="vertical-radios">
@@ -20,16 +20,16 @@
           name="verify-device"
           id="verify-device"
           data-testid="signin-method-email"
-          gg-match="div.radioButton input[name='verify-device']"
+          rb-match="div.radioButton input[name='verify-device']"
           value="verify-device"
         />
-        <label for="verify-device" gg-match="div.radioButton span#email">Send Code</label>
+        <label for="verify-device" rb-match="div.radioButton span#email">Send Code</label>
       </div>
     </div>
     <button
       type="submit"
       data-testid="submit"
-      gg-match="//div[@class='verify-device']//button[contains(@class, 'btn-primary') and not(.//div[contains(@class, 'pp-loading-spinner')])]"
+      rb-match="//div[@class='verify-device']//button[contains(@class, 'btn-primary') and not(.//div[contains(@class, 'pp-loading-spinner')])]"
     >
       Sign in
     </button>

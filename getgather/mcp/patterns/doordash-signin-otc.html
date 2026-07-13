@@ -1,4 +1,4 @@
-<html gg-domain="doordash">
+<html rb-domain="doordash">
   <head>
     <title>Doordash Sign In Code</title>
   </head>
@@ -12,7 +12,7 @@
         }
       }
     </style>
-    <p id="message" gg-optional gg-match-html="form#otc-submit-form > span:nth-of-type(1)" />
+    <p id="message" rb-optional rb-match-html="form#otc-submit-form > span:nth-of-type(1)" />
     <div
       id="doordash-otc"
       style="
@@ -31,7 +31,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-0"
-        gg-match="form#otc-submit-form input[type=number][aria-label='0']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='0']"
         value="0"
       />
       <input
@@ -42,7 +42,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-1"
-        gg-match="form#otc-submit-form input[type=number][aria-label='1']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='1']"
         value="0"
       />
       <input
@@ -53,7 +53,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-2"
-        gg-match="form#otc-submit-form input[type=number][aria-label='2']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='2']"
         value="0"
       />
       <input
@@ -64,7 +64,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-3"
-        gg-match="form#otc-submit-form input[type=number][aria-label='3']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='3']"
         value="0"
       />
       <input
@@ -75,7 +75,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-4"
-        gg-match="form#otc-submit-form input[type=number][aria-label='4']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='4']"
         value="0"
       />
       <input
@@ -86,7 +86,7 @@
         pattern="[0-9]"
         maxlength="1"
         data-testid="otp-5"
-        gg-match="form#otc-submit-form input[type=number][aria-label='5']"
+        rb-match="form#otc-submit-form input[type=number][aria-label='5']"
         value="0"
       />
     </div>
@@ -123,9 +123,9 @@
     <p
       id="error"
       style="color: red"
-      gg-optional
-      gg-match="form#otc-submit-form span:nth-child(5)"
+      rb-optional
+      rb-match="form#otc-submit-form span:nth-child(5)"
     />
-    <button type="submit" data-testid="submit" gg-match="button#otc-submit-button">Sign in</button>
+    <button type="submit" data-testid="submit" rb-match="button#otc-submit-button">Sign in</button>
   </body>
 </html>

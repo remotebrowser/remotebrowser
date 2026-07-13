@@ -1,24 +1,24 @@
-<html gg-domain="ashley">
+<html rb-domain="ashley">
   <head>
     <title>Ashley Login</title>
   </head>
   <body>
-    <p gg-optional gg-match="div.notification.error"></p>
+    <p rb-optional rb-match="div.notification.error"></p>
     <input
       type="email"
       name="email"
       placeholder="email"
       data-testid="email"
-      gg-match="input#email"
+      rb-match="input#email"
     />
     <input
       type="password"
       name="password"
       placeholder="password"
       data-testid="password"
-      gg-match="input#password"
+      rb-match="input#password"
     />
-    <button type="submit" data-testid="submit" gg-match="form#login-form button[type=submit]">
+    <button type="submit" data-testid="submit" rb-match="form#login-form button[type=submit]">
       Log in
     </button>
   </body>
