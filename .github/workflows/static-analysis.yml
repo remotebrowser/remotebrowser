@@ -33,7 +33,7 @@ jobs:
         uses: ./.github/actions/prepare-frontend
 
       - name: Check frontend formatting
-        run: npm run frontend:check:format
+        run: make check-frontend-format
 
   backend-types:
     runs-on: ubuntu-22.04
