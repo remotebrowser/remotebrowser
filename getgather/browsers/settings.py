@@ -24,10 +24,10 @@ class BrowserSettings(BaseSettings):
     # WebSocket open timeout. Must exceed the Chrome Fleet cold-start (Daytona
     # sandbox create is ~45s p95), otherwise the connect loses the race against a
     # browser that is still launching.
-    CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS: float = 60.0
+    CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS: float = 120.0
     # Timeout for the CDP handshake (set_discover_targets / update_targets) after
     # the WebSocket opens. Also sized past cold-start for the same reason.
-    CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS: float = 60.0
+    CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS: float = 120.0
 
     # Local backend selection (ignored when CHROMEFLEET_URL is set)
     BROWSER_BACKEND: BrowserBackendName = "podman"
