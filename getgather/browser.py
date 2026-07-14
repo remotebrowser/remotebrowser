@@ -135,7 +135,7 @@ async def _create_browser_from_cdp_websocket(
             try:
                 await asyncio.wait_for(
                     instance.connection.send(zd.cdp.target.set_discover_targets(discover=True)),
-                    timeout=30.0,
+                    timeout=settings.CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS,
                 )
             except websockets.ConnectionClosedError as e:
                 raise ConnectionError(
@@ -144,11 +144,16 @@ async def _create_browser_from_cdp_websocket(
                 ) from e
             except asyncio.TimeoutError:
                 raise ConnectionError(
-                    f"CDP WebSocket handshake timed out after 30s: browser_id={browser_id}"
+                    f"CDP WebSocket handshake timed out after "
+                    f"{settings.CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS:g}s: "
+                    f"browser_id={browser_id}"
                 )
 
         try:
-            await asyncio.wait_for(instance.update_targets(), timeout=30.0)
+            await asyncio.wait_for(
+                instance.update_targets(),
+                timeout=settings.CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS,
+            )
         except websockets.ConnectionClosedError as e:
             raise ConnectionError(
                 f"CDP WebSocket closed by remote (code={e.rcvd.code if e.rcvd else 'unknown'},"
@@ -156,7 +161,9 @@ async def _create_browser_from_cdp_websocket(
             ) from e
         except asyncio.TimeoutError:
             raise ConnectionError(
-                f"CDP WebSocket update_targets timed out after 30s: browser_id={browser_id}"
+                f"CDP WebSocket update_targets timed out after "
+                f"{settings.CHROMEFLEET_CDP_HANDSHAKE_TIMEOUT_SECONDS:g}s: "
+                f"browser_id={browser_id}"
             )
     util.get_registered_instances().add(instance)
 
