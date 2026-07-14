@@ -304,18 +304,26 @@ class DaytonaBackend:
             if browser_id == winner_id:
                 continue
             self._locks.pop(browser_id, None)
-            # A cancelled candidate's sandbox may still be materializing server-side; retry the
-            # delete so we don't leak it (Daytona's auto_delete_interval is the final backstop).
-            for _ in range(6):
+            # A cancelled candidate's sandbox may still be materializing server-side: it can be
+            # not-yet-visible, or visible but mid state-change (delete rejected with "state change
+            # in progress"). Retry both cases until it settles, so we don't leak it (Daytona's
+            # auto_delete_interval is the final backstop).
+            deleted = False
+            for _ in range(8):
                 sandbox = await self._get(_sandbox_name(browser_id))
-                if sandbox is not None:
-                    try:
-                        await sandbox.delete()
-                        logger.info(f"Best-of-N: deleted losing candidate {browser_id}")
-                    except Exception as e:
-                        logger.warning(f"Best-of-N: failed to delete loser {browser_id}: {e}")
+                if sandbox is None:
+                    await asyncio.sleep(5)
+                    continue
+                try:
+                    await sandbox.delete()
+                    logger.info(f"Best-of-N: deleted losing candidate {browser_id}")
+                    deleted = True
                     break
-                await asyncio.sleep(5)
+                except Exception as e:
+                    logger.debug(f"Best-of-N: delete retry for loser {browser_id}: {e}")
+                    await asyncio.sleep(5)
+            if not deleted:
+                logger.warning(f"Best-of-N: gave up deleting loser {browser_id} (will auto-delete)")
 
     async def _ensure(self, browser_id: str) -> AsyncSandbox:
         name = _sandbox_name(browser_id)
