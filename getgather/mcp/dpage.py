@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from fastmcp.server.dependencies import get_http_headers
 from loguru import logger
 from nanoid import generate
+from zendriver.core.connection import ProtocolException
 
 from getgather.browser import (
     ElementConfig,
@@ -595,11 +596,18 @@ async def distill_post_loop(
                 element = await page_query_selector(page, selector, config=config)
                 if not element:
                     continue
-                if kind == "click":
-                    await element.click()
-                elif kind == "set_value":
-                    value = pending_action.get("value")
-                    await element.type_text(value if isinstance(value, str) else "")
+                try:
+                    if kind == "click":
+                        await element.click()
+                    elif kind == "set_value":
+                        value = pending_action.get("value")
+                        await element.type_text(value if isinstance(value, str) else "")
+                except ProtocolException as e:
+                    # Node went stale mid-action (page re-rendered the field). This fallback
+                    # is best-effort; the distillation loop re-distills and retries next
+                    # iteration, so skip this field rather than 500 the whole request.
+                    logger.warning(f"Fallback {kind} on {selector!r} hit stale node, skipping: {e}")
+                    continue
 
             await asyncio.sleep(0.25)
 

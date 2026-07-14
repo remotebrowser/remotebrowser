@@ -588,13 +588,47 @@ class Element:
         logger.error("TODO: Element#check")
         await asyncio.sleep(0.25)
 
+    async def _refresh_node(self) -> bool:
+        """Re-resolve the underlying zendriver node from this element's selector.
+
+        The CDP backendNodeId cached in ``self.element`` becomes stale when the page
+        re-renders the node (common on OTP/verification inputs that auto-advance).
+        Re-selecting swaps in a live node so a retried CDP op can resolve it.
+        """
+        try:
+            if self.xpath_selector:
+                elements = await self.page.xpath(self.xpath_selector, 0)
+                node = elements[0] if elements else None
+            elif self.css_selector:
+                node = await self.page.select(self.css_selector)
+            else:
+                return False
+        except Exception:
+            return False
+        if node is None:
+            return False
+        self.element = node
+        self.tag = node.tag
+        return True
+
+    async def _clear_input(self) -> None:
+        for attempt in range(2):
+            try:
+                await self.element.clear_input_by_deleting()
+                await asyncio.sleep(self.config.typing_clear_delay)
+                await self.element.clear_input()
+                await asyncio.sleep(self.config.typing_clear_delay)
+                return
+            except ProtocolException as e:
+                if attempt == 0 and await self._refresh_node():
+                    logger.warning(f"clear_input hit stale node; refreshed and retrying: {e}")
+                    continue
+                raise
+
     async def type_text(self, text: str) -> None:
         if self.config.action_delay_ms > 0:
             await asyncio.sleep(self.config.action_delay_ms / 1000)
-        await self.element.clear_input_by_deleting()
-        await asyncio.sleep(self.config.typing_clear_delay)
-        await self.element.clear_input()
-        await asyncio.sleep(self.config.typing_clear_delay)
+        await self._clear_input()
         for char in text:
             await self.element.send_keys(char)
             await asyncio.sleep(
