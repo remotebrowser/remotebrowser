@@ -1,9 +1,9 @@
 <html rb-domain="target" rb-priority="1">
   <head>
-    <title>Target Sign In - OTP v2</title>
+    <title>Target Sign In - OTP</title>
   </head>
   <body>
-    <div rb-match="//*[contains(normalize-space(.), &quot;We’ve sent your code&quot;)]">
+    <div rb-match='//span[contains(normalize-space(.), "We’ve sent your code")]/parent::div'>
       We've sent your code
     </div>
     <input
