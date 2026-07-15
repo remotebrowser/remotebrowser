@@ -187,12 +187,12 @@ class DaytonaBackend:
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
+        # Proxy is applied + verified once at create time; GET is a cheap read that never
+        # reconfigures (no tinyproxy restart, no egress re-check), so it stays idempotent and
+        # can't 500 on a transient IP-check flake.
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
-        if origin_ip:
-            # Mandatory proxy: propagate ProxyVerificationError instead of returning unproxied.
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:

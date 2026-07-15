@@ -163,6 +163,31 @@ async def test_configure_remote_sandbox_raises_when_ip_unchanged(monkeypatch: Mo
 
 
 @pytest.mark.asyncio
+async def test_get_browser_never_reconfigures_proxy(monkeypatch: MonkeyPatch) -> None:
+    # GET is a cheap read: proxy is configured+verified once on create, never on get, even when
+    # x-origin-ip is present. Otherwise every GET restarts tinyproxy and can 500 on an IP-check flake.
+    configured = False
+
+    async def fake_configure(*args: Any, **kwargs: Any) -> None:
+        nonlocal configured
+        configured = True
+
+    async def fake_get(self: Any, name: str):
+        return _Sandbox()
+
+    async def fake_info(self: Any, sandbox: Any):
+        return {"id": "b0"}
+
+    monkeypatch.setattr(daytona_browsers, "_configure_remote_sandbox", fake_configure)
+    monkeypatch.setattr(DaytonaBackend, "_get", fake_get)
+    monkeypatch.setattr(DaytonaBackend, "_get_info", fake_info)
+
+    info = await _backend().get_browser("b0", origin_ip="1.2.3.4", target_domain="amazon.com")
+    assert info == {"id": "b0"}
+    assert configured is False
+
+
+@pytest.mark.asyncio
 async def test_cleanup_losers_deletes_all_but_winner(monkeypatch: MonkeyPatch) -> None:
     deleted: list[str] = []
 
