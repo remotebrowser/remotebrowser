@@ -84,7 +84,11 @@ async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> boo
 async def _get_sandbox_public_ip(
     sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
 ) -> str | None:
-    cmd = "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+    # Force IPv4 (-4): the residential upstream proxy is IPv4-only. Without this, curl reaches
+    # ip.fly.dev over the sandbox's native IPv6 and tinyproxy connects direct (bypassing the
+    # upstream), so the reported egress IP is the sandbox's own IPv6 both before and after the
+    # proxy is applied -> "IP unchanged" false ProxyVerificationError.
+    cmd = "curl -4 -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
     for attempt in range(1, retries + 1):
         try:
             response = await sandbox.process.exec(cmd)
