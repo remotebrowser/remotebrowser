@@ -124,10 +124,18 @@ async def _configure_remote_sandbox(
         raise ProxyVerificationError(f"Proxy failed to apply on {sandbox.name}")
 
     ip_after = await _get_sandbox_public_ip(sandbox)
-    if ip_before and ip_after and ip_before != ip_after:
-        logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
-        return
-    raise ProxyVerificationError(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
+    if ip_after is None:
+        # Distinct from "unchanged": the egress IP check itself failed (curl/exec timeout),
+        # so we cannot confirm the proxy either way. Fail the candidate with an accurate reason.
+        raise ProxyVerificationError(
+            f"Could not verify egress IP on {sandbox.name} (IP check failed)"
+        )
+    if ip_before is not None and ip_before == ip_after:
+        raise ProxyVerificationError(
+            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
+        )
+    logger.info(f"Sandbox {sandbox.name} IP after proxy: {ip_after} (before: {ip_before})")
+    return
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -182,9 +190,6 @@ class DaytonaBackend:
         sandbox = await self._get(_sandbox_name(browser_id))
         if sandbox is None:
             raise BrowserNotFound(browser_id)
-        if origin_ip:
-            # Mandatory proxy: propagate ProxyVerificationError instead of returning unproxied.
-            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
