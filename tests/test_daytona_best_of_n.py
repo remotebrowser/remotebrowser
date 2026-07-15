@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pytest import MonkeyPatch
@@ -105,6 +105,61 @@ async def test_create_browser_auto_n1_uses_single_path(monkeypatch: MonkeyPatch)
     assert winner_id == "solo"
     assert info == {"id": "solo"}
     assert called["browser_id"] == "solo"
+
+
+def _patch_proxy(monkeypatch: MonkeyPatch, *, ips: list[str | None], proxy_ok: bool = True) -> None:
+    """Force a configured proxy and drive _get_sandbox_public_ip's return sequence."""
+
+    class _Cfg:
+        def get_proxy_url(self, browser_id: str) -> str:
+            return "http://proxy.example:9999"
+
+    async def fake_get_proxy_config(*args: Any, **kwargs: Any):
+        return _Cfg()
+
+    async def fake_configure_sandbox_proxy(*args: Any, **kwargs: Any) -> bool:
+        return proxy_ok
+
+    it = iter(ips)
+
+    async def fake_public_ip(*args: Any, **kwargs: Any):
+        return next(it)
+
+    monkeypatch.setattr(daytona_browsers, "get_proxy_config", fake_get_proxy_config)
+    monkeypatch.setattr(daytona_browsers, "_configure_sandbox_proxy", fake_configure_sandbox_proxy)
+    monkeypatch.setattr(daytona_browsers, "_get_sandbox_public_ip", fake_public_ip)
+
+
+class _Sandbox:
+    name = "chromium-test"
+
+
+def _fake_sandbox() -> "daytona_browsers.AsyncSandbox":
+    return cast("daytona_browsers.AsyncSandbox", _Sandbox())
+
+
+@pytest.mark.asyncio
+async def test_configure_remote_sandbox_ok_when_ip_before_missing(monkeypatch: MonkeyPatch) -> None:
+    # Regression: a failed ip_before measurement (None) must NOT fail a working proxy.
+    _patch_proxy(monkeypatch, ips=[None, "9.9.9.9"])
+    await daytona_browsers._configure_remote_sandbox(_fake_sandbox(), "b0", None, None)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_configure_remote_sandbox_raises_on_ip_check_failure(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # ip_after is None (curl/exec timeout): distinct, accurate error, not "IP unchanged".
+    _patch_proxy(monkeypatch, ips=["1.1.1.1", None])
+    with pytest.raises(ProxyVerificationError, match="IP check failed"):
+        await daytona_browsers._configure_remote_sandbox(_fake_sandbox(), "b0", None, None)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_configure_remote_sandbox_raises_when_ip_unchanged(monkeypatch: MonkeyPatch) -> None:
+    _patch_proxy(monkeypatch, ips=["1.1.1.1", "1.1.1.1"])
+    with pytest.raises(ProxyVerificationError, match="IP unchanged"):
+        await daytona_browsers._configure_remote_sandbox(_fake_sandbox(), "b0", None, None)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.asyncio

@@ -84,7 +84,7 @@ async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> boo
 async def _get_sandbox_public_ip(
     sandbox: AsyncSandbox, *, retries: int = 5, retry_delay: float = 2.0
 ) -> str | None:
-    cmd = "curl -s --max-time 10 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
+    cmd = "curl -s --max-time 20 --retry 2 --proxy http://127.0.0.1:8119 https://ip.fly.dev"
     for attempt in range(1, retries + 1):
         try:
             response = await sandbox.process.exec(cmd)
@@ -124,10 +124,18 @@ async def _configure_remote_sandbox(
         raise ProxyVerificationError(f"Proxy failed to apply on {sandbox.name}")
 
     ip_after = await _get_sandbox_public_ip(sandbox)
-    if ip_before and ip_after and ip_before != ip_after:
-        logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
-        return
-    raise ProxyVerificationError(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
+    if ip_after is None:
+        # Distinct from "unchanged": the egress IP check itself failed (curl/exec timeout),
+        # so we cannot confirm the proxy either way. Fail the candidate with an accurate reason.
+        raise ProxyVerificationError(
+            f"Could not verify egress IP on {sandbox.name} (IP check failed)"
+        )
+    if ip_before is not None and ip_before == ip_after:
+        raise ProxyVerificationError(
+            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
+        )
+    logger.info(f"Sandbox {sandbox.name} IP after proxy: {ip_after} (before: {ip_before})")
+    return
 
 
 def _browser_id_from_name(name: str) -> str:
