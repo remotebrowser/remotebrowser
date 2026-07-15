@@ -167,3 +167,48 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
     assert response.status_code == 200
     assert response.json() == {"browser_id": "winner", "id": "winner"}
     assert invoked == {"n": 3, "origin_ip": "1.2.3.4", "target_domain": "amazon.com"}
+
+
+def test_create_browser_auto_uses_backend_default_when_env_unset(monkeypatch: MonkeyPatch) -> None:
+    # When BROWSER_BEST_OF_N is unset (None), the router falls back to the backend's own default
+    # (DaytonaBackend.default_best_of_n == 3) instead of hard-coding 1.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from getgather.browsers import router as router_module
+
+    monkeypatch.setattr(router_module.settings, "BROWSER_BEST_OF_N", None)
+    monkeypatch.setattr(router_module, "backend", _backend())
+
+    invoked: dict[str, Any] = {}
+
+    async def fake_best_of_n(
+        backend: Any, n: int, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, str]]:
+        invoked["n"] = n
+        return "winner", {"id": "winner"}
+
+    monkeypatch.setattr(router_module, "best_of_n", fake_best_of_n)
+
+    app = FastAPI()
+    app.include_router(router_module.router)
+    client = TestClient(app)
+
+    response = client.post("/api/v1/browsers")
+    assert response.status_code == 200
+    assert invoked["n"] == 3
+
+
+@pytest.mark.parametrize(
+    ("module_name", "expected"),
+    [
+        ("getgather.browsers.podman_browsers", 5),
+        ("getgather.browsers.daytona_browsers", 3),
+        ("getgather.browsers.fleet_browsers", 1),
+    ],
+)
+def test_backend_default_best_of_n_consts(module_name: str, expected: int) -> None:
+    import importlib
+
+    module = importlib.import_module(module_name)
+    assert module.DEFAULT_BEST_OF_N == expected

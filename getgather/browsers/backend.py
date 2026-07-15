@@ -138,6 +138,9 @@ class Backend(Protocol):
 
     async def shutdown(self) -> None: ...
 
+    @property
+    def default_best_of_n(self) -> int: ...
+
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...

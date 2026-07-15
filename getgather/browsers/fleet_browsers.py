@@ -10,6 +10,8 @@ from getgather.config import settings
 
 HTTP_METHOD = Literal["GET", "POST", "DELETE"]
 
+DEFAULT_BEST_OF_N = 1
+
 
 def build_chromefleet_headers(*, target_domain: str | None = None) -> dict[str, str]:
     mcp_headers = get_http_headers(include_all=True)
@@ -94,6 +96,10 @@ class FleetBackend:
 
     async def shutdown(self) -> None:
         return None
+
+    @property
+    def default_best_of_n(self) -> int:
+        return DEFAULT_BEST_OF_N
 
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None

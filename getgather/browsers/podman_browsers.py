@@ -18,6 +18,8 @@ from getgather.config import settings
 
 DOCKER_INTERNAL_HOST = "172.17.0.1"
 
+DEFAULT_BEST_OF_N = 5
+
 
 # uvloop's child process watcher can cause asyncio.create_subprocess_exec to hang
 # indefinitely. When uvloop is the active event loop, fall back to running the
@@ -325,6 +327,10 @@ async def get_cdp_url(browser_id: str) -> str:
 
 
 class PodmanBackend:
+    @property
+    def default_best_of_n(self) -> int:
+        return DEFAULT_BEST_OF_N
+
     async def shutdown(self) -> None:
         return None
 
