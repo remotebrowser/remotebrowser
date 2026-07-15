@@ -5,7 +5,7 @@ import pytest
 from pytest import MonkeyPatch
 
 from getgather.browsers import daytona_browsers
-from getgather.browsers.daytona_browsers import DaytonaBackend
+from getgather.browsers.daytona_browsers import DaytonaBackend, ProxyVerificationError
 
 
 def _backend() -> DaytonaBackend:
@@ -20,20 +20,16 @@ def _patch_ids(monkeypatch: MonkeyPatch, ids: list[str]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_best_of_n_picks_first_proxy_verified(monkeypatch: MonkeyPatch) -> None:
+async def test_best_of_n_picks_first_to_complete(monkeypatch: MonkeyPatch) -> None:
     _patch_ids(monkeypatch, ["b0", "b1", "b2"])
 
-    # b1 finishes first but fails proxy; b0 finishes next and passes -> b0 wins.
-    plan = {
-        "b0": (0.02, True),
-        "b1": (0.01, False),
-        "b2": (0.05, True),
-    }
-
+    # b1 finishes first but its proxy fails (raises); b0 completes next -> b0 wins.
     async def fake_candidate(self: Any, browser_id: str, origin_ip: Any, target_domain: Any):
-        delay, ok = plan[browser_id]
-        await asyncio.sleep(delay)
-        return browser_id, {"id": browser_id}, ok
+        delays = {"b0": 0.02, "b1": 0.01, "b2": 0.05}
+        await asyncio.sleep(delays[browser_id])
+        if browser_id == "b1":
+            raise ProxyVerificationError("proxy unchanged")
+        return browser_id, {"id": browser_id}
 
     cleaned: dict[str, Any] = {}
 
@@ -53,17 +49,13 @@ async def test_best_of_n_picks_first_proxy_verified(monkeypatch: MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_best_of_n_falls_back_to_fastest_started_when_no_proxy_verified(
-    monkeypatch: MonkeyPatch,
-) -> None:
+async def test_best_of_n_raises_when_no_proxy_verified(monkeypatch: MonkeyPatch) -> None:
+    # Proxy is mandatory: if every candidate fails verification, best-of-N raises instead of
+    # returning an unproxied browser, so the client can retry.
     _patch_ids(monkeypatch, ["b0", "b1"])
 
-    plan = {"b0": (0.03, False), "b1": (0.01, False)}
-
     async def fake_candidate(self: Any, browser_id: str, origin_ip: Any, target_domain: Any):
-        delay, ok = plan[browser_id]
-        await asyncio.sleep(delay)
-        return browser_id, {"id": browser_id}, ok
+        raise ProxyVerificationError("IP unchanged after proxy")
 
     async def fake_cleanup(self: Any, ids: list[str], *, winner_id: str):
         return None
@@ -71,8 +63,8 @@ async def test_best_of_n_falls_back_to_fastest_started_when_no_proxy_verified(
     monkeypatch.setattr(DaytonaBackend, "_create_candidate", fake_candidate)
     monkeypatch.setattr(DaytonaBackend, "_cleanup_losers", fake_cleanup)
 
-    winner_id, _ = await _backend()._best_of_n(2, None, None)  # pyright: ignore[reportPrivateUsage]
-    assert winner_id == "b1"  # fastest to start, since none verified their proxy
+    with pytest.raises(ProxyVerificationError, match="no sandbox candidate started"):
+        await _backend()._best_of_n(2, None, None)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.asyncio
@@ -88,7 +80,7 @@ async def test_best_of_n_raises_when_all_candidates_fail(monkeypatch: MonkeyPatc
     monkeypatch.setattr(DaytonaBackend, "_create_candidate", fake_candidate)
     monkeypatch.setattr(DaytonaBackend, "_cleanup_losers", fake_cleanup)
 
-    with pytest.raises(RuntimeError, match="all sandbox candidates failed"):
+    with pytest.raises(ProxyVerificationError, match="no sandbox candidate started"):
         await _backend()._best_of_n(2, None, None)  # pyright: ignore[reportPrivateUsage]
 
 
