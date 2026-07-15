@@ -57,7 +57,7 @@ class BrowserSettings(BaseSettings):
     # Losers are deleted in the background. Set to 1 to disable the race and create a single
     # browser. Applies to every backend; only used by the server-assigned-id endpoint
     # (POST /api/v1/browsers).
-    BROWSER_BEST_OF_N: int = 3
+    BROWSER_BEST_OF_N: int = 1
 
     @property
     def effective_chromefleet_url(self) -> str:
