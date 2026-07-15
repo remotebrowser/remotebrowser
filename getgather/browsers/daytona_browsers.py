@@ -13,13 +13,13 @@ from daytona import (
 )
 from loguru import logger
 
-from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound
+from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound, new_browser_id
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
 
 class ProxyVerificationError(Exception):
-    """Raised when egress IP is unchanged after proxy configuration."""
+    """Raised when a configured (mandatory) proxy fails to apply or the egress IP is unchanged."""
 
 
 CDP_PORT = 9222
@@ -105,26 +105,29 @@ async def _configure_remote_sandbox(
     origin_ip: str | None,
     target_domain: str | None,
 ) -> None:
+    """Apply the residential proxy to the sandbox and verify egress IP changed.
+
+    The proxy is mandatory: if one is configured it MUST apply and change the egress IP, otherwise
+    this raises ProxyVerificationError. If no proxy is configured, this is a no-op (proxy is not
+    required). Callers let the error propagate; best-of-N treats a raising candidate as failed."""
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
 
     if not proxy_url:
-        return
+        return  # no proxy configured; proxy is not required for this browser
 
     ip_before = await _get_sandbox_public_ip(sandbox)
     logger.debug(f"Sandbox {sandbox.name} IP before proxy: {ip_before}")
 
     ok = await _configure_sandbox_proxy(sandbox, proxy_url)
     if not ok:
-        return
+        raise ProxyVerificationError(f"Proxy failed to apply on {sandbox.name}")
 
     ip_after = await _get_sandbox_public_ip(sandbox)
     if ip_before and ip_after and ip_before != ip_after:
         logger.info(f"Sandbox {sandbox.name} IP changed: {ip_before} -> {ip_after}")
-    elif ip_before == ip_after:
-        raise ProxyVerificationError(
-            f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}"
-        )
+        return
+    raise ProxyVerificationError(f"Sandbox {sandbox.name} IP unchanged after proxy: {ip_before}")
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -159,11 +162,19 @@ class DaytonaBackend:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
             sandbox = await self._ensure(browser_id)
-            try:
-                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
-            except ProxyVerificationError as e:
-                logger.warning(str(e))
+            # Proxy is mandatory when configured: let ProxyVerificationError propagate (the endpoint
+            # maps it to 500) so the client can retry rather than get an unproxied browser.
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
             return await self._get_info(sandbox)
+
+    async def create_browser_auto(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        n = max(1, settings.DAYTONA_BEST_OF_N)
+        if n == 1:
+            browser_id = new_browser_id()
+            return browser_id, await self.create_browser(browser_id, origin_ip, target_domain)
+        return await self._best_of_n(n, origin_ip, target_domain)
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
@@ -172,10 +183,8 @@ class DaytonaBackend:
         if sandbox is None:
             raise BrowserNotFound(browser_id)
         if origin_ip:
-            try:
-                await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
-            except ProxyVerificationError as e:
-                logger.warning(str(e))
+            # Mandatory proxy: propagate ProxyVerificationError instead of returning unproxied.
+            await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
         return await self._get_info(sandbox)
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:
@@ -244,6 +253,80 @@ class DaytonaBackend:
             VNC_PORT, expires_in_seconds=SIGNED_URL_TTL_SECONDS
         )
         return signed.url
+
+    async def _best_of_n(
+        self, n: int, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        """Race n cold-create candidates; keep the first that fully succeeds, delete the rest.
+
+        Each candidate is an independent browser with its own server-assigned id (so their sandbox
+        names never collide). A candidate "succeeds" only after it starts AND (when a proxy is
+        configured) passes mandatory proxy verification, so the first to complete is the winner.
+        If every candidate fails (e.g. no proxy in the pool verifies), this raises rather than
+        returning an unproxied browser, so the client can retry. Losers are torn down in the
+        background."""
+        ids = [new_browser_id() for _ in range(n)]
+        logger.info(f"Best-of-{n} sandbox race: {ids}")
+        tasks = [
+            asyncio.create_task(self._create_candidate(b, origin_ip, target_domain)) for b in ids
+        ]
+        winner: tuple[str, dict[str, Any]] | None = None
+        for coro in asyncio.as_completed(tasks):
+            try:
+                browser_id, info = await coro
+            except Exception as e:
+                logger.warning(f"Best-of-N candidate failed: {type(e).__name__}: {e}")
+                continue
+            winner = (browser_id, info)
+            break
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        if winner is None:
+            raise ProxyVerificationError(
+                "Best-of-N: no sandbox candidate started with a verified proxy"
+            )
+        logger.info(f"Best-of-N winner: {winner[0]}")
+        asyncio.create_task(self._cleanup_losers(ids, winner_id=winner[0]))
+        return winner
+
+    async def _create_candidate(
+        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        sandbox = await self._create(_sandbox_name(browser_id))
+        if sandbox.state != "started":
+            await sandbox.start()
+        # Raises ProxyVerificationError if a configured proxy fails; that fails this candidate.
+        await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
+        return browser_id, await self._get_info(sandbox)
+
+    async def _cleanup_losers(self, ids: list[str], *, winner_id: str) -> None:
+        for browser_id in ids:
+            if browser_id == winner_id:
+                continue
+            self._locks.pop(browser_id, None)
+            # A cancelled candidate's sandbox may still be materializing server-side: it can be
+            # not-yet-visible, or visible but mid state-change (delete rejected with "state change
+            # in progress"). Retry both cases until it settles, so we don't leak it (Daytona's
+            # auto_delete_interval is the final backstop).
+            deleted = False
+            for _ in range(8):
+                sandbox = await self._get(_sandbox_name(browser_id))
+                if sandbox is None:
+                    await asyncio.sleep(5)
+                    continue
+                try:
+                    await sandbox.delete()
+                    logger.info(f"Best-of-N: deleted losing candidate {browser_id}")
+                    deleted = True
+                    break
+                except Exception as e:
+                    logger.debug(f"Best-of-N: delete retry for loser {browser_id}: {e}")
+                    await asyncio.sleep(5)
+            if not deleted:
+                logger.warning(f"Best-of-N: gave up deleting loser {browser_id} (will auto-delete)")
 
     async def _ensure(self, browser_id: str) -> AsyncSandbox:
         name = _sandbox_name(browser_id)

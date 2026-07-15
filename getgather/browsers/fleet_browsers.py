@@ -102,6 +102,16 @@ class FleetBackend:
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
 
+    async def create_browser_auto(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        # The upstream fleet owns id assignment (and any best-of-N race); forward to its
+        # server-assigned-id endpoint and echo back the id it picked.
+        headers = {"x-origin-ip": origin_ip} if origin_ip else {}
+        response = _require(await call_chromefleet_api("POST", headers=headers))
+        data: dict[str, Any] = response.json()
+        return str(data["browser_id"]), data
+
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:

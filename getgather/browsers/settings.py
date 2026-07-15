@@ -52,6 +52,11 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+    # Best-of-N cold-create: on a fresh browser, race this many sandbox candidates in parallel and
+    # keep the first that starts AND passes proxy IP verification; losers are deleted in the
+    # background. Set to 1 to disable the race and create a single sandbox. Only used by the
+    # server-assigned-id endpoint (POST /api/v1/browsers).
+    DAYTONA_BEST_OF_N: int = 3
 
     @property
     def effective_chromefleet_url(self) -> str:

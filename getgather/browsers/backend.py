@@ -1,10 +1,17 @@
 from typing import Any, Protocol, runtime_checkable
 
-from getgather.config import settings
+from nanoid import generate
+
+from getgather.config import FRIENDLY_CHARS, settings
 
 # Shared name prefix: a browser with id `abc` is a podman container / Daytona sandbox named
 # `chromium-abc`. Both local backends derive names and parse ids from this single prefix.
 BROWSER_NAME_PREFIX = "chromium-"
+
+
+def new_browser_id() -> str:
+    """A server-assigned browser id. `B`-prefixed so it is distinguishable from client-supplied ids."""
+    return "B" + generate(FRIENDLY_CHARS, 8)
 
 
 class BrowserNotFound(Exception):
@@ -29,6 +36,15 @@ class Backend(Protocol):
     async def create_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]: ...
+
+    async def create_browser_auto(
+        self, origin_ip: str | None, target_domain: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        """Create a browser with a server-assigned id and return `(browser_id, info)`.
+
+        Backends may race several candidates (best-of-N) and return the winner; the returned id is
+        authoritative and every subsequent call must use it."""
+        ...
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None

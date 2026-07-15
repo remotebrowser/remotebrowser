@@ -9,11 +9,9 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketState
 from loguru import logger
-from nanoid import generate
 from websockets.exceptions import ConnectionClosed
 
 from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
-from getgather.config import FRIENDLY_CHARS
 
 router = APIRouter()
 
@@ -211,16 +209,15 @@ async def websocket_proxy(
 
 @router.post("/api/v1/browsers")
 async def create_browser_auto(request: Request) -> dict[str, Any]:
-    browser_id = "B" + generate(FRIENDLY_CHARS, 8)
-    logger.info(f"Starting browser {browser_id}...")
+    logger.info("Starting browser (server-assigned id)...")
     try:
         origin_ip = request.headers.get("x-origin-ip")
         target_domain = request.headers.get("x-target-domains")
-        result = await backend.create_browser(browser_id, origin_ip, target_domain)
+        browser_id, result = await backend.create_browser_auto(origin_ip, target_domain)
         logger.info(f"Browser {browser_id} is started.")
         return {"browser_id": browser_id, **result}
     except Exception as e:
-        detail = f"Unable to start browser {browser_id}!"
+        detail = "Unable to start browser!"
         logger.error(f"{detail} Exception={e}")
         raise HTTPException(status_code=500, detail=detail)
 
