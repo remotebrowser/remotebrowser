@@ -144,6 +144,21 @@ async def _configure_remote_sandbox(
     return
 
 
+async def _select_browser_prestart(sandbox: AsyncSandbox, browser: str) -> None:
+    """Pre-start selection (path 1a): write `.active-browser` before `sandbox.start()`.
+
+    The `chromium` s6 service reads this file on every start, so the sandbox boots straight into
+    the selected browser — a single boot, no post-start swap. This is the common case: a returning
+    user's sandbox has auto-stopped (see AUTO_STOP_MINUTES), so `_ensure` starts it fresh and the
+    file takes effect on that boot. Needs sudo — the file is root-owned. On images without Cloak
+    (arm64) the s6 service falls back to Chrome at launch."""
+    res = await sandbox.process.exec(f"echo {browser} | sudo tee {ACTIVE_BROWSER_PATH}")
+    if res.exit_code != 0:
+        raise RuntimeError(
+            f"Failed to select {browser} on {sandbox.name} (pre-start): {res.result!r}"
+        )
+
+
 async def _wait_for_cdp(sandbox: AsyncSandbox) -> None:
     """Block until CDP is reachable on the internal port again after a browser switch.
 
@@ -162,21 +177,22 @@ async def _wait_for_cdp(sandbox: AsyncSandbox) -> None:
         )
 
 
-async def _switch_to_cloak(sandbox: AsyncSandbox) -> None:
-    """Switch the sandbox from Chrome (snapshot default) to CloakBrowser, then wait for CDP.
+async def _switch_browser_live(sandbox: AsyncSandbox, browser: str) -> None:
+    """Post-start switch (path 1b): swap the browser on an already-running sandbox, then wait for CDP.
 
-    Idempotent but not free: skips the switch (a browser restart) if `.active-browser` already reads
-    `cloak`. `switch-browser` needs sudo (the s6 service dir is root-owned). On images without Cloak
-    (arm64) the switch exits non-zero; that is currently a hard failure."""
+    Costs a second browser boot (the sandbox is up on one browser, then restarts on another), so it
+    is only used when the sandbox is already `started` — a fresh cold-create (which auto-boots Chrome)
+    or a resumed-running sandbox. Idempotent: skips the restart if `.active-browser` already matches.
+    Also persists the selection so future starts boot it directly via the 1a path. Needs sudo."""
     active = await sandbox.process.exec(f"cat {ACTIVE_BROWSER_PATH} 2>/dev/null")
-    if active.exit_code == 0 and active.result.strip() == "cloak":
-        logger.debug(f"Sandbox {sandbox.name} already on CloakBrowser; skipping switch")
+    if active.exit_code == 0 and active.result.strip() == browser:
+        logger.debug(f"Sandbox {sandbox.name} already on {browser}; skipping switch")
         return
 
-    logger.info(f"Switching sandbox {sandbox.name} to CloakBrowser")
-    res = await sandbox.process.exec("sudo switch-browser cloak")
+    logger.info(f"Switching sandbox {sandbox.name} to {browser}")
+    res = await sandbox.process.exec(f"sudo switch-browser {browser}")
     if res.exit_code != 0:
-        raise RuntimeError(f"switch-browser cloak failed on {sandbox.name}: {res.result!r}")
+        raise RuntimeError(f"switch-browser {browser} failed on {sandbox.name}: {res.result!r}")
     await _wait_for_cdp(sandbox)
 
 
@@ -298,12 +314,18 @@ class DaytonaBackend:
         if sandbox is None:
             sandbox = await self._create(name)
 
+        want_cloak = settings.DAYTONA_CLOAK_BROWSER
         if sandbox.state != "started":
+            # 1a pre-start (single boot): select the browser before start so the s6 service boots
+            # straight into it. Common case — a returning user's sandbox has auto-stopped.
+            if want_cloak:
+                await _select_browser_prestart(sandbox, "cloak")
             logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
             await sandbox.start()
-
-        if settings.DAYTONA_CLOAK_BROWSER:
-            await _switch_to_cloak(sandbox)
+        elif want_cloak:
+            # 1b post-start (double boot): sandbox already running (fresh cold-create auto-boots
+            # Chrome, or resumed-running), so swap live and persist for future single-boot starts.
+            await _switch_browser_live(sandbox, "cloak")
 
         return sandbox
 
