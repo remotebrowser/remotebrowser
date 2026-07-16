@@ -26,7 +26,7 @@ VNC_PORT = 8080
 
 # The chromium s6 service reads this env var on first boot to pick the browser (Chrome default,
 # `cloak` for CloakBrowser). Set at sandbox-create time so a fresh sandbox boots straight into the
-# selected browser — no post-start swap. See CLOAKBROWSER_HANDOFF.md and chrome-live chromium/run.
+# selected browser — no post-start swap. See chrome-live chromium/run.
 ACTIVE_BROWSER_ENV = "ACTIVE_BROWSER"
 
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.

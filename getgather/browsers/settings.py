@@ -55,7 +55,7 @@ class BrowserSettings(BaseSettings):
     # Which browser the sandbox boots: "chrome" (default) or "cloak" (CloakBrowser stealth build).
     # Passed to the sandbox as the ACTIVE_BROWSER env var at create time; the chromium s6 service
     # reads it on first boot (needs a snapshot whose image is ACTIVE_BROWSER-aware; cloak is amd64
-    # only). See CLOAKBROWSER_HANDOFF.md.
+    # only).
     DAYTONA_ACTIVE_BROWSER: str = "chrome"
     # Best-of-N cold-create: on a fresh browser, race this many candidates in parallel and keep the
     # first whose `create_browser` fully succeeds.
