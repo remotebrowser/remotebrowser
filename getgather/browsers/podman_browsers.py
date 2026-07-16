@@ -8,7 +8,11 @@ from typing import Any
 
 from loguru import logger
 
-from getgather.browsers.backend import BROWSER_NAME_PREFIX, BrowserNotFound, new_browser_id
+from getgather.browsers.backend import (
+    BROWSER_NAME_PREFIX,
+    BrowserNotFound,
+    ProxyVerificationError,
+)
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
 
@@ -179,50 +183,60 @@ async def get_container_last_activity(container_name: str) -> float | None:
         return None
 
 
-async def configure_container(container_name: str, proxy_url: str | None) -> None:
-    logger.info(f"Configuring container {container_name} with proxy_url={proxy_url}...")
+async def configure_container(container_name: str, proxy_url: str | None) -> bool:
+    """Apply `proxy_url` (an http://... upstream) to the container's tinyproxy.
 
-    if proxy_url:
-        try:
-            proxy_url = proxy_url.removeprefix("http://")
-            logger.debug(f"Configuring proxy with proxy_url: {proxy_url}")
-            logger.info(f"Modifying tinyproxy.conf in {container_name}...")
-            await run_podman([
-                "exec",
-                container_name,
-                "sed",
-                "-i",
-                "/^Upstream http/d",
-                "/app/tinyproxy.conf",
-            ])
-            await run_podman([
-                "exec",
-                container_name,
-                "sed",
-                "-i",
-                f"$ a\\Upstream http {proxy_url}",
-                "/app/tinyproxy.conf",
-            ])
-            logger.info(f"Restarting tinyproxy in {container_name}...")
-            await run_podman([
-                "exec",
-                container_name,
-                "sh",
-                "-c",
-                "pkill tinyproxy || true",
-            ])
-            await run_podman([
-                "exec",
-                container_name,
-                "sh",
-                "-c",
-                "tinyproxy -d -c /app/tinyproxy.conf &",
-            ])
-            logger.info(f"Proxy configured successfully in {container_name}.")
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Error configuring proxy: {e}")
-        except Exception as e:
-            logger.error(f"Error configuring proxy: {e}")
+    Returns True if the proxy was applied (or `proxy_url` was None, a no-op success). Returns False
+    if any `podman exec` step failed, so the caller (`configure_remote_browser`) can raise a
+    `ProxyVerificationError`. Mirrors `daytona_browsers._configure_sandbox_proxy`."""
+    if not proxy_url:
+        return True
+    logger.info(f"Configuring container {container_name} with proxy_url={proxy_url}...")
+    try:
+        upstream = proxy_url.removeprefix("http://")
+        logger.debug(f"Configuring proxy with upstream: {upstream}")
+        logger.info(f"Modifying tinyproxy.conf in {container_name}...")
+        await run_podman([
+            "exec",
+            container_name,
+            "sed",
+            "-i",
+            "/^Upstream http/d",
+            "/app/tinyproxy.conf",
+        ])
+        await run_podman([
+            "exec",
+            container_name,
+            "sed",
+            "-i",
+            f"$ a\\Upstream http {upstream}",
+            "/app/tinyproxy.conf",
+        ])
+        logger.info(f"Restarting tinyproxy in {container_name}...")
+        await run_podman([
+            "exec",
+            container_name,
+            "sh",
+            "-c",
+            "pkill tinyproxy || true",
+        ])
+        await run_podman([
+            "exec",
+            container_name,
+            "sh",
+            "-c",
+            "tinyproxy -d -c /app/tinyproxy.conf &",
+        ])
+        logger.info(f"Proxy configured successfully in {container_name}.")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.warning(
+            f"Proxy config failed on {container_name}: {type(e).__name__}: {e.stderr.strip()!r}"
+        )
+        return False
+    except Exception as e:
+        logger.warning(f"Proxy config failed on {container_name}: {type(e).__name__}: {e}")
+        return False
 
 
 def container_host() -> str:
@@ -269,25 +283,37 @@ async def configure_remote_browser(
     origin_ip: str | None,
     target_domain: str | None,
 ) -> str | None:
+    """Apply the residential proxy to the container and verify the egress IP changed.
+
+    The proxy is mandatory when one is configured: it MUST apply and change the egress IP,
+    otherwise this raises `ProxyVerificationError` (the endpoint maps it to 500, and best-of-N
+    treats the raising candidate as a loser, so the client can retry rather than get an unproxied
+    browser). If no proxy is configured, this is a no-op (proxy is not required) and the current
+    egress IP is returned. Mirrors `daytona_browsers._configure_remote_sandbox`."""
     proxy_config = await get_proxy_config(origin_ip, target_domain, settings)
     proxy_url = proxy_config.get_proxy_url(browser_id) if proxy_config else None
 
     ip_before = await get_container_public_ip(container_name)
     logger.debug(f"Browser {browser_id} IP before applying config: {ip_before}")
 
-    await configure_container(container_name, proxy_url)
+    if not proxy_url:
+        return ip_before  # no proxy configured; proxy is not required for this browser
 
-    if proxy_url:
-        ip_after = await get_container_public_ip(container_name)
-        if ip_before and ip_after:
-            if ip_before != ip_after:
-                logger.info(f"Browser {browser_id} IP changed: {ip_before} -> {ip_after}")
-            else:
-                logger.warning(
-                    f"Browser {browser_id} IP unchanged after proxy configuration: {ip_before}"
-                )
-        return ip_after
-    return ip_before
+    ok = await configure_container(container_name, proxy_url)
+    if not ok:
+        raise ProxyVerificationError(f"Proxy failed to apply on {container_name}")
+
+    ip_after = await get_container_public_ip(container_name)
+    if ip_after is None:
+        # Distinct from "unchanged": the egress IP check itself failed (curl/exec timeout), so we
+        # cannot confirm the proxy either way. Fail the candidate with an accurate reason.
+        raise ProxyVerificationError(
+            f"Could not verify egress IP on {container_name} (IP check failed)"
+        )
+    if ip_before is not None and ip_before == ip_after:
+        raise ProxyVerificationError(f"Browser {browser_id} IP unchanged after proxy: {ip_before}")
+    logger.info(f"Browser {browser_id} IP changed: {ip_before} -> {ip_after}")
+    return ip_after
 
 
 async def get_cdp_url(browser_id: str) -> str:
@@ -310,27 +336,18 @@ class PodmanBackend:
         ip = await configure_remote_browser(browser_id, container_name, origin_ip, target_domain)
         return {"container_name": container_name, "status": "created", "ip": ip}
 
-    async def create_browser_auto(
-        self, origin_ip: str | None, target_domain: str | None
-    ) -> tuple[str, dict[str, Any]]:
-        # Local backend: no best-of-N race, just assign an id and create the single container.
-        browser_id = new_browser_id()
-        return browser_id, await self.create_browser(browser_id, origin_ip, target_domain)
-
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None
     ) -> dict[str, Any]:
+        # GET is a cheap read: proxy is configured+verified once on create (see create_browser),
+        # never on get, even when x-origin-ip is present. Otherwise every GET would restart tinyproxy
+        # and could 500 on an IP-check flake. Mirrors DaytonaBackend.get_browser.
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         if not await container_is_running(container_name):
             raise BrowserNotFound(browser_id)
         last_activity_timestamp = await get_container_last_activity(container_name)
         logger.debug(f"Browser {browser_id}: last_activity_timestamp={last_activity_timestamp}.")
-        if origin_ip:
-            ip = await configure_remote_browser(
-                browser_id, container_name, origin_ip, target_domain
-            )
-        else:
-            ip = await get_container_public_ip(container_name)
+        ip = await get_container_public_ip(container_name)
         return {"last_activity_timestamp": last_activity_timestamp, "ip": ip}
 
     async def delete_browser(self, browser_id: str) -> dict[str, Any]:

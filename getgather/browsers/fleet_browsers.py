@@ -4,7 +4,7 @@ import httpx
 from fastmcp.server.dependencies import get_http_headers
 from httpx_retries import Retry, RetryTransport
 
-from getgather.browsers.backend import BrowserNotFound, new_browser_id
+from getgather.browsers.backend import BrowserNotFound
 from getgather.client_ip import client_ip_var
 from getgather.config import settings
 
@@ -101,14 +101,6 @@ class FleetBackend:
         headers = {"x-origin-ip": origin_ip} if origin_ip else {}
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
-
-    async def create_browser_auto(
-        self, origin_ip: str | None, target_domain: str | None
-    ) -> tuple[str, dict[str, Any]]:
-        # The upstream fleet has no server-assigned-id endpoint (POST /api/v1/browsers returns
-        # 405); assign the id here and forward to the per-id endpoint.
-        browser_id = new_browser_id()
-        return browser_id, await self.create_browser(browser_id, origin_ip, target_domain)
 
     async def get_browser(
         self, browser_id: str, origin_ip: str | None, target_domain: str | None

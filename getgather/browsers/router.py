@@ -11,7 +11,14 @@ from fastapi.websockets import WebSocketState
 from loguru import logger
 from websockets.exceptions import ConnectionClosed
 
-from getgather.browsers.backend import Backend, BrowserNotFound, create_backend
+from getgather.browsers.backend import (
+    Backend,
+    BrowserNotFound,
+    best_of_n,
+    create_backend,
+    new_browser_id,
+)
+from getgather.config import settings
 
 router = APIRouter()
 
@@ -208,12 +215,20 @@ async def websocket_proxy(
 
 
 @router.post("/api/v1/browsers")
-async def create_browser_auto(request: Request) -> dict[str, Any]:
+async def create_browser_auto_endpoint(request: Request) -> dict[str, Any]:
+    # Server-assigned id + best-of-N policy lives here (not per-backend): every backend only owns
+    # per-browser CRUD keyed by a caller-supplied id. When BROWSER_BEST_OF_N > 1 it races that many
+    # candidates via best_of_n and returns the winner; otherwise it creates a single browser directly.
     logger.info("Starting browser (server-assigned id)...")
     try:
         origin_ip = request.headers.get("x-origin-ip")
         target_domain = request.headers.get("x-target-domains")
-        browser_id, result = await backend.create_browser_auto(origin_ip, target_domain)
+        n = max(1, settings.BROWSER_BEST_OF_N)
+        if n == 1:
+            browser_id = new_browser_id()
+            result = await backend.create_browser(browser_id, origin_ip, target_domain)
+        else:
+            browser_id, result = await best_of_n(backend, n, origin_ip, target_domain)
         logger.info(f"Browser {browser_id} is started.")
         return {"browser_id": browser_id, **result}
     except Exception as e:
