@@ -24,12 +24,10 @@ from getgather.config import settings
 CDP_PORT = 9222
 VNC_PORT = 8080
 
-# CloakBrowser and Chrome both serve CDP on this internal port; the :9222 proxy sits in front of it.
-# `switch-browser` restarts the chromium s6 service, so CDP drops and comes back on this port.
-CDP_INTERNAL_PORT = 9221
-# Bound the wait for CDP to come back after a browser switch (switch-browser restarts chromium).
-CDP_READY_TIMEOUT_SECONDS = 60
-ACTIVE_BROWSER_PATH = "/home/user/.active-browser"
+# The chromium s6 service reads this env var on first boot to pick the browser (Chrome default,
+# `cloak` for CloakBrowser). Set at sandbox-create time so a fresh sandbox boots straight into the
+# selected browser — no post-start swap. See CLOAKBROWSER_HANDOFF.md and chrome-live chromium/run.
+ACTIVE_BROWSER_ENV = "ACTIVE_BROWSER"
 
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
 CHROMIUM_EPOCH_OFFSET_SECONDS = 11644473600
@@ -142,58 +140,6 @@ async def _configure_remote_sandbox(
         )
     logger.info(f"Sandbox {sandbox.name} IP after proxy: {ip_after} (before: {ip_before})")
     return
-
-
-async def _select_browser_prestart(sandbox: AsyncSandbox, browser: str) -> None:
-    """Pre-start selection (path 1a): write `.active-browser` before `sandbox.start()`.
-
-    The `chromium` s6 service reads this file on every start, so the sandbox boots straight into
-    the selected browser — a single boot, no post-start swap. This is the common case: a returning
-    user's sandbox has auto-stopped (see AUTO_STOP_MINUTES), so `_ensure` starts it fresh and the
-    file takes effect on that boot. Needs sudo — the file is root-owned. On images without Cloak
-    (arm64) the s6 service falls back to Chrome at launch."""
-    res = await sandbox.process.exec(f"echo {browser} | sudo tee {ACTIVE_BROWSER_PATH}")
-    if res.exit_code != 0:
-        raise RuntimeError(
-            f"Failed to select {browser} on {sandbox.name} (pre-start): {res.result!r}"
-        )
-
-
-async def _wait_for_cdp(sandbox: AsyncSandbox) -> None:
-    """Block until CDP is reachable on the internal port again after a browser switch.
-
-    Mirrors browser-trace's readiness loop. Raises RuntimeError if CDP does not come back within
-    CDP_READY_TIMEOUT_SECONDS so a stuck switch fails the create rather than handing out a dead url."""
-    cmd = (
-        f"for i in $(seq {CDP_READY_TIMEOUT_SECONDS}); do "
-        f"curl -sf -o /dev/null http://127.0.0.1:{CDP_INTERNAL_PORT}/json/version && exit 0; "
-        "sleep 1; done; exit 1"
-    )
-    response = await sandbox.process.exec(cmd)
-    if response.exit_code != 0:
-        raise RuntimeError(
-            f"CDP not ready on :{CDP_INTERNAL_PORT} for {sandbox.name} after "
-            f"{CDP_READY_TIMEOUT_SECONDS}s: {response.result!r}"
-        )
-
-
-async def _switch_browser_live(sandbox: AsyncSandbox, browser: str) -> None:
-    """Post-start switch (path 1b): swap the browser on an already-running sandbox, then wait for CDP.
-
-    Costs a second browser boot (the sandbox is up on one browser, then restarts on another), so it
-    is only used when the sandbox is already `started` — a fresh cold-create (which auto-boots Chrome)
-    or a resumed-running sandbox. Idempotent: skips the restart if `.active-browser` already matches.
-    Also persists the selection so future starts boot it directly via the 1a path. Needs sudo."""
-    active = await sandbox.process.exec(f"cat {ACTIVE_BROWSER_PATH} 2>/dev/null")
-    if active.exit_code == 0 and active.result.strip() == browser:
-        logger.debug(f"Sandbox {sandbox.name} already on {browser}; skipping switch")
-        return
-
-    logger.info(f"Switching sandbox {sandbox.name} to {browser}")
-    res = await sandbox.process.exec(f"sudo switch-browser {browser}")
-    if res.exit_code != 0:
-        raise RuntimeError(f"switch-browser {browser} failed on {sandbox.name}: {res.result!r}")
-    await _wait_for_cdp(sandbox)
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -314,18 +260,12 @@ class DaytonaBackend:
         if sandbox is None:
             sandbox = await self._create(name)
 
-        want_cloak = settings.DAYTONA_CLOAK_BROWSER
+        # Browser selection is baked into the sandbox at create time via the ACTIVE_BROWSER env var
+        # (see _create), so both a fresh create and a resumed start boot the right browser directly —
+        # no post-start swap here.
         if sandbox.state != "started":
-            # 1a pre-start (single boot): select the browser before start so the s6 service boots
-            # straight into it. Common case — a returning user's sandbox has auto-stopped.
-            if want_cloak:
-                await _select_browser_prestart(sandbox, "cloak")
             logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
             await sandbox.start()
-        elif want_cloak:
-            # 1b post-start (double boot): sandbox already running (fresh cold-create auto-boots
-            # Chrome, or resumed-running), so swap live and persist for future single-boot starts.
-            await _switch_browser_live(sandbox, "cloak")
 
         return sandbox
 
@@ -378,10 +318,14 @@ class DaytonaBackend:
             return None
 
     async def _create(self, name: str) -> AsyncSandbox:
+        # Select CloakBrowser at boot via env; default (flag off) leaves it unset so the snapshot
+        # boots Chrome. The chromium s6 service reads ACTIVE_BROWSER on first boot (chrome-live).
+        env_vars = {ACTIVE_BROWSER_ENV: "cloak"} if settings.DAYTONA_CLOAK_BROWSER else {}
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
             labels={LABEL_FLEET: "1"},
+            env_vars=env_vars,
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown
