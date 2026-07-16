@@ -182,8 +182,8 @@ async def _capture_create_params(monkeypatch: MonkeyPatch, backend: DaytonaBacke
 
 
 @pytest.mark.asyncio
-async def test_create_sets_cloak_env_when_flag_on(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr(daytona_browsers.settings, "DAYTONA_CLOAK_BROWSER", True)
+async def test_create_sets_active_browser_env_cloak(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(daytona_browsers.settings, "DAYTONA_ACTIVE_BROWSER", "cloak")
     backend = _backend()
     captured = await _capture_create_params(monkeypatch, backend)
     await backend._create("chromium-test")  # pyright: ignore[reportPrivateUsage]
@@ -191,9 +191,9 @@ async def test_create_sets_cloak_env_when_flag_on(monkeypatch: MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_create_leaves_env_empty_when_flag_off(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setattr(daytona_browsers.settings, "DAYTONA_CLOAK_BROWSER", False)
+async def test_create_sets_active_browser_env_chrome_by_default(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(daytona_browsers.settings, "DAYTONA_ACTIVE_BROWSER", "chrome")
     backend = _backend()
     captured = await _capture_create_params(monkeypatch, backend)
     await backend._create("chromium-test")  # pyright: ignore[reportPrivateUsage]
-    assert captured[0].env_vars == {}  # default: snapshot boots Chrome
+    assert captured[0].env_vars == {"ACTIVE_BROWSER": "chrome"}

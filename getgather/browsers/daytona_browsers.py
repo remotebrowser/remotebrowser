@@ -318,14 +318,13 @@ class DaytonaBackend:
             return None
 
     async def _create(self, name: str) -> AsyncSandbox:
-        # Select CloakBrowser at boot via env; default (flag off) leaves it unset so the snapshot
-        # boots Chrome. The chromium s6 service reads ACTIVE_BROWSER on first boot (chrome-live).
-        env_vars = {ACTIVE_BROWSER_ENV: "cloak"} if settings.DAYTONA_CLOAK_BROWSER else {}
+        # Select the browser at boot via env; the chromium s6 service reads ACTIVE_BROWSER on first
+        # boot (chrome-live). Defaults to "chrome" so an ACTIVE_BROWSER-unaware snapshot is unaffected.
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
             labels={LABEL_FLEET: "1"},
-            env_vars=env_vars,
+            env_vars={ACTIVE_BROWSER_ENV: settings.DAYTONA_ACTIVE_BROWSER},
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown
