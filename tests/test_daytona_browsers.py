@@ -167,3 +167,57 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
     assert response.status_code == 200
     assert response.json() == {"browser_id": "winner", "id": "winner"}
     assert invoked == {"n": 3, "origin_ip": "1.2.3.4", "target_domain": "amazon.com"}
+
+
+class _ExecResult:
+    def __init__(self, exit_code: int, result: str = "") -> None:
+        self.exit_code = exit_code
+        self.result = result
+
+
+class _Process:
+    def __init__(self, responses: dict[str, _ExecResult]) -> None:
+        self._responses = responses
+        self.calls: list[str] = []
+
+    async def exec(self, cmd: str) -> _ExecResult:
+        self.calls.append(cmd)
+        for key, res in self._responses.items():
+            if key in cmd:
+                return res
+        return _ExecResult(0, "")
+
+
+class _SwitchSandbox:
+    def __init__(self, responses: dict[str, _ExecResult]) -> None:
+        self.name = "chromium-test"
+        self.process = _Process(responses)
+
+
+@pytest.mark.asyncio
+async def test_switch_to_cloak_execs_switch_and_waits_for_cdp() -> None:
+    sandbox = _SwitchSandbox({
+        ".active-browser": _ExecResult(0, "chrome"),  # not yet on cloak
+        "switch-browser cloak": _ExecResult(0, ""),
+        "json/version": _ExecResult(0, ""),  # CDP ready
+    })
+    await daytona_browsers._switch_to_cloak(cast("daytona_browsers.AsyncSandbox", sandbox))  # pyright: ignore[reportPrivateUsage]
+    assert any("sudo switch-browser cloak" in c for c in sandbox.process.calls)
+    assert any("json/version" in c for c in sandbox.process.calls)  # CDP re-waited
+
+
+@pytest.mark.asyncio
+async def test_switch_to_cloak_skips_when_already_cloak() -> None:
+    sandbox = _SwitchSandbox({".active-browser": _ExecResult(0, "cloak")})
+    await daytona_browsers._switch_to_cloak(cast("daytona_browsers.AsyncSandbox", sandbox))  # pyright: ignore[reportPrivateUsage]
+    assert not any("switch-browser" in c for c in sandbox.process.calls)
+
+
+@pytest.mark.asyncio
+async def test_switch_to_cloak_raises_when_switch_fails() -> None:
+    sandbox = _SwitchSandbox({
+        ".active-browser": _ExecResult(0, "chrome"),
+        "switch-browser cloak": _ExecResult(1, "CloakBrowser not available (amd64 only)"),
+    })
+    with pytest.raises(RuntimeError, match="switch-browser cloak failed"):
+        await daytona_browsers._switch_to_cloak(cast("daytona_browsers.AsyncSandbox", sandbox))  # pyright: ignore[reportPrivateUsage]

@@ -24,6 +24,13 @@ from getgather.config import settings
 CDP_PORT = 9222
 VNC_PORT = 8080
 
+# CloakBrowser and Chrome both serve CDP on this internal port; the :9222 proxy sits in front of it.
+# `switch-browser` restarts the chromium s6 service, so CDP drops and comes back on this port.
+CDP_INTERNAL_PORT = 9221
+# Bound the wait for CDP to come back after a browser switch (switch-browser restarts chromium).
+CDP_READY_TIMEOUT_SECONDS = 60
+ACTIVE_BROWSER_PATH = "/home/user/.active-browser"
+
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
 CHROMIUM_EPOCH_OFFSET_SECONDS = 11644473600
 CHROME_HISTORY_PATH = "/home/user/chrome-profile/Default/History"
@@ -135,6 +142,42 @@ async def _configure_remote_sandbox(
         )
     logger.info(f"Sandbox {sandbox.name} IP after proxy: {ip_after} (before: {ip_before})")
     return
+
+
+async def _wait_for_cdp(sandbox: AsyncSandbox) -> None:
+    """Block until CDP is reachable on the internal port again after a browser switch.
+
+    Mirrors browser-trace's readiness loop. Raises RuntimeError if CDP does not come back within
+    CDP_READY_TIMEOUT_SECONDS so a stuck switch fails the create rather than handing out a dead url."""
+    cmd = (
+        f"for i in $(seq {CDP_READY_TIMEOUT_SECONDS}); do "
+        f"curl -sf -o /dev/null http://127.0.0.1:{CDP_INTERNAL_PORT}/json/version && exit 0; "
+        "sleep 1; done; exit 1"
+    )
+    response = await sandbox.process.exec(cmd)
+    if response.exit_code != 0:
+        raise RuntimeError(
+            f"CDP not ready on :{CDP_INTERNAL_PORT} for {sandbox.name} after "
+            f"{CDP_READY_TIMEOUT_SECONDS}s: {response.result!r}"
+        )
+
+
+async def _switch_to_cloak(sandbox: AsyncSandbox) -> None:
+    """Switch the sandbox from Chrome (snapshot default) to CloakBrowser, then wait for CDP.
+
+    Idempotent but not free: skips the switch (a browser restart) if `.active-browser` already reads
+    `cloak`. `switch-browser` needs sudo (the s6 service dir is root-owned). On images without Cloak
+    (arm64) the switch exits non-zero; that is currently a hard failure."""
+    active = await sandbox.process.exec(f"cat {ACTIVE_BROWSER_PATH} 2>/dev/null")
+    if active.exit_code == 0 and active.result.strip() == "cloak":
+        logger.debug(f"Sandbox {sandbox.name} already on CloakBrowser; skipping switch")
+        return
+
+    logger.info(f"Switching sandbox {sandbox.name} to CloakBrowser")
+    res = await sandbox.process.exec("sudo switch-browser cloak")
+    if res.exit_code != 0:
+        raise RuntimeError(f"switch-browser cloak failed on {sandbox.name}: {res.result!r}")
+    await _wait_for_cdp(sandbox)
 
 
 def _browser_id_from_name(name: str) -> str:
@@ -258,6 +301,9 @@ class DaytonaBackend:
         if sandbox.state != "started":
             logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
             await sandbox.start()
+
+        if settings.DAYTONA_CLOAK_BROWSER:
+            await _switch_to_cloak(sandbox)
 
         return sandbox
 

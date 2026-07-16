@@ -52,6 +52,11 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+    # Switch the sandbox to CloakBrowser (stealth build) after start. The snapshot boots Chrome;
+    # when true, the backend execs `sudo switch-browser cloak` and waits for CDP to come back on
+    # :9221 before handing out cdp_url. On images without Cloak (arm64), the switch is a no-op
+    # fallback to Chrome. See CLOAKBROWSER_HANDOFF.md.
+    DAYTONA_CLOAK_BROWSER: bool = False
     # Best-of-N cold-create: on a fresh browser, race this many candidates in parallel and keep the
     # first whose `create_browser` fully succeeds.
     # Losers are deleted in the background. Set to 1 to disable the race and create a single
