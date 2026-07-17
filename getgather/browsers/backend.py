@@ -44,12 +44,20 @@ class _BestOfNBackend(_CleanupBackend, Protocol):
     while tests can pass a minimal fake."""
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]: ...
 
 
 async def best_of_n(
-    backend: _BestOfNBackend, n: int, origin_ip: str | None, target_domain: str | None
+    backend: _BestOfNBackend,
+    n: int,
+    origin_ip: str | None,
+    target_domain: str | None,
+    browser_type: str | None,
 ) -> tuple[str, dict[str, Any]]:
     """Race `n` cold-create candidates; keep the first that fully succeeds, delete the rest.
 
@@ -64,7 +72,7 @@ async def best_of_n(
     logger.info(f"Best-of-{n} browser race: {ids}")
 
     async def _candidate(bid: str) -> tuple[str, dict[str, Any]]:
-        return bid, await backend.create_browser(bid, origin_ip, target_domain)
+        return bid, await backend.create_browser(bid, origin_ip, target_domain, browser_type)
 
     tasks = [asyncio.create_task(_candidate(b)) for b in ids]
     winner: tuple[str, dict[str, Any]] | None = None
@@ -139,7 +147,11 @@ class Backend(Protocol):
     async def shutdown(self) -> None: ...
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]: ...
 
     async def get_browser(

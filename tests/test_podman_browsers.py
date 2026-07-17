@@ -123,7 +123,7 @@ async def test_create_browser_propagates_proxy_verification_error(monkeypatch: M
     monkeypatch.setattr(podman_browsers, "configure_remote_browser", fake_configure)
 
     with pytest.raises(ProxyVerificationError, match="IP unchanged"):
-        await PodmanBackend().create_browser("b0", "1.2.3.4", "amazon.com")
+        await PodmanBackend().create_browser("b0", "1.2.3.4", "amazon.com", None)
 
 
 @pytest.mark.asyncio
@@ -146,7 +146,11 @@ async def test_best_of_n_treats_proxy_failure_as_loser(monkeypatch: MonkeyPatch)
             self.existing: set[str] = set()
 
         async def create_browser(
-            self, browser_id: str, origin_ip: str | None, target_domain: str | None
+            self,
+            browser_id: str,
+            origin_ip: str | None,
+            target_domain: str | None,
+            browser_type: str | None,
         ) -> dict[str, Any]:
             if browser_id == "b0":
                 raise ProxyVerificationError("IP unchanged after proxy")
@@ -163,6 +167,6 @@ async def test_best_of_n_treats_proxy_failure_as_loser(monkeypatch: MonkeyPatch)
     ids = iter(["b0", "b1"])
     monkeypatch.setattr(backend_module, "new_browser_id", lambda: next(ids))
 
-    winner_id, info = await best_of_n(_Backend(), 2, "1.2.3.4", "amazon.com")
+    winner_id, info = await best_of_n(_Backend(), 2, "1.2.3.4", "amazon.com", None)
     assert winner_id == "b1"
     assert info == {"id": "b1"}

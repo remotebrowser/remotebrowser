@@ -329,7 +329,11 @@ class PodmanBackend:
         return None
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,  # not supported by the podman backend; always Chrome
     ) -> dict[str, Any]:
         container_name = f"{BROWSER_NAME_PREFIX}{browser_id}"
         await launch_container(settings.CONTAINER_IMAGE, container_name)
