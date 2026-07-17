@@ -169,11 +169,15 @@ class DaytonaBackend:
         await self.client.close()
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
-            sandbox = await self._ensure(browser_id)
+            sandbox = await self._ensure(browser_id, browser_type)
             # Proxy is mandatory when configured: let ProxyVerificationError propagate (the endpoint
             # maps it to 500) so the client can retry rather than get an unproxied browser.
             await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
@@ -254,11 +258,11 @@ class DaytonaBackend:
         )
         return signed.url
 
-    async def _ensure(self, browser_id: str) -> AsyncSandbox:
+    async def _ensure(self, browser_id: str, browser_type: str | None = None) -> AsyncSandbox:
         name = _sandbox_name(browser_id)
         sandbox = await self._get(name)
         if sandbox is None:
-            sandbox = await self._create(name)
+            sandbox = await self._create(name, browser_type)
 
         # Browser selection is baked into the sandbox at create time via the ACTIVE_BROWSER env var
         # (see _create), so both a fresh create and a resumed start boot the right browser directly —
@@ -317,14 +321,17 @@ class DaytonaBackend:
         except DaytonaNotFoundError:
             return None
 
-    async def _create(self, name: str) -> AsyncSandbox:
+    async def _create(self, name: str, browser_type: str | None = None) -> AsyncSandbox:
         # Select the browser at boot via env; the chromium s6 service reads ACTIVE_BROWSER on first
-        # boot (chrome-live). Defaults to "chrome" so an ACTIVE_BROWSER-unaware snapshot is unaffected.
+        # boot (chrome-live). Per-request `browser_type` (x-browser-type header) wins; otherwise the
+        # DAYTONA_ACTIVE_BROWSER default. Defaults to "chrome" so an ACTIVE_BROWSER-unaware snapshot
+        # is unaffected.
+        active_browser = browser_type or settings.DAYTONA_ACTIVE_BROWSER
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
             labels={LABEL_FLEET: "1"},
-            env_vars={ACTIVE_BROWSER_ENV: settings.DAYTONA_ACTIVE_BROWSER},
+            env_vars={ACTIVE_BROWSER_ENV: active_browser},
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown

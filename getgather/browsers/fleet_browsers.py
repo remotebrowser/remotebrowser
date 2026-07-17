@@ -96,9 +96,15 @@ class FleetBackend:
         return None
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]:
         headers = {"x-origin-ip": origin_ip} if origin_ip else {}
+        if browser_type:
+            headers["x-browser-type"] = browser_type
         response = _require(await call_chromefleet_api("POST", browser_id, headers=headers))
         return response.json()
 
