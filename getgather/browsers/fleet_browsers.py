@@ -24,6 +24,7 @@ def build_chromefleet_headers(*, target_domain: str | None = None) -> dict[str, 
         "x-origin-ip": mcp_headers.get("x-origin-ip") or client_ip_var.get(),
         "x-origin-id": mcp_headers.get("x-origin-id", None),
         "x-origin-ua": mcp_headers.get("x-origin-ua", None),
+        "x-browser-type": mcp_headers.get("x-browser-type", None),
         "x-target-domains": target_domain,
     }
     return {k: v for k, v in headers.items() if v is not None}
