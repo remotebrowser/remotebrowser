@@ -56,6 +56,7 @@ def test_create_browser_auto_name_starts_with_b(monkeypatch: MonkeyPatch) -> Non
             "ip": "1.2.3.4",
         }
 
+    monkeypatch.setattr(settings, "BROWSER_BEST_OF_N", 1)
     monkeypatch.setattr(browsers_router.backend, "create_browser", fake_create_browser)
 
     app = FastAPI()

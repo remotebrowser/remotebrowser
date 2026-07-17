@@ -217,14 +217,17 @@ async def websocket_proxy(
 @router.post("/api/v1/browsers")
 async def create_browser_auto_endpoint(request: Request) -> dict[str, Any]:
     # Server-assigned id + best-of-N policy lives here (not per-backend): every backend only owns
-    # per-browser CRUD keyed by a caller-supplied id. When BROWSER_BEST_OF_N > 1 it races that many
-    # candidates via best_of_n and returns the winner; otherwise it creates a single browser directly.
+    # per-browser CRUD keyed by a caller-supplied id. When the effective N > 1 it races that many
+    # candidates via best_of_n and returns the winner; otherwise it creates a single browser
+    # directly. The effective N is BROWSER_BEST_OF_N when explicitly set, else the backend's own
+    # default (see `Backend.default_best_of_n`).
     logger.info("Starting browser (server-assigned id)...")
     try:
         origin_ip = request.headers.get("x-origin-ip")
         target_domain = request.headers.get("x-target-domains")
         browser_type = request.headers.get("x-browser-type")
-        n = max(1, settings.BROWSER_BEST_OF_N)
+        explicit = settings.BROWSER_BEST_OF_N
+        n = max(1, explicit if explicit is not None else backend.default_best_of_n)
         if n == 1:
             browser_id = new_browser_id()
             result = await backend.create_browser(

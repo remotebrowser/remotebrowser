@@ -29,6 +29,8 @@ VNC_PORT = 8080
 # selected browser — no post-start swap. See chrome-live chromium/run.
 ACTIVE_BROWSER_ENV = "ACTIVE_BROWSER"
 
+DEFAULT_BEST_OF_N = 3
+
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
 CHROMIUM_EPOCH_OFFSET_SECONDS = 11644473600
 CHROME_HISTORY_PATH = "/home/user/chrome-profile/Default/History"
@@ -164,6 +166,10 @@ class DaytonaBackend:
         self.snapshot = snapshot
         self.client = AsyncDaytona(DaytonaConfig(api_key=api_key, api_url=api_url or None))
         self._locks: dict[str, asyncio.Lock] = {}
+
+    @property
+    def default_best_of_n(self) -> int:
+        return DEFAULT_BEST_OF_N
 
     async def shutdown(self) -> None:
         await self.client.close()
