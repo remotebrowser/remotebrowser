@@ -212,12 +212,14 @@ async def test_create_sets_active_browser_env_cloak(monkeypatch: MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_create_sets_active_browser_env_chrome_by_default(monkeypatch: MonkeyPatch) -> None:
+async def test_create_omits_env_for_chrome_default(monkeypatch: MonkeyPatch) -> None:
+    # Chrome is the snapshot default: send no env_vars so the create call is identical to a
+    # Chrome-only snapshot (older Daytona backends reject unexpected env_vars).
     monkeypatch.setattr(daytona_browsers.settings, "DAYTONA_ACTIVE_BROWSER", "chrome")
     backend = _backend()
     captured = await _capture_create_params(monkeypatch, backend)
     await backend._create("chromium-test")  # pyright: ignore[reportPrivateUsage]
-    assert captured[0].env_vars == {"ACTIVE_BROWSER": "chrome"}
+    assert captured[0].env_vars is None
 
 
 @pytest.mark.asyncio
