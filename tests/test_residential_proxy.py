@@ -6,10 +6,43 @@ from getgather.browsers.residential_proxy import (
     GeoLocation,
     MassiveProxyConfig,
     OxylabsProxyConfig,
+    _should_skip_geolocation,
     get_proxy_config,
     get_proxy_type_for_target_domain,
 )
 from getgather.browsers.settings import BrowserSettings
+
+
+# --- _should_skip_geolocation (Go net.IP equivalent) ---
+
+
+@pytest.mark.parametrize(
+    "ip",
+    [
+        "",
+        "localhost",
+        "unknown",
+        "not-an-ip",
+        "127.0.0.1",
+        "::1",
+        "10.0.0.1",
+        "192.168.1.1",
+        "169.254.1.1",  # link-local
+        "0.0.0.0",  # unspecified
+        "224.0.0.1",  # multicast
+        "fdaa:40:8a24:a7b:2af:795b:588f:2",  # Fly 6PN / ULA
+        "fe80::1",  # link-local unicast
+        "::",  # unspecified
+        "ff02::1",  # multicast
+    ],
+)
+def test_should_skip_geolocation_non_global(ip: str) -> None:
+    assert _should_skip_geolocation(ip) is True
+
+
+@pytest.mark.parametrize("ip", ["8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"])
+def test_should_skip_geolocation_public(ip: str) -> None:
+    assert _should_skip_geolocation(ip) is False
 
 
 def _settings(**kwargs: object) -> BrowserSettings:
