@@ -1,3 +1,4 @@
+import ipaddress
 from typing import TYPE_CHECKING, Literal, Protocol, Self
 
 from async_lru import alru_cache
@@ -9,13 +10,35 @@ from pydantic import BaseModel, model_validator
 if TYPE_CHECKING:
     from getgather.browsers.settings import BrowserSettings
 
-_SKIP_IPS = {"127.0.0.1", "::1", "localhost", "unknown"}
+# Non-IP sentinels that still show up as "origin" values.
+_SKIP_IP_LABELS = frozenset({"localhost", "unknown"})
 _MASSIVE_DOMAINS: set[str] = {"google.com", "doordash.com", "youtube.com"}
 _OXYLABS_DOMAINS: set[str] = {"amazon.com"}
 _PROXY_DOMAIN_POOLS: list[tuple[Literal["oxylabs", "massive"], set[str]]] = [
     ("massive", _MASSIVE_DOMAINS),
     ("oxylabs", _OXYLABS_DOMAINS),
 ]
+
+
+def should_skip_geolocation(ip: str) -> bool:
+    """True for IPs that MaxMind cannot (and should not) geolocate.
+
+    Mirrors Go's net.IP checks: IsPrivate / IsLoopback / IsLinkLocalUnicast /
+    IsMulticast / IsUnspecified. Covers Fly 6PN (fdaa:…) via ULA is_private.
+    """
+    if not ip or ip in _SKIP_IP_LABELS:
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return True
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
 
 
 class GeoLocation(BaseModel):
@@ -54,7 +77,7 @@ class GeoLocation(BaseModel):
 
 @alru_cache
 async def get_location(ip: str, account_id: int, license_key: str) -> "GeoLocation | None":
-    if not ip or ip in _SKIP_IPS:
+    if should_skip_geolocation(ip):
         return None
 
     async with AsyncClient(account_id, license_key) as client:
