@@ -20,7 +20,7 @@ _PROXY_DOMAIN_POOLS: list[tuple[Literal["oxylabs", "massive"], set[str]]] = [
 ]
 
 
-def _should_skip_geolocation(ip: str) -> bool:
+def should_skip_geolocation(ip: str) -> bool:
     """True for IPs that MaxMind cannot (and should not) geolocate.
 
     Mirrors Go's net.IP checks: IsPrivate / IsLoopback / IsLinkLocalUnicast /
@@ -77,7 +77,7 @@ class GeoLocation(BaseModel):
 
 @alru_cache
 async def get_location(ip: str, account_id: int, license_key: str) -> "GeoLocation | None":
-    if _should_skip_geolocation(ip):
+    if should_skip_geolocation(ip):
         return None
 
     async with AsyncClient(account_id, license_key) as client:
