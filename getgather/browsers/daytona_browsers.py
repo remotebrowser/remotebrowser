@@ -329,14 +329,13 @@ class DaytonaBackend:
 
     async def _create(self, name: str, browser_type: str | None = None) -> AsyncSandbox:
         # Select the browser at boot via env; the chromium s6 service reads ACTIVE_BROWSER on first
-        # boot (chrome-live). Per-request `browser_type` (x-browser-type header) wins; otherwise the
-        # DAYTONA_ACTIVE_BROWSER default. Only set the env for a non-Chrome pick: Chrome is the
-        # snapshot default, so an empty env_vars keeps the create call identical to a Chrome-only
-        # snapshot (older Daytona backends reject env_vars they don't expect).
-        active_browser = browser_type or settings.DAYTONA_ACTIVE_BROWSER
+        # boot (chrome-live). Driven by the per-request `browser_type` (x-browser-type header); Chrome
+        # is the default. Only set the env for a non-Chrome pick: Chrome is the snapshot default, so
+        # a None env_vars keeps the create call identical to a Chrome-only snapshot (older Daytona
+        # backends reject env_vars they don't expect).
         env_vars = (
-            {ACTIVE_BROWSER_ENV: active_browser}
-            if active_browser and active_browser != "chrome"
+            {ACTIVE_BROWSER_ENV: browser_type}
+            if browser_type and browser_type != "chrome"
             else None
         )
         params = CreateSandboxFromSnapshotParams(
