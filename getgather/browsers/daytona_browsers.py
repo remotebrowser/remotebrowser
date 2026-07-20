@@ -24,6 +24,11 @@ from getgather.config import settings
 CDP_PORT = 9222
 VNC_PORT = 8080
 
+# The chromium s6 service reads this env var on first boot to pick the browser (Chrome default,
+# `cloak` for CloakBrowser). Set at sandbox-create time so a fresh sandbox boots straight into the
+# selected browser — no post-start swap. See chrome-live chromium/run.
+ACTIVE_BROWSER_ENV = "ACTIVE_BROWSER"
+
 DEFAULT_BEST_OF_N = 3
 
 # Chrome stores last_visit_time as microseconds since 1601-01-01; this offset converts to unix epoch.
@@ -170,11 +175,15 @@ class DaytonaBackend:
         await self.client.close()
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
-            sandbox = await self._ensure(browser_id)
+            sandbox = await self._ensure(browser_id, browser_type)
             # Proxy is mandatory when configured: let ProxyVerificationError propagate (the endpoint
             # maps it to 500) so the client can retry rather than get an unproxied browser.
             await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
@@ -255,12 +264,15 @@ class DaytonaBackend:
         )
         return signed.url
 
-    async def _ensure(self, browser_id: str) -> AsyncSandbox:
+    async def _ensure(self, browser_id: str, browser_type: str | None = None) -> AsyncSandbox:
         name = _sandbox_name(browser_id)
         sandbox = await self._get(name)
         if sandbox is None:
-            sandbox = await self._create(name)
+            sandbox = await self._create(name, browser_type)
 
+        # Browser selection is baked into the sandbox at create time via the ACTIVE_BROWSER env var
+        # (see _create), so both a fresh create and a resumed start boot the right browser directly —
+        # no post-start swap here.
         if sandbox.state != "started":
             logger.info(f"Starting Daytona sandbox {name} (state={sandbox.state})")
             await sandbox.start()
@@ -315,11 +327,22 @@ class DaytonaBackend:
         except DaytonaNotFoundError:
             return None
 
-    async def _create(self, name: str) -> AsyncSandbox:
+    async def _create(self, name: str, browser_type: str | None = None) -> AsyncSandbox:
+        # Select the browser at boot via env; the chromium s6 service reads ACTIVE_BROWSER on first
+        # boot (chrome-live). Driven by the per-request `browser_type` (x-browser-type header); Chrome
+        # is the default. Only set the env for a non-Chrome pick: Chrome is the snapshot default, so
+        # a None env_vars keeps the create call identical to a Chrome-only snapshot (older Daytona
+        # backends reject env_vars they don't expect).
+        env_vars = (
+            {ACTIVE_BROWSER_ENV: browser_type}
+            if browser_type and browser_type != "chrome"
+            else None
+        )
         params = CreateSandboxFromSnapshotParams(
             snapshot=self.snapshot,
             name=name,
             labels={LABEL_FLEET: "1"},
+            env_vars=env_vars,
             public=False,
             auto_stop_interval=AUTO_STOP_MINUTES,
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown

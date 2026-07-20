@@ -112,9 +112,14 @@ def test_create_browser_n1_short_circuits_best_of_n(monkeypatch: MonkeyPatch) ->
     called: dict[str, Any] = {}
 
     async def fake_create_browser(
-        self: Any, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self: Any,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, str]:
         called["browser_id"] = browser_id
+        called["browser_type"] = browser_type
         return {"id": browser_id}
 
     async def fail_best_of_n(*args: Any, **kwargs: Any) -> tuple[str, dict[str, Any]]:
@@ -128,11 +133,12 @@ def test_create_browser_n1_short_circuits_best_of_n(monkeypatch: MonkeyPatch) ->
     app.include_router(router_module.router)
     client = TestClient(app)
 
-    response = client.post("/api/v1/browsers")
+    response = client.post("/api/v1/browsers", headers={"x-browser-type": "cloak"})
     assert response.status_code == 200
     data = response.json()
     assert data == {"browser_id": "solo", "id": "solo"}
     assert called["browser_id"] == "solo"
+    assert called["browser_type"] == "cloak"  # x-browser-type header threaded through
 
 
 def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -> None:
@@ -148,11 +154,16 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
     invoked: dict[str, Any] = {}
 
     async def fake_best_of_n(
-        backend: Any, n: int, origin_ip: str | None, target_domain: str | None
+        backend: Any,
+        n: int,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> tuple[str, dict[str, str]]:
         invoked["n"] = n
         invoked["origin_ip"] = origin_ip
         invoked["target_domain"] = target_domain
+        invoked["browser_type"] = browser_type
         return "winner", {"id": "winner"}
 
     monkeypatch.setattr(router_module, "best_of_n", fake_best_of_n)
@@ -162,11 +173,61 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
     client = TestClient(app)
 
     response = client.post(
-        "/api/v1/browsers", headers={"x-origin-ip": "1.2.3.4", "x-target-domains": "amazon.com"}
+        "/api/v1/browsers",
+        headers={
+            "x-origin-ip": "1.2.3.4",
+            "x-target-domains": "amazon.com",
+            "x-browser-type": "cloak",
+        },
     )
     assert response.status_code == 200
     assert response.json() == {"browser_id": "winner", "id": "winner"}
-    assert invoked == {"n": 3, "origin_ip": "1.2.3.4", "target_domain": "amazon.com"}
+    assert invoked == {
+        "n": 3,
+        "origin_ip": "1.2.3.4",
+        "target_domain": "amazon.com",
+        "browser_type": "cloak",
+    }
+
+
+async def _capture_create_params(monkeypatch: MonkeyPatch, backend: DaytonaBackend) -> list[Any]:
+    """Patch the Daytona client's create() to record the params it was called with."""
+    captured: list[Any] = []
+
+    async def fake_create(params: Any, timeout: float = 0) -> Any:
+        captured.append(params)
+        return cast(Any, _Sandbox())
+
+    monkeypatch.setattr(backend.client, "create", fake_create)
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_create_sets_active_browser_env_for_cloak(monkeypatch: MonkeyPatch) -> None:
+    # browser_type="cloak" (x-browser-type header) selects CloakBrowser via the ACTIVE_BROWSER env.
+    backend = _backend()
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", "cloak")  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].env_vars == {"ACTIVE_BROWSER": "cloak"}
+
+
+@pytest.mark.asyncio
+async def test_create_omits_env_for_chrome(monkeypatch: MonkeyPatch) -> None:
+    # Chrome is the default: send no env_vars so the create call is identical to a Chrome-only
+    # snapshot (older Daytona backends reject unexpected env_vars).
+    backend = _backend()
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", "chrome")  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].env_vars is None
+
+
+@pytest.mark.asyncio
+async def test_create_omits_env_when_browser_type_none(monkeypatch: MonkeyPatch) -> None:
+    # No x-browser-type header -> browser_type None -> default Chrome, no env_vars.
+    backend = _backend()
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", None)  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].env_vars is None
 
 
 def test_create_browser_auto_uses_backend_default_when_env_unset(monkeypatch: MonkeyPatch) -> None:
@@ -183,7 +244,11 @@ def test_create_browser_auto_uses_backend_default_when_env_unset(monkeypatch: Mo
     invoked: dict[str, Any] = {}
 
     async def fake_best_of_n(
-        backend: Any, n: int, origin_ip: str | None, target_domain: str | None
+        backend: Any,
+        n: int,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> tuple[str, dict[str, str]]:
         invoked["n"] = n
         return "winner", {"id": "winner"}

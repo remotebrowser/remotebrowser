@@ -25,7 +25,11 @@ class _FakeBackend:
         self.existing: set[str] = set()
 
     async def create_browser(
-        self, browser_id: str, origin_ip: str | None, target_domain: str | None
+        self,
+        browser_id: str,
+        origin_ip: str | None,
+        target_domain: str | None,
+        browser_type: str | None,
     ) -> dict[str, Any]:
         delay = self.delays.get(browser_id, 0.0)
         if delay:
@@ -69,7 +73,7 @@ async def test_best_of_n_picks_first_to_complete(monkeypatch: MonkeyPatch) -> No
     backend.delays = {"b0": 0.02, "b1": 0.01, "b2": 0.05}
     backend.create_outcomes = {"b1": ProxyVerificationError("proxy unchanged")}
 
-    winner_id, info = await best_of_n(backend, 3, None, None)
+    winner_id, info = await best_of_n(backend, 3, None, None, None)
     await asyncio.sleep(0)  # let the fire-and-forget cleanup task schedule
 
     assert winner_id == "b0"
@@ -86,7 +90,7 @@ async def test_best_of_n_raises_when_all_candidates_fail(monkeypatch: MonkeyPatc
     }
 
     with pytest.raises(ProxyVerificationError, match="no browser candidate started"):
-        await best_of_n(backend, 2, None, None)
+        await best_of_n(backend, 2, None, None, None)
 
 
 @pytest.mark.asyncio
@@ -96,7 +100,7 @@ async def test_best_of_n_winner_is_not_deleted(monkeypatch: MonkeyPatch) -> None
     backend = _FakeBackend()
     backend.delays = {"w": 0.01, "l1": 0.05, "l2": 0.05}
 
-    winner_id, _ = await best_of_n(backend, 3, None, None)
+    winner_id, _ = await best_of_n(backend, 3, None, None, None)
     assert winner_id == "w"
     assert "w" not in backend.deleted
 
@@ -150,17 +154,26 @@ async def test_cleanup_losers_waits_for_materialization(monkeypatch: MonkeyPatch
 
 
 @pytest.mark.asyncio
-async def test_best_of_n_passes_origin_ip_and_target_domain(monkeypatch: MonkeyPatch) -> None:
+async def test_best_of_n_passes_origin_ip_target_domain_and_browser_type(
+    monkeypatch: MonkeyPatch,
+) -> None:
     _patch_ids(monkeypatch, ["b0", "b1"])
-    seen: list[tuple[str, str | None, str | None]] = []
+    seen: list[tuple[str, str | None, str | None, str | None]] = []
 
     class _Tracking(_FakeBackend):
         async def create_browser(
-            self, browser_id: str, origin_ip: str | None, target_domain: str | None
+            self,
+            browser_id: str,
+            origin_ip: str | None,
+            target_domain: str | None,
+            browser_type: str | None,
         ) -> dict[str, Any]:
-            seen.append((browser_id, origin_ip, target_domain))
+            seen.append((browser_id, origin_ip, target_domain, browser_type))
             self.existing.add(browser_id)
             return {"id": browser_id}
 
-    await best_of_n(_Tracking(), 2, "1.2.3.4", "amazon.com")
-    assert set(seen) == {("b0", "1.2.3.4", "amazon.com"), ("b1", "1.2.3.4", "amazon.com")}
+    await best_of_n(_Tracking(), 2, "1.2.3.4", "amazon.com", "cloak")
+    assert set(seen) == {
+        ("b0", "1.2.3.4", "amazon.com", "cloak"),
+        ("b1", "1.2.3.4", "amazon.com", "cloak"),
+    }

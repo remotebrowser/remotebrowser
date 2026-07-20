@@ -225,13 +225,16 @@ async def create_browser_auto_endpoint(request: Request) -> dict[str, Any]:
     try:
         origin_ip = request.headers.get("x-origin-ip")
         target_domain = request.headers.get("x-target-domains")
+        browser_type = request.headers.get("x-browser-type")
         explicit = settings.BROWSER_BEST_OF_N
         n = max(1, explicit if explicit is not None else backend.default_best_of_n)
         if n == 1:
             browser_id = new_browser_id()
-            result = await backend.create_browser(browser_id, origin_ip, target_domain)
+            result = await backend.create_browser(
+                browser_id, origin_ip, target_domain, browser_type
+            )
         else:
-            browser_id, result = await best_of_n(backend, n, origin_ip, target_domain)
+            browser_id, result = await best_of_n(backend, n, origin_ip, target_domain, browser_type)
         logger.info(f"Browser {browser_id} is started.")
         return {"browser_id": browser_id, **result}
     except Exception as e:
@@ -246,7 +249,8 @@ async def create_browser(browser_id: str, request: Request) -> dict[str, Any]:
     try:
         origin_ip = request.headers.get("x-origin-ip")
         target_domain = request.headers.get("x-target-domains")
-        result = await backend.create_browser(browser_id, origin_ip, target_domain)
+        browser_type = request.headers.get("x-browser-type")
+        result = await backend.create_browser(browser_id, origin_ip, target_domain, browser_type)
         logger.info(f"Browser {browser_id} is started.")
         return result
     except Exception as e:
@@ -308,7 +312,8 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
         try:
             origin_ip = client_ws.headers.get("x-origin-ip")
             target_domain = client_ws.headers.get("x-target-domains")
-            await backend.create_browser(browser_id, origin_ip, target_domain)
+            browser_type = client_ws.headers.get("x-browser-type")
+            await backend.create_browser(browser_id, origin_ip, target_domain, browser_type)
             logger.info(f"[CDP] Browser {browser_id} started")
         except Exception as e:
             logger.error(f"[CDP] Failed to auto-start browser {browser_id}: {e}")
