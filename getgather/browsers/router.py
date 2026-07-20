@@ -3,7 +3,6 @@ import html
 import json
 from typing import Any
 
-import httpx
 import websockets
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -18,6 +17,7 @@ from getgather.browsers.backend import (
     create_backend,
     new_browser_id,
 )
+from getgather.cdp_client import CDPClient, open_cdp_url
 from getgather.config import settings
 
 router = APIRouter()
@@ -26,60 +26,41 @@ backend: Backend = create_backend()
 logger.info(f"Using browser backend: {backend.__class__.__name__}")
 
 
-def rewrite_ws_url(ws_url: str, cdp_base_url: str) -> str:
-    """Rewrite a CDP webSocketDebuggerUrl to use the cdp_base_url's scheme/host/port.
+async def open_browser_cdp_client(browser_id: str) -> CDPClient | None:
+    """Open a browser-level CDP client for `browser_id`, usable for direct commands like
+    Target.getTargets. Returns None when the backend has no browser-level socket the router
+    can open directly (Fleet relays /cdp and /devtools to an external proxy instead).
 
-    Chrome reports webSocketDebuggerUrl against the Host it saw (e.g. ws://localhost:9222/...),
-    which is unreachable when CDP is fronted by a reverse proxy (a Daytona signed preview URL).
-    This points the websocket at the same scheme+host+port we reached CDP on (https -> wss),
-    keeping the path/query. For the local podman backend the host already matches, so it is a no-op.
+    - Browserbase: open the per-session connectUrl (signing key in the query string).
+    - Podman / Daytona: /json/version discovers the browser webSocketDebuggerUrl, then open it.
+    - Fleet: cdp_websocket_base() is the shared relay; never enumerated here.
     """
-    base = httpx.URL(cdp_base_url)
-    scheme = "wss" if base.scheme == "https" else "ws"
-    return str(httpx.URL(ws_url).copy_with(scheme=scheme, host=base.host, port=base.port))
-
-
-async def get_cdp_websocket_url(browser_id: str) -> str:
-    cdp_base_url = await backend.get_cdp_base_url(browser_id)
-
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(f"{cdp_base_url}/json/version")
-        response.raise_for_status()
-        data = response.json()
-        logger.debug(f"[CDP] CDP json version gives {data}")
-        return rewrite_ws_url(str(data["webSocketDebuggerUrl"]), cdp_base_url)
-
-
-async def get_page_websocket_url(browser_id: str, page_id: str) -> str | None:
-    try:
-        cdp_base_url = await backend.get_cdp_base_url(browser_id)
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{cdp_base_url}/json/list")
-            response.raise_for_status()
-            data: list[dict[str, Any]] = response.json()
-            for item in data:
-                if item.get("id") == page_id:
-                    ws_url = item.get("webSocketDebuggerUrl")
-                    return rewrite_ws_url(str(ws_url), cdp_base_url) if ws_url else None
-            return None
-    except Exception as e:
-        logger.error(f"[CDP] Error getting page websocket URL for {browser_id}/{page_id}: {e}")
+    if backend.cdp_websocket_base() is not None:
+        return None  # Fleet: relay-only, no browser-level socket to open directly.
+    ws_url = await backend.get_cdp_websocket_remote_url(browser_id)
+    if ws_url is None:
         return None
+    return await open_cdp_url(ws_url, timeout=10.0)
 
 
 async def get_page_list(browser_id: str) -> list[str]:
-    try:
-        cdp_base_url = await backend.get_cdp_base_url(browser_id)
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{cdp_base_url}/json/list")
-            response.raise_for_status()
-            data: list[dict[str, Any]] = response.json()
-            return [str(item["id"]) for item in data]
-    except Exception as e:
-        logger.error(f"[CDP] Error getting page list for {browser_id}: {e}")
+    # Page enumeration is done over the browser-level CDP socket by sending Target.getTargets
+    # and filtering for type == "page" — the same call pages_api_router.list_pages uses. This
+    # works uniformly for every backend that exposes a browser-level socket (Browserbase via
+    # connectUrl, Podman/Daytona via /json/version discovery); Fleet relays /devtools to its
+    # own proxy and never reaches this path, so open_browser_cdp_client returns None there.
+    client = await open_browser_cdp_client(browser_id)
+    if client is None:
         return []
+    try:
+        result = await client.send("Target.getTargets")
+    except Exception as e:
+        logger.warning(f"[CDP] Target.getTargets failed for {browser_id}: {type(e).__name__}: {e}")
+        return []
+    finally:
+        await client.aclose()
+    target_infos: list[dict[str, Any]] = result.get("targetInfos", [])  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+    return [str(info["targetId"]) for info in target_infos if info.get("type") == "page"]
 
 
 async def find_browser_id(page_id: str) -> str | None:
@@ -307,6 +288,7 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
     await client_ws.accept()
     logger.debug("[CDP] WebSocket accepted")
 
+    # (1) Auto-launch the browser if it isn't running yet.
     if not await backend.browser_exists(browser_id):
         logger.info(f"[CDP] Browser {browser_id} not found — launching")
         try:
@@ -320,41 +302,36 @@ async def cdp_browser_websocket_proxy(client_ws: WebSocket, browser_id: str) -> 
             await client_ws.close(code=1008)
             return
 
-    cdp_base = backend.cdp_websocket_base()
-    if cdp_base is not None:
-        # Fleet mode: relay straight to the external fleet's own /cdp proxy, which already
-        # patches target ids — so do not patch again here (would double-prefix browser_id).
-        remote_url = f"{cdp_base}/cdp/{browser_id}"
-        logger.info(f"[CDP] Relaying to external fleet: {remote_url}")
-        await websocket_proxy(client_ws, remote_url, browser_id, patch=False)
-        logger.debug("[CDP] cdp_browser_websocket_proxy exiting")
-        return
-
-    remote_url = None
+    # (2) Resolve the backend-specific remote wss URL — retry up to 10 times. Each backend owns
+    # this lookup end-to-end (`get_cdp_websocket_remote_url`); the router is agnostic of
+    # whether it came from a connectUrl, an external /cdp relay, or a /json/version probe. Both
+    # `None` (not yet resolvable) and exceptions (transient /json/version failure on a boot race)
+    # count as a missed attempt; the first non-None result wins.
+    remote_url: str | None = None
     for attempt in range(10):
         try:
-            remote_url = await get_cdp_websocket_url(browser_id)
-            logger.info(f"[CDP] Got remote URL: {remote_url}")
-            break
+            remote_url = await backend.get_cdp_websocket_remote_url(browser_id)
         except Exception as e:
             logger.warning(
                 f"[CDP] Attempt {attempt + 1}/10 failed to get debugger URL from {browser_id}: {e}"
             )
-            if attempt < 9:
-                logger.debug("[CDP] Retrying in 3 seconds...")
-                await asyncio.sleep(3)
-            else:
-                logger.error("[CDP] All retry attempts exhausted")
-                await client_ws.close(code=4502, reason="Failed to get debugger URL")
-                return
-
-    if not remote_url:
-        logger.error("[CDP] No remote URL obtained")
+        if remote_url is not None:
+            logger.info(f"[CDP] Got remote URL: {remote_url}")
+            break
+        if attempt < 9:
+            logger.debug("[CDP] Retrying in 3 seconds...")
+            await asyncio.sleep(3)
+    else:
+        logger.error("[CDP] All retry attempts exhausted")
         await client_ws.close(code=4502, reason="Failed to get debugger URL")
         return
 
+    # (3) Relay. `cdp_targets_need_namespacing` lets each backend tell the router whether the URL
+    # it returned already namespaces target ids (Fleet's external /cdp proxy) — in which case we
+    # do not patch again (would double-prefix browser_id).
     logger.info(f"[CDP] Client connected, proxying to {remote_url}")
-    await websocket_proxy(client_ws, remote_url, browser_id)
+    patch = backend.cdp_targets_need_namespacing()
+    await websocket_proxy(client_ws, remote_url, browser_id, patch)
     logger.debug("[CDP] cdp_browser_websocket_proxy exiting")
 
 
@@ -364,16 +341,13 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
     await client_ws.accept()
     logger.debug("[CDP] WebSocket accepted")
 
-    cdp_base = backend.cdp_websocket_base()
-    if cdp_base is not None:
-        # Fleet mode: relay the page-level CDP socket to the fleet's own /devtools proxy verbatim.
-        # The fleet resolves the page and patches target ids; browser_id is unused with patch=False.
-        remote_url = f"{cdp_base}/devtools/{path}"
-        logger.info(f"[CDP] Relaying to external fleet: {remote_url}")
-        await websocket_proxy(client_ws, remote_url, browser_id="", patch=False)
-        logger.debug("[CDP] cdp_devtools_websocket_proxy exiting")
-        return
-
+    # Resolve the page id from the path's last segment (Chrome's /devtools/page/<id> URL form,
+    # possibly namespaced by /cdp as `<browser_id>@<page_id>`). When the `@` form is present the
+    # browser_id is carried in the segment; otherwise scan every backend browser's targets via
+    # Target.getTargets to locate the page (Fleet relays /devtools verbatim and never reaches
+    # this branch — it returns a relay URL from `get_devtools_websocket_remote_url` for any
+    # page_id, so the find_browser_id fallback only fires for the local backends that report raw
+    # un-namespaced target ids to clients).
     parts = path.split("/")
     page_id = parts[-1] if parts else None
     if not page_id:
@@ -381,13 +355,10 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
         await client_ws.close(code=4000, reason="No page_id in path")
         return
 
-    browser_id = None
     if "@" in page_id:
-        id_parts = page_id.split("@")
-        browser_id = id_parts[0]
-        page_id = id_parts[1]
+        browser_id, page_id = page_id.split("@", 1)
         logger.debug(f"[CDP] browser_id={browser_id} page_id={page_id}")
-    else:
+    elif backend.cdp_websocket_base() is None:
         logger.debug(f"[CDP] Looking for page_id={page_id}")
         browser_id = await find_browser_id(page_id)
         if browser_id:
@@ -396,15 +367,55 @@ async def cdp_devtools_websocket_proxy(client_ws: WebSocket, path: str) -> None:
             logger.error(f"[CDP] Page {page_id} not found in any browser")
             await client_ws.close(code=4000, reason="Page not found in any browser")
             return
+    else:
+        # Fleet relay: page_id wasn't namespaced by /cdp (the fleet's own /cdp already namespaces
+        # target ids, and we patch=False on that route). Pass the namespaced form through to the
+        # backend by leaving browser_id empty; see `get_devtools_websocket_remote_url`.
+        browser_id = ""
 
-    remote_url = await get_page_websocket_url(browser_id, page_id)
-    if not remote_url:
+    # Resolve the backend-specific remote wss URL — retry up to 10 times. Each backend owns this
+    # end-to-end (`get_devtools_websocket_remote_url`): Fleet returns the external /devtools
+    # relay URL, Podman/Daytona return the per-page /json/list webSocketDebuggerUrl, and
+    # Browserbase self-relays the client socket against its multiplexed connectUrl and returns ""
+    # — the sentinel that tells this router to skip its own websocket_proxy (a plain relay can't
+    # drive a single page off a multiplexed socket). Both `None` (not yet resolvable) and
+    # exceptions (a transient /json/list failure on a boot race) count as a missed attempt; the
+    # first non-None result wins.
+    remote_url: str | None = None
+    for attempt in range(10):
+        try:
+            remote_url = await backend.get_devtools_websocket_remote_url(
+                client_ws, browser_id, page_id
+            )
+        except Exception as e:
+            logger.warning(
+                f"[CDP] Attempt {attempt + 1}/10 failed to get page URL for "
+                f"{browser_id}/{page_id}: {e}"
+            )
+        if remote_url is not None:
+            if remote_url != "":
+                logger.info(f"[CDP] Got page remote URL: {remote_url}")
+            break
+        if attempt < 9:
+            logger.debug("[CDP] Retrying in 3 seconds...")
+            await asyncio.sleep(3)
+    else:
         logger.error(f"[CDP] Could not get websocket URL for page {page_id}")
         await client_ws.close(code=4502, reason="Failed to get page websocket URL")
         return
 
+    # Sentinel: the backend already relayed the client socket itself (Browserbase).
+    if remote_url == "":
+        logger.debug("[CDP] cdp_devtools_websocket_proxy exiting (backend self-relayed)")
+        return
+
+    # Relay. `cdp_targets_need_namespacing` lets each backend tell the router whether the URL it
+    # returned already namespaces target ids (Fleet's external /devtools proxy) — in which case
+    # we do not patch again (would double-prefix browser_id).
     logger.info(f"[CDP] Connecting to {remote_url}")
-    await websocket_proxy(client_ws, remote_url, browser_id)
+    await websocket_proxy(
+        client_ws, remote_url, browser_id, patch=backend.cdp_targets_need_namespacing()
+    )
     logger.debug("[CDP] cdp_devtools_websocket_proxy exiting")
 
 

@@ -1,6 +1,8 @@
 import asyncio
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
+import httpx
+from fastapi import WebSocket
 from loguru import logger
 from nanoid import generate
 
@@ -9,6 +11,57 @@ from getgather.config import FRIENDLY_CHARS, settings
 # Shared name prefix: a browser with id `abc` is a podman container / Daytona sandbox named
 # `chromium-abc`. Both local backends derive names and parse ids from this single prefix.
 BROWSER_NAME_PREFIX = "chromium-"
+
+
+def rewrite_ws_url(ws_url: str, cdp_base_url: str) -> str:
+    """Rewrite a CDP webSocketDebuggerUrl to use the cdp_base_url's scheme/host/port.
+
+    Chrome reports webSocketDebuggerUrl against the Host it saw (e.g. ws://localhost:9222/...),
+    which is unreachable when CDP is fronted by a reverse proxy (a Daytona signed preview URL).
+    This points the websocket at the same scheme+host+port we reached CDP on (https -> wss),
+    keeping the path/query. For the local podman backend the host already matches, so it is a no-op.
+    """
+    base = httpx.URL(cdp_base_url)
+    scheme = "wss" if base.scheme == "https" else "ws"
+    return str(httpx.URL(ws_url).copy_with(scheme=scheme, host=base.host, port=base.port))
+
+
+async def get_browser_websocket_debugger_url(cdp_base_url: str) -> str:
+    """Discover the browser-level `webSocketDebuggerUrl` from a CDP endpoint's
+    `/json/version`, rewritten to ride over the same scheme/host/port as `cdp_base_url`.
+
+    Used by the local backends (Podman / Daytona) that expose a per-browser HTTP CDP endpoint
+    but no pre-baked wss connect URL: their `get_cdp_websocket_remote_url` resolves the
+    cdp base URL (per browser) and then this helper does the standard /json/version probe.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{cdp_base_url}/json/version")
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        logger.debug(f"[CDP] CDP json version gives {data}")
+        return rewrite_ws_url(str(data["webSocketDebuggerUrl"]), cdp_base_url)
+
+
+async def get_page_websocket_debugger_url(cdp_base_url: str, page_id: str) -> str | None:
+    """Discover the per-page `webSocketDebuggerUrl` for `page_id` from a CDP endpoint's
+    `/json/list`, rewritten to ride over the same scheme/host/port as `cdp_base_url`.
+
+    Used by the local backends (Podman / Daytona) that expose per-page webSocketDebuggerUrls
+    over HTTP — their `get_devtools_websocket_remote_url` resolves the cdp base URL (per
+    browser) and then this helper does the standard /json/list probe. Returns None when the
+    page id is not present in the listing (page already closed or not yet registered).
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{cdp_base_url}/json/list")
+        response.raise_for_status()
+        raw: Any = response.json()
+        if not isinstance(raw, list):
+            return None
+        for item in cast(list[dict[str, Any]], raw):
+            if item.get("id") == page_id:
+                ws_url = item.get("webSocketDebuggerUrl")
+                return rewrite_ws_url(str(ws_url), cdp_base_url) if ws_url else None
+        return None
 
 
 def new_browser_id() -> str:
@@ -172,6 +225,36 @@ class Backend(Protocol):
     async def get_cdp_base_url(self, browser_id: str) -> str: ...
 
     def cdp_websocket_base(self) -> str | None: ...
+
+    async def get_cdp_websocket_remote_url(self, browser_id: str) -> str | None:
+        """The single wss URL the router should relay a /cdp/{browser_id} client socket to.
+        Owned end-to-end by each backend, so the router can stay agnostic of how the URL is
+        derived (the external fleet's /cdp relay for Fleet, the per-browser /json/version
+        discovery for Podman/Daytona). Returns None when the URL can't (yet) be resolved."""
+
+    def cdp_targets_need_namespacing(self) -> bool:
+        """Whether `websocket_proxy` should rewrite target ids to namespace them by `browser_id`
+        when relaying to this backend's URL. True for backends that hand back a single browser's
+        raw CDP socket (Podman / Daytona); False for the Fleet relay, whose /cdp proxy already
+        namespaces target ids itself (so the router patching again would double-prefix)."""
+        ...
+
+    async def get_devtools_websocket_remote_url(
+        self, client_ws: WebSocket, browser_id: str, page_id: str
+    ) -> str | None:
+        """Resolve the remote wss URL the router should relay a /devtools/{path} client socket
+        to, or self-relay the socket and return a sentinel "" telling the router to skip its own
+        `websocket_proxy`. Owned end-to-end by each backend.
+
+        Returns:
+          - a non-empty URL string: the router relays via `websocket_proxy(client_ws, url, …)`.
+            Fleet returns the external /devtools relay URL; Podman/Daytona return the per-page
+            `/json/list` webSocketDebuggerUrl.
+          - "": the backend already relayed `client_ws`, the router must skip `websocket_proxy`.
+          - None: the URL can't (yet) be resolved — the router retries up to 10 times before
+            giving up and closing the client with 4502.
+        """
+        ...
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None: ...
 
