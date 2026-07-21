@@ -657,6 +657,14 @@ async def run_distillation_loop(
 
     current = Match(name="", priority=-1, distilled="")
 
+    # Let the page settle (e.g. redirect chains, JS/CSS) before polling, so
+    # matched elements pass isVisible() and short timeouts don't falsely report
+    # "No matched pattern found".
+    try:
+        await wait_for_ready_state(page, timeout=5)
+    except Exception as e:
+        logger.warning(f"Error waiting for page ready state: {e}")
+
     for iteration in range(max):
         logger.debug(f"Iteration {iteration + 1} of {max}")
         await asyncio.sleep(TICK)
