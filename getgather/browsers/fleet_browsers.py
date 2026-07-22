@@ -1,6 +1,7 @@
 from typing import Any, Literal, cast
 
 import httpx
+from fastapi import WebSocket
 from fastmcp.server.dependencies import get_http_headers
 from httpx_retries import Retry, RetryTransport
 
@@ -158,6 +159,29 @@ class FleetBackend:
         # the local routes relay to them verbatim. ws:// for http, wss:// for https.
         base = settings.effective_chromefleet_url.rstrip("/")
         return base.replace("https://", "wss://").replace("http://", "ws://")
+
+    async def get_cdp_websocket_remote_url(self, browser_id: str) -> str | None:
+        # Relay straight to the external fleet's own /cdp proxy, which already namespaces target
+        # ids; the router does not patch again (see cdp_targets_need_namespacing). Deterministic
+        # from CHROMEFLEET_URL + browser_id, so this never returns None — no retry needed.
+        return f"{self.cdp_websocket_base()}/cdp/{browser_id}"
+
+    def cdp_targets_need_namespacing(self) -> bool:
+        # The external fleet's /cdp proxy already namespaces target ids by browser_id; the
+        # router patching here would double-prefix them, so opt out.
+        return False
+
+    async def get_devtools_websocket_remote_url(
+        self, client_ws: WebSocket, browser_id: str, page_id: str
+    ) -> str | None:
+        # Relay verbatim to the external fleet's own /devtools proxy at the Chrome DevTools
+        # `page/` URL form. The router passes the namespaced `<browser_id>@<page_id>` target id
+        # when the path carried it (the form /cdp produces); otherwise `browser_id` is empty and
+        # we relay the un-split fleet target id untouched. Deterministic, so this never returns
+        # None — no retry needed.
+        del client_ws
+        target = f"{browser_id}@{page_id}" if browser_id else page_id
+        return f"{self.cdp_websocket_base()}/devtools/page/{target}"
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         return None

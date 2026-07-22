@@ -52,6 +52,7 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+
     # Best-of-N cold-create: on a fresh browser, race this many candidates in parallel and keep the
     # first whose `create_browser` fully succeeds.
     # Losers are deleted in the background. Set to 1 to disable the race and create a single

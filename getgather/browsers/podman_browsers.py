@@ -6,12 +6,15 @@ import sys
 from datetime import datetime
 from typing import Any
 
+from fastapi import WebSocket
 from loguru import logger
 
 from getgather.browsers.backend import (
     BROWSER_NAME_PREFIX,
     BrowserNotFound,
     ProxyVerificationError,
+    get_browser_websocket_debugger_url,
+    get_page_websocket_debugger_url,
 )
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
@@ -413,6 +416,29 @@ class PodmanBackend:
         # Local containers expose CDP per-browser via /json/version (get_cdp_base_url), not a
         # shared websocket proxy, so the router uses that flow rather than a transparent relay.
         return None
+
+    async def get_cdp_websocket_remote_url(self, browser_id: str) -> str | None:
+        # Local container exposes the browser-level webSocketDebuggerUrl over /json/version
+        # (get_cdp_base_url → /json/version), so this just runs that discovery. May raise on a
+        # missed boot race (chrome not ready yet) — the router retries 10x before giving up.
+        cdp_base_url = await self.get_cdp_base_url(browser_id)
+        return await get_browser_websocket_debugger_url(cdp_base_url)
+
+    def cdp_targets_need_namespacing(self) -> bool:
+        # The per-browser socket reports raw target ids; the router namespaces them by browser_id
+        # so the devtools route can route /devtools/{browser_id@page_id} back to this browser.
+        return True
+
+    async def get_devtools_websocket_remote_url(
+        self, client_ws: WebSocket, browser_id: str, page_id: str
+    ) -> str | None:
+        # Local container exposes the per-page webSocketDebuggerUrl over /json/list
+        # (get_cdp_base_url → /json/list), so this just runs that discovery. May return None
+        # transiently (page just registered / already closed) or raise on a boot race — the
+        # router retries 10x before giving up.
+        del client_ws
+        cdp_base_url = await self.get_cdp_base_url(browser_id)
+        return await get_page_websocket_debugger_url(cdp_base_url, page_id)
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         vnc_port = await get_host_port(f"{BROWSER_NAME_PREFIX}{browser_id}", 5900)

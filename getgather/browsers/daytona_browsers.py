@@ -11,12 +11,15 @@ from daytona import (
     DaytonaNotFoundError,
     ListSandboxesQuery,
 )
+from fastapi import WebSocket
 from loguru import logger
 
 from getgather.browsers.backend import (
     BROWSER_NAME_PREFIX,
     BrowserNotFound,
     ProxyVerificationError,
+    get_browser_websocket_debugger_url,
+    get_page_websocket_debugger_url,
 )
 from getgather.browsers.residential_proxy import get_proxy_config
 from getgather.config import settings
@@ -235,6 +238,30 @@ class DaytonaBackend:
         # CDP is reached per-sandbox over a signed HTTPS preview URL via get_cdp_base_url +
         # /json/version, not a shared websocket proxy, so there is no relay base.
         return None
+
+    async def get_cdp_websocket_remote_url(self, browser_id: str) -> str | None:
+        # Discover the browser-level webSocketDebuggerUrl over the signed preview proxy's
+        # /json/version (get_cdp_base_url → /json/version). May raise BrowserNotFound if the
+        # sandbox was torn down underneath the router, or transiently on a boot race — the router
+        # retries 10x before giving up.
+        cdp_base_url = await self.get_cdp_base_url(browser_id)
+        return await get_browser_websocket_debugger_url(cdp_base_url)
+
+    def cdp_targets_need_namespacing(self) -> bool:
+        # The per-sandbox socket reports raw target ids; the router namespaces them by browser_id
+        # so the devtools route can route /devtools/{browser_id@page_id} back to this sandbox.
+        return True
+
+    async def get_devtools_websocket_remote_url(
+        self, client_ws: WebSocket, browser_id: str, page_id: str
+    ) -> str | None:
+        # Discover the per-page webSocketDebuggerUrl over the signed preview proxy's /json/list
+        # (get_cdp_base_url → /json/list). May return None transiently (page just registered /
+        # already closed) or raise BrowserNotFound if the sandbox was torn down — the router
+        # retries 10x before giving up.
+        del client_ws
+        cdp_base_url = await self.get_cdp_base_url(browser_id)
+        return await get_page_websocket_debugger_url(cdp_base_url, page_id)
 
     async def get_vnc_endpoint(self, browser_id: str) -> tuple[str, int] | None:
         return None  # no raw VNC port; live view uses get_live_view_url (noVNC on VNC_PORT)

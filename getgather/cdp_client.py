@@ -32,6 +32,18 @@ async def open_cdp(browser_id: str) -> "CDPClient":
     return CDPClient(ws)
 
 
+async def open_cdp_url(ws_url: str, timeout: float | None = None) -> "CDPClient":
+    """Open a CDP client against a direct wss URL Used by router helpers that
+    need to enumerate page targets on backends that have no /json/list HTTP endpoint."""
+    ws = await websockets.connect(
+        ws_url,
+        open_timeout=timeout
+        if timeout is not None
+        else settings.CHROMEFLEET_CDP_OPEN_TIMEOUT_SECONDS,
+    )
+    return CDPClient(ws)
+
+
 class CDPClient:
     def __init__(self, ws: websockets.asyncio.client.ClientConnection) -> None:  # type: ignore[name-defined]
         self._ws: Any = ws
