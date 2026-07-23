@@ -18,7 +18,7 @@ make dev                                  # uvicorn on :23456, --reload
 make check                                # all of the below
 make check-backend-format                 # ruff check + ruff format --check
 make format-backend                       # ruff format + ruff check --fix
-make typecheck                            # pyright . (strict mode)
+make typecheck                            # pyright . (strict mode) + ty check
 make check-frontend-format                # prettier check on html/js/ts/css/json/md
 make check-yaml-format                    # yamlfix --check (skips mcp-tools.yaml)
 
