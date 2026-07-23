@@ -3,7 +3,7 @@ from typing import Literal, Self
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BrowserBackendName = Literal["podman", "daytona"]
+BrowserBackendName = Literal["podman", "daytona", "browserbase"]
 
 
 class BrowserSettings(BaseSettings):
@@ -52,6 +52,10 @@ class BrowserSettings(BaseSettings):
         ""  # point at a self-hosted Daytona; empty uses the managed cloud default
     )
     DAYTONA_SNAPSHOT: str = ""
+
+    # Browserbase backend (required when BROWSER_BACKEND=browserbase). Read at runtime from the
+    # environment so the server can boot without it when another backend is selected.
+    BROWSERBASE_API_KEY: str = ""
 
     # Best-of-N cold-create: on a fresh browser, race this many candidates in parallel and keep the
     # first whose `create_browser` fully succeeds.

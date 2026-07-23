@@ -229,8 +229,9 @@ class Backend(Protocol):
     async def get_cdp_websocket_remote_url(self, browser_id: str) -> str | None:
         """The single wss URL the router should relay a /cdp/{browser_id} client socket to.
         Owned end-to-end by each backend, so the router can stay agnostic of how the URL is
-        derived (the external fleet's /cdp relay for Fleet, the per-browser /json/version
-        discovery for Podman/Daytona). Returns None when the URL can't (yet) be resolved."""
+        derived (per-session connectUrl for Browserbase, the external fleet's /cdp relay for
+        Fleet, the per-browser /json/version discovery for Podman/Daytona). Returns None when
+        the URL can't (yet) be resolved."""
 
     def cdp_targets_need_namespacing(self) -> bool:
         """Whether `websocket_proxy` should rewrite target ids to namespace them by `browser_id`
@@ -273,6 +274,11 @@ def create_backend() -> Backend:
         return DaytonaBackend(
             settings.DAYTONA_API_KEY, settings.DAYTONA_API_URL, settings.DAYTONA_SNAPSHOT
         )
+
+    if settings.BROWSER_BACKEND == "browserbase":
+        from getgather.browsers.browserbase_browsers import BrowserbaseBackend
+
+        return BrowserbaseBackend()
 
     from getgather.browsers.podman_browsers import PodmanBackend
 
