@@ -1,5 +1,5 @@
 {
-  "rows": "div.ActivityListItem_listItem__aoJjV",
+  "rows": "div[class*=\"ActivityListItem_listItem_\"]",
   "columns": [
     {
       "name": "activity_icon",
