@@ -45,7 +45,10 @@ jobs:
       - name: Prepare back-end environment
         uses: ./.github/actions/prepare-backend
 
-      - name: Check backend types
+      - name: Check backend types with ty
+        run: uv run ty check
+
+      - name: Check backend types with pyright
         run: uv run pyright .
 
   yaml-format:

@@ -31,6 +31,17 @@ def _is_uvloop() -> bool:
     return type(asyncio.get_event_loop()).__module__.startswith("uvloop")
 
 
+def _run_podman_sync(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
 async def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
     cmd = ["podman"]
     if settings.CONTAINER_HOST:
@@ -38,15 +49,7 @@ async def run_podman(args: list[str]) -> subprocess.CompletedProcess[str]:
     cmd.extend(args)
 
     if _is_uvloop():
-        return await asyncio.to_thread(
-            subprocess.run,
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        return await asyncio.to_thread(_run_podman_sync, cmd)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,

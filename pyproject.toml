@@ -43,6 +43,7 @@ dev = [
   "pytest-cov>=4.1.0",
   "pytest-xdist>=3.7.0",
   "ruff>=0.11.6",
+  "ty>=0.0.1a19",
   "yamlfix>=1.6.1",
   "python-fasthtml>=0.12.21",
   "pyinstaller>=6.19.0",
@@ -89,6 +90,9 @@ select = ["I", "UP045", "UP006", "UP007"]
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = ["getgather", "tests"]
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"
 
 [tool.yamlfix]
 exclude = ["**/.venv/**"]

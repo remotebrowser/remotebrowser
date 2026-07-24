@@ -402,7 +402,7 @@ async def zen_report_distill_error(
 
 
 def make_error_reporter(browser: zd.Browser, location: str | None = None) -> ErrorReporter:
-    profile_id = cast(str, browser.id)  # type: ignore[attr-defined]
+    profile_id = cast(str, browser.id)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
 
     async def _report(
         *,

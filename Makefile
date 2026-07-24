@@ -35,6 +35,7 @@ format: format-backend format-yaml format-frontend
 
 .PHONY: typecheck
 typecheck:
+	uv run ty check
 	uv run pyright .
 
 .PHONY: test

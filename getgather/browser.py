@@ -57,7 +57,7 @@ def _ensure_ws_connect_patched() -> None:
     global _ws_connect_patched
     if _ws_connect_patched:
         return
-    websockets.connect = _traced_websocket_connect  # type: ignore[assignment]
+    websockets.connect = _traced_websocket_connect  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
     _ws_connect_patched = True
 
 
@@ -174,7 +174,7 @@ async def _create_browser_from_cdp_websocket(
 
     asyncio_atexit.register(browser_atexit)  # type: ignore[reportUnknownMemberType]
 
-    instance.id = browser_id  # type: ignore[attr-defined]
+    instance.id = browser_id  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     return instance
 
 
@@ -254,7 +254,7 @@ async def create_remote_browser(
 
 async def terminate_remote_browser(browser: zd.Browser) -> None:
     """Terminate an existing remote Chrome via ChromeFleet."""
-    browser_id = cast(str, browser.id)  # type: ignore[attr-defined]
+    browser_id = cast(str, browser.id)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     logger.info(f"Terminating ChromeFleet browser: {browser_id}")
     # no need to raise for error (which would fail the whole process)
     await call_chromefleet_api("DELETE", browser_id, timeout=1.0, retries=0, raise_for_status=False)

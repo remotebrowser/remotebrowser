@@ -701,7 +701,7 @@ async def remote_zen_dpage_mcp_tool(
         distillation_result = converted if converted is not None else distilled
         return {result_key: distillation_result}
 
-    page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
+    page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
 
     response = _signin_flow_response(signin_id)
     logger.info(
@@ -792,7 +792,7 @@ async def remote_zen_dpage_with_action(
         await safe_close_page(page)
         return result
 
-    page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]
+    page.hostname = urllib.parse.urlparse(initial_url).hostname  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
 
     response = _signin_flow_response(signin_id)
     logger.info(

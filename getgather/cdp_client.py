@@ -3,6 +3,7 @@ import json
 from typing import Any, cast
 
 import websockets
+import websockets.asyncio.client
 
 from getgather.browser import get_remote_browser_cdp_url
 from getgather.config import settings
@@ -45,7 +46,7 @@ async def open_cdp_url(ws_url: str, timeout: float | None = None) -> "CDPClient"
 
 
 class CDPClient:
-    def __init__(self, ws: websockets.asyncio.client.ClientConnection) -> None:  # type: ignore[name-defined]
+    def __init__(self, ws: websockets.asyncio.client.ClientConnection) -> None:
         self._ws: Any = ws
         self._id = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}

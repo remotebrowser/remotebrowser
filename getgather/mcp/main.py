@@ -19,7 +19,6 @@ from getgather.mcp.registry import MCPTool
 
 
 class LocationProxyMiddleware(Middleware):
-    # type: ignore
     async def on_call_tool(self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]):
         if not context.fastmcp_context:
             return await call_next(context)
@@ -36,9 +35,9 @@ class LocationProxyMiddleware(Middleware):
         if browser_session_id:
             log_context["browser_session_id"] = browser_session_id
 
-        tool = await context.fastmcp_context.fastmcp.get_tool(context.message.name)  # type: ignore
+        tool = await context.fastmcp_context.fastmcp.get_tool(context.message.name)
 
-        if "general_tool" in tool.tags:  # pyright: ignore[reportOptionalMemberAccess]
+        if "general_tool" in tool.tags:  # pyright: ignore[reportOptionalMemberAccess]  # ty: ignore[unresolved-attribute]
             with logger.contextualize(**log_context):
                 return await call_next(context)
 
