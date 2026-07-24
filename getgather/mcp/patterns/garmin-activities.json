@@ -1,5 +1,5 @@
 {
-  "rows": "div.ActivityListItem_listItem__aoJjV",
+  "rows": "div[class*=\"ActivityListItem_listItem_\"]",
   "columns": [
     {
       "name": "activity_icon",
@@ -7,7 +7,7 @@
     },
     {
       "name": "activity_date",
-      "selector": "span[class*=\"ActivityListItem_activityDate_\"]"
+      "selector": "div[class*=\"ActivityListItem_dateListContainer_\"]"
     },
     {
       "name": "activity_year",
