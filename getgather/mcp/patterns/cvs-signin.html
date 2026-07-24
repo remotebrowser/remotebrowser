@@ -1,0 +1,19 @@
+<html rb-domain="cvs">
+  <head>
+    <title>Sign In to CVS</title>
+  </head>
+  <body>
+    <h1>Sign in to your account</h1>
+    <input
+      autofocus
+      name="userid"
+      type="text"
+      data-testid="username"
+      rb-match="input[autocomplete='username']"
+      placeholder="Mobile number or email"
+    />
+    <button type="submit" rb-autoclick rb-match="ps-button.profile-button > button[type='button']">
+      Continue
+    </button>
+  </body>
+</html>
