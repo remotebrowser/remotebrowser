@@ -2,6 +2,7 @@ import asyncio
 import time
 from typing import Any
 
+import httpx
 from daytona import (
     AsyncDaytona,
     AsyncSandbox,
@@ -17,6 +18,7 @@ from loguru import logger
 from getgather.browsers.backend import (
     BROWSER_NAME_PREFIX,
     BrowserNotFound,
+    CloakBrowserSeatsExhausted,
     ProxyVerificationError,
     get_browser_websocket_debugger_url,
     get_page_websocket_debugger_url,
@@ -63,9 +65,41 @@ LIVE_VIEW_MAX_IDLE_SECONDS = 3600
 
 LABEL_FLEET = "fleet"
 
+# Solo plan concurrent seat cap; checked via CloakBrowser's session-count API before create.
+CLOAKBROWSER_MAX_SEATS = 5
+CLOAKBROWSER_SESSION_COUNT_URL = "https://cloakbrowser.dev/api/license/session/count"
+
 
 def _sandbox_name(browser_id: str) -> str:
     return f"{BROWSER_NAME_PREFIX}{browser_id}"
+
+
+async def _get_cloakbrowser_active_sessions(license_key: str) -> int | None:
+    """Live seat count for this license (same source as `python -m cloakbrowser info`)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                CLOAKBROWSER_SESSION_COUNT_URL,
+                json={"license_key": license_key},
+            )
+            response.raise_for_status()
+            active = response.json().get("active")
+            return int(active) if active is not None else None
+    except Exception as e:
+        logger.warning(f"CloakBrowser session count lookup failed: {type(e).__name__}: {e}")
+        return None
+
+
+async def _ensure_cloakbrowser_seats_available(license_key: str) -> None:
+    active = await _get_cloakbrowser_active_sessions(license_key)
+    if active is None:
+        raise CloakBrowserSeatsExhausted(
+            "Could not verify CloakBrowser seat availability (license server unreachable)"
+        )
+    if active >= CLOAKBROWSER_MAX_SEATS:
+        raise CloakBrowserSeatsExhausted(
+            f"All {CLOAKBROWSER_MAX_SEATS} CloakBrowser seats are in use ({active} active)"
+        )
 
 
 async def _configure_sandbox_proxy(sandbox: AsyncSandbox, proxy_url: str) -> bool:
@@ -183,10 +217,11 @@ class DaytonaBackend:
         origin_ip: str | None,
         target_domain: str | None,
         browser_type: str | None,
+        snapshot: str | None = None,
     ) -> dict[str, Any]:
         lock = self._locks.setdefault(browser_id, asyncio.Lock())
         async with lock:
-            sandbox = await self._ensure(browser_id, browser_type)
+            sandbox = await self._ensure(browser_id, browser_type, snapshot)
             # Proxy is mandatory when configured: let ProxyVerificationError propagate (the endpoint
             # maps it to 500) so the client can retry rather than get an unproxied browser.
             await _configure_remote_sandbox(sandbox, browser_id, origin_ip, target_domain)
@@ -291,11 +326,16 @@ class DaytonaBackend:
         )
         return signed.url
 
-    async def _ensure(self, browser_id: str, browser_type: str | None = None) -> AsyncSandbox:
+    async def _ensure(
+        self,
+        browser_id: str,
+        browser_type: str | None = None,
+        snapshot: str | None = None,
+    ) -> AsyncSandbox:
         name = _sandbox_name(browser_id)
         sandbox = await self._get(name)
         if sandbox is None:
-            sandbox = await self._create(name, browser_type)
+            sandbox = await self._create(name, browser_type, snapshot)
 
         # Browser selection is baked into the sandbox at create time via the ACTIVE_BROWSER env var
         # (see _create), so both a fresh create and a resumed start boot the right browser directly —
@@ -354,19 +394,35 @@ class DaytonaBackend:
         except DaytonaNotFoundError:
             return None
 
-    async def _create(self, name: str, browser_type: str | None = None) -> AsyncSandbox:
+    async def _create(
+        self, name: str, browser_type: str | None = None, snapshot: str | None = None
+    ) -> AsyncSandbox:
         # Select the browser at boot via env; the chromium s6 service reads ACTIVE_BROWSER on first
         # boot (chrome-live). Driven by the per-request `browser_type` (x-browser-type header); Chrome
         # is the default. Only set the env for a non-Chrome pick: Chrome is the snapshot default, so
         # a None env_vars keeps the create call identical to a Chrome-only snapshot (older Daytona
         # backends reject env_vars they don't expect).
-        env_vars = (
-            {ACTIVE_BROWSER_ENV: browser_type}
-            if browser_type and browser_type != "chrome"
+        env_vars: dict[str, str] | None = None
+        sandbox_env: dict[str, str] = {}
+        if browser_type and browser_type != "chrome":
+            sandbox_env[ACTIVE_BROWSER_ENV] = browser_type
+        if browser_type == "cloak" and settings.CLOAKBROWSER_LICENSE_KEY:
+            await _ensure_cloakbrowser_seats_available(settings.CLOAKBROWSER_LICENSE_KEY)
+            sandbox_env["CLOAKBROWSER_LICENSE_KEY"] = settings.CLOAKBROWSER_LICENSE_KEY
+        if sandbox_env:
+            env_vars = sandbox_env
+        safe_env_vars = (
+            {
+                key: ("***" if key == "CLOAKBROWSER_LICENSE_KEY" else value)
+                for key, value in env_vars.items()
+            }
+            if env_vars
             else None
         )
+        effective_snapshot = snapshot or self.snapshot
+        logger.info(f"Daytona sandbox env_vars for {name}: {safe_env_vars}")
         params = CreateSandboxFromSnapshotParams(
-            snapshot=self.snapshot,
+            snapshot=effective_snapshot,
             name=name,
             labels={LABEL_FLEET: "1"},
             env_vars=env_vars,
@@ -375,7 +431,7 @@ class DaytonaBackend:
             # delete after TTL_MINUTES continuously stopped; Daytona owns teardown
             auto_delete_interval=TTL_MINUTES,
         )
-        logger.info(f"Creating Daytona sandbox {name} from snapshot {self.snapshot}")
+        logger.info(f"Creating Daytona sandbox {name} from snapshot {effective_snapshot}")
         try:
             return await self.client.create(params, timeout=400)
         except DaytonaConflictError:

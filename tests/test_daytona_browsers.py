@@ -4,6 +4,7 @@ import pytest
 from pytest import MonkeyPatch
 
 from getgather.browsers import daytona_browsers
+from getgather.browsers.backend import CloakBrowserSeatsExhausted
 from getgather.browsers.daytona_browsers import DaytonaBackend, ProxyVerificationError
 
 
@@ -117,9 +118,11 @@ def test_create_browser_n1_short_circuits_best_of_n(monkeypatch: MonkeyPatch) ->
         origin_ip: str | None,
         target_domain: str | None,
         browser_type: str | None,
+        snapshot: str | None = None,
     ) -> dict[str, str]:
         called["browser_id"] = browser_id
         called["browser_type"] = browser_type
+        called["snapshot"] = snapshot
         return {"id": browser_id}
 
     async def fail_best_of_n(*args: Any, **kwargs: Any) -> tuple[str, dict[str, Any]]:
@@ -159,11 +162,13 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
         origin_ip: str | None,
         target_domain: str | None,
         browser_type: str | None,
+        snapshot: str | None = None,
     ) -> tuple[str, dict[str, str]]:
         invoked["n"] = n
         invoked["origin_ip"] = origin_ip
         invoked["target_domain"] = target_domain
         invoked["browser_type"] = browser_type
+        invoked["snapshot"] = snapshot
         return "winner", {"id": "winner"}
 
     monkeypatch.setattr(router_module, "best_of_n", fake_best_of_n)
@@ -178,6 +183,7 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
             "x-origin-ip": "1.2.3.4",
             "x-target-domains": "amazon.com",
             "x-browser-type": "cloak",
+            "x-daytona-snapshot": "custom-snapshot",
         },
     )
     assert response.status_code == 200
@@ -187,6 +193,7 @@ def test_create_browser_auto_n_gt1_invokes_best_of_n(monkeypatch: MonkeyPatch) -
         "origin_ip": "1.2.3.4",
         "target_domain": "amazon.com",
         "browser_type": "cloak",
+        "snapshot": "custom-snapshot",
     }
 
 
@@ -206,9 +213,79 @@ async def _capture_create_params(monkeypatch: MonkeyPatch, backend: DaytonaBacke
 async def test_create_sets_active_browser_env_for_cloak(monkeypatch: MonkeyPatch) -> None:
     # browser_type="cloak" (x-browser-type header) selects CloakBrowser via the ACTIVE_BROWSER env.
     backend = _backend()
+    monkeypatch.setattr(daytona_browsers.settings, "CLOAKBROWSER_LICENSE_KEY", None)
     captured = await _capture_create_params(monkeypatch, backend)
     await backend._create("chromium-test", "cloak")  # pyright: ignore[reportPrivateUsage]
     assert captured[0].env_vars == {"ACTIVE_BROWSER": "cloak"}
+
+
+@pytest.mark.asyncio
+async def test_create_sets_cloakbrowser_license_key_for_cloak(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    backend = _backend()
+    monkeypatch.setattr(daytona_browsers.settings, "CLOAKBROWSER_LICENSE_KEY", "cb_test_key")
+
+    async def fake_seats(_license_key: str) -> None:
+        return None
+
+    monkeypatch.setattr(daytona_browsers, "_ensure_cloakbrowser_seats_available", fake_seats)
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", "cloak")  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].env_vars == {
+        "ACTIVE_BROWSER": "cloak",
+        "CLOAKBROWSER_LICENSE_KEY": "cb_test_key",
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_raises_when_cloak_seats_exhausted(monkeypatch: MonkeyPatch) -> None:
+    backend = _backend()
+    monkeypatch.setattr(daytona_browsers.settings, "CLOAKBROWSER_LICENSE_KEY", "cb_test_key")
+
+    async def fake_seats(_license_key: str) -> None:
+        raise CloakBrowserSeatsExhausted("All 5 CloakBrowser seats are in use (5 active)")
+
+    monkeypatch.setattr(daytona_browsers, "_ensure_cloakbrowser_seats_available", fake_seats)
+    captured = await _capture_create_params(monkeypatch, backend)
+    with pytest.raises(CloakBrowserSeatsExhausted, match="5 active"):
+        await backend._create("chromium-test", "cloak")  # pyright: ignore[reportPrivateUsage]
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_cloakbrowser_seats_available_allows_when_under_cap(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def fake_count(_license_key: str) -> int:
+        return 4
+
+    monkeypatch.setattr(daytona_browsers, "_get_cloakbrowser_active_sessions", fake_count)
+    await daytona_browsers._ensure_cloakbrowser_seats_available("cb_test_key")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_ensure_cloakbrowser_seats_available_rejects_at_cap(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def fake_count(_license_key: str) -> int:
+        return 5
+
+    monkeypatch.setattr(daytona_browsers, "_get_cloakbrowser_active_sessions", fake_count)
+    with pytest.raises(CloakBrowserSeatsExhausted, match="5 active"):
+        await daytona_browsers._ensure_cloakbrowser_seats_available("cb_test_key")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_ensure_cloakbrowser_seats_available_rejects_when_unknown(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def fake_count(_license_key: str) -> None:
+        return None
+
+    monkeypatch.setattr(daytona_browsers, "_get_cloakbrowser_active_sessions", fake_count)
+    with pytest.raises(CloakBrowserSeatsExhausted, match="unreachable"):
+        await daytona_browsers._ensure_cloakbrowser_seats_available("cb_test_key")  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.asyncio
@@ -230,6 +307,24 @@ async def test_create_omits_env_when_browser_type_none(monkeypatch: MonkeyPatch)
     assert captured[0].env_vars is None
 
 
+@pytest.mark.asyncio
+async def test_create_uses_snapshot_override(monkeypatch: MonkeyPatch) -> None:
+    backend = _backend()
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", None, "custom-snapshot")  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].snapshot == "custom-snapshot"
+
+
+@pytest.mark.asyncio
+async def test_create_uses_default_snapshot_when_override_missing(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    backend = _backend()
+    captured = await _capture_create_params(monkeypatch, backend)
+    await backend._create("chromium-test", None, None)  # pyright: ignore[reportPrivateUsage]
+    assert captured[0].snapshot == "test-snapshot"
+
+
 def test_create_browser_auto_uses_backend_default_when_env_unset(monkeypatch: MonkeyPatch) -> None:
     # When BROWSER_BEST_OF_N is unset (None), the router falls back to the backend's own default
     # (DaytonaBackend.default_best_of_n == 3) instead of hard-coding 1.
@@ -249,6 +344,7 @@ def test_create_browser_auto_uses_backend_default_when_env_unset(monkeypatch: Mo
         origin_ip: str | None,
         target_domain: str | None,
         browser_type: str | None,
+        snapshot: str | None = None,
     ) -> tuple[str, dict[str, str]]:
         invoked["n"] = n
         return "winner", {"id": "winner"}

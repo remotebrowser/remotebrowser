@@ -25,6 +25,11 @@ on:
         required: false
         type: boolean
         default: true
+      daytona_cloakbrowser_pro:
+        description: Deploy remotebrowser-daytona-cloakbrowser-pro
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   prepare-matrix:
@@ -38,13 +43,15 @@ jobs:
           entries: |
             { "env": "demo",        "config": "demo",        "app_name": "remotebrowser"     }
             { "env": "dev",         "config": "dev",         "app_name": "remotebrowser-dev" }
-            { "env": "daytona",     "config": "daytona",     "app_name": "remotebrowser-daytona" }
+            { "env": "daytona",     "config": "daytona",     "app_name": "remotebrowser-daytona-cloakbrowser-pro" }
             { "env": "browserbase", "config": "browserbase", "app_name": "remotebrowser-browserbase" }
+            { "env": "daytona-cloakbrowser-pro", "config": "daytona", "app_name": "remotebrowser-daytona-cloakbrowser-pro" }
           selections: |
             ${{ inputs.demo        && 'demo'        || '' }}
             ${{ inputs.dev         && 'dev'         || '' }}
             ${{ inputs.daytona     && 'daytona'     || '' }}
             ${{ inputs.browserbase && 'browserbase' || '' }}
+            ${{ inputs.daytona_cloakbrowser_pro && 'daytona-cloakbrowser-pro' || '' }}
           key-field: env
 
   deploy:
@@ -63,6 +70,6 @@ jobs:
         with:
           doppler-token: ${{ secrets.DOPPLER_TOKEN }}
           doppler-project: remotebrowser
-          doppler-config: ${{ matrix.config }}
+          doppler-config: daytona
           app-name: ${{ matrix.app_name }}
-          build-args: ${{ matrix.env == 'daytona' && 'BROWSER_BACKEND=daytona' || '' }}
+          build-args: ${{ contains(fromJSON('["daytona","daytona-cloakbrowser-pro"]'), matrix.env) && 'BROWSER_BACKEND=daytona' || '' }}
