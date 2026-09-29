@@ -140,9 +140,21 @@ class FleetBackend:
     async def list_browser_ids(self, scope: BROWSER_SCOPE = "all") -> list[str]:
         response = _require(await call_chromefleet_api("GET"))
         data: Any = response.json()
-        if not isinstance(data, list):
+        if isinstance(data, list):
+            return [str(item) for item in cast(list[Any], data)]
+        # Fleet Gateway and newer fleets return `{"browsers": [{"browser_id": ...}]}`.
+        if not isinstance(data, dict):
             return []
-        return [str(item) for item in cast(list[Any], data)]
+        browsers: Any = cast(dict[str, Any], data).get("browsers")
+        if not isinstance(browsers, list):
+            return []
+        ids: list[str] = []
+        for browser in cast(list[Any], browsers):
+            if isinstance(browser, dict):
+                browser_id: Any = cast(dict[str, Any], browser).get("browser_id")
+                if browser_id:
+                    ids.append(str(browser_id))
+        return ids
 
     async def cleanup_idle(self) -> list[str]:
         # The external Chrome Fleet runs its own idle cleanup; nothing to do here.

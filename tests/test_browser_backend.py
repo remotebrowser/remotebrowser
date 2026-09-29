@@ -2,6 +2,8 @@ import asyncio
 import json
 from typing import Any
 
+import httpx
+import pytest
 import websockets
 from pytest import MonkeyPatch
 
@@ -153,3 +155,28 @@ def test_cdp_raw_route_relays_verbatim(monkeypatch: MonkeyPatch) -> None:
     to_browser, to_client = _relay_roundtrip(monkeypatch, "/api/v1/browsers/BID/cdp", "abc1234567")
     assert json.loads(to_browser)["params"]["targetId"] == "abc1234567"
     assert json.loads(to_client)["result"]["targetId"] == "abc1234567"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        ["b1", "b2"],
+        {
+            "browsers": [
+                {"browser_id": "b1", "created_at": "2026-09-27T22:26:03Z"},
+                {"browser_id": "b2", "created_at": None},
+            ]
+        },
+    ],
+)
+def test_fleet_list_reads_old_and_wrapped_payloads(monkeypatch: MonkeyPatch, payload: Any) -> None:
+    from getgather.browsers import fleet_browsers
+
+    async def fake_call(method: str, browser_id: str | None = None, **kwargs: Any):
+        return httpx.Response(
+            200, json=payload, request=httpx.Request("GET", "http://fleet/api/v1/browsers")
+        )
+
+    monkeypatch.setattr(fleet_browsers, "call_chromefleet_api", fake_call)
+
+    assert asyncio.run(FleetBackend().list_browser_ids()) == ["b1", "b2"]
