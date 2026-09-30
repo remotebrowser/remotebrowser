@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in to Remote Browser</title>
+  </head>
+  <body style="margin: 0; padding: 24px; background-color: #fcfcfc; color: #333; font-family: sans-serif">
+    <p style="margin: 0 0 16px">Click below to sign in to your Remote Browser account:</p>
+    <p style="margin: 0 0 16px">
+      <a
+        href="<%= it.link %>"
+        style="
+          display: inline-block;
+          background-color: #0088f6;
+          color: #fcfcfc;
+          padding: 0.375rem 0.75rem;
+          font-size: 1rem;
+          text-decoration: none;
+        "
+        >Sign in</a
+      >
+    </p>
+    <p style="margin: 0 0 16px; font-size: 0.875rem">
+      Expires in 5 minutes. Having trouble? <a href="<%= it.link %>">Use this link</a>.
+    </p>
+    <p style="margin: 0; color: #555; font-size: 0.875rem">Didn't request this? Ignore this email.</p>
+  </body>
+</html>

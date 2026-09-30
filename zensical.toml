@@ -1,0 +1,45 @@
+[project]
+site_name = "Remote Browser"
+docs_dir = "docs"
+site_dir = "site"
+nav = [
+  { "Overview" = "index.md" },
+  { "Getting Started" = "getting-started.md" },
+  { "Self-Hosting" = [
+    { "Overview" = "self-hosting.md" },
+    { "Security" = "security.md" },
+    { "Sign-in" = "sign-in.md" },
+    { "Database" = "database.md" },
+    { "Instrumentation" = "instrumentation.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+font = false
+features = [
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.sections",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+toc.permalink = true
+pymdownx.highlight = {}
+pymdownx.superfences = {}

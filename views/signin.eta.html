@@ -1,0 +1,60 @@
+<% layout('layout', { title: 'Sign in', bodyClass: 'auth' }) %> <%~ include('partials/auth-aside') %>
+<script src="/htmx.min.js"></script>
+<main class="signin-main">
+  <h1 class="auth-brand">Remote Browser</h1>
+  <div class="signin-panel">
+    <h2>Welcome</h2>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <div id="signin-content">
+      <form
+        method="post"
+        action="/sent"
+        class="signin-form"
+        hx-post="/sent"
+        hx-target="#signin-content"
+        hx-select="div.sent-box"
+        hx-swap="innerHTML"
+      >
+        <%~ include('partials/csrf', it) %>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          autocomplete="email"
+          placeholder="email"
+          aria-label="Email"
+          required
+          autofocus
+        />
+        <button type="submit" class="btn-primary signin-submit">
+          <span class="signin-spinner" aria-hidden="true"></span>
+          <span class="signin-submit-label">
+            Continue <span class="icon-caret-right" aria-hidden="true">&#9656;</span>
+          </span>
+        </button>
+      </form>
+      <script nonce="<%= it.scriptNonce %>">
+        // This htmx build has no hx-disable-elt, so the button is disabled for
+        // the whole request by hand. afterRequest also fires on a 4xx (where no
+        // swap happens), so re-enabling there keeps the form usable after an
+        // error. No timeout: the spinner runs until the server answers.
+        (() => {
+          const form = document.querySelector('.signin-form');
+          const button = form.querySelector('.signin-submit');
+          form.addEventListener('htmx:beforeRequest', () => {
+            button.disabled = true;
+          });
+          form.addEventListener('htmx:afterRequest', () => {
+            button.disabled = false;
+          });
+        })();
+      </script>
+      <p class="signin-terms">
+        By continuing, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Use</a> and the
+        <a href="/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>.
+      </p>
+    </div>
+  </div>
+</main>

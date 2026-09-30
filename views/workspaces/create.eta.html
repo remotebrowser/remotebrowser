@@ -1,0 +1,16 @@
+<% layout('/layout', { title: 'Remote Browser - Create a workspace' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1>Create a workspace</h1>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <form method="post" action="/workspaces/create" class="page-form">
+      <%~ include('/partials/csrf', it) %>
+      <label for="name">Workspace name</label>
+      <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
+      <button type="submit" class="btn-primary">Create workspace</button>
+    </form>
+  </article>
+</main>

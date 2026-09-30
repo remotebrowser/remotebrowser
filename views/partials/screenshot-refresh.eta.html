@@ -1,0 +1,28 @@
+<script nonce="<%= it.scriptNonce %>">
+  // outerHTML swaps destroy and recreate every element in the swapped
+  // fragment, including each screenshot <img>. A freshly-created <img> has
+  // no decoded bitmap to keep showing while its new src loads, which is
+  // what makes the screenshot flash blank on every poll. Re-assigning .src
+  // on the *same* <img> node instead lets the browser keep painting the old
+  // bitmap until the new one is ready, so this stashes the outgoing
+  // screenshot nodes right before a swap and splices them back in - with
+  // the freshly-swapped-in src - right after.
+  let outgoingScreenshots = new Map();
+
+  document.body.addEventListener('htmx:beforeSwap', (event) => {
+    outgoingScreenshots = new Map(
+      [...event.detail.target.querySelectorAll('img[id^="screenshot-"]')].map((img) => [img.id, img])
+    );
+  });
+
+  document.body.addEventListener('htmx:afterSwap', (event) => {
+    for (const img of event.detail.elt.querySelectorAll('img[id^="screenshot-"]')) {
+      const outgoing = outgoingScreenshots.get(img.id);
+      if (outgoing) {
+        outgoing.src = img.src;
+        img.replaceWith(outgoing);
+      }
+    }
+    outgoingScreenshots.clear();
+  });
+</script>

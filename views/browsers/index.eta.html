@@ -1,0 +1,15 @@
+<% layout('/layout', { title: 'Remote Browser - Browsers' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<main hx-get="/browsers" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">
+  <article>
+    <%~ include('/partials/browser-instances-table', it) %>
+    <div class="browser-table-actions">
+      <% if (it.capacity.atCapacity) { %>
+      <span class="btn-primary" aria-disabled="true">Launch a browser</span>
+      <% } else { %>
+      <a href="/browsers/launch" class="btn-primary">Launch a browser</a>
+      <% } %>
+    </div>
+  </article>
+</main>

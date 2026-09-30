@@ -1,0 +1,39 @@
+<% layout('/layout', { title: 'Remote Browser - Workspaces' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %> <% if (it.collaborators.length === 0) { %>
+    <p>You don't have any workspaces yet.</p>
+    <% } else { %>
+    <table class="roster-table">
+      <thead>
+        <tr>
+          <th>Workspace</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% it.collaborators.forEach(function(collaborator) { %>
+        <tr>
+          <td><%= collaborator.workspaceId === it.personalWorkspaceId ? 'Personal' : collaborator.workspaceName %></td>
+          <td><%= collaborator.role %></td>
+          <td>
+            <% if (collaborator.workspaceId === it.activeWorkspaceId) { %> Active <% } else { %>
+            <form method="post" action="/workspaces/switch" class="inline-form">
+              <%~ include('/partials/csrf', it) %>
+              <input type="hidden" name="workspace" value="<%= collaborator.workspaceId %>" />
+              <button type="submit" class="link-button">Switch</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% } %>
+    <p><a href="/workspaces/create" class="btn-primary">Create a new workspace</a></p>
+  </article>
+</main>

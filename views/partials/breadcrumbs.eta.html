@@ -1,0 +1,11 @@
+<% if (it.breadcrumbs && it.breadcrumbs.length > 0) { %>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <% it.breadcrumbs.forEach(function(crumb, index) { %> <% if (index > 0) { %>
+  <span class="breadcrumb-separator" aria-hidden="true">&rsaquo;</span>
+  <% } %> <% if (crumb.switcher) { %> <%~ include('/partials/workspace-switcher', it) %> <% } else if (crumb.href) { %>
+  <a href="<%= crumb.href %>"><%= crumb.label %></a>
+  <% } else { %>
+  <span aria-current="page"><%= crumb.label %></span>
+  <% } %> <% }) %>
+</nav>
+<% } %>

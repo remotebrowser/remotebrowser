@@ -1,0 +1,40 @@
+<script nonce="<%= it.scriptNonce %>">
+  // Each button starts with the hidden class (views/browsers/show.eta.html)
+  // so a visitor with no JavaScript never sees a Copy button that can't do
+  // anything; this removes it once script has actually run.
+  const revealCopyButtons = () => {
+    document.querySelectorAll('.code-copy-button.hidden').forEach((button) => {
+      button.classList.remove('hidden');
+    });
+  };
+  document.addEventListener('DOMContentLoaded', revealCopyButtons);
+  // DOMContentLoaded only ever fires once, but the poll on <main> (views/
+  // browsers/show.eta.html) replaces the whole element via hx-swap="outerHTML"
+  // every 3s - bringing back the server-rendered hidden class on every
+  // freshly-swapped-in button - so this re-reveals them after every poll too.
+  document.body.addEventListener('htmx:afterSwap', revealCopyButtons);
+
+  // Delegated from document.body, not attached per-button: the same swap
+  // above would silently drop a listener bound to any one button's node.
+  // body itself is never swapped, so one listener here survives every poll.
+  document.body.addEventListener('click', async (event) => {
+    const button = event.target.closest('.code-copy-button');
+    if (!button || !navigator.clipboard) {
+      return;
+    }
+    // The displayed code hides the CDP URL (see src/routes/browsers/
+    // code-sample.js), so textContent alone would copy the masked text. The
+    // full, real source lives in data-copy-value; use that instead.
+    const pre = button.nextElementSibling;
+    const code = pre.dataset.copyValue || pre.querySelector('code').textContent;
+    try {
+      await navigator.clipboard.writeText(code);
+      button.textContent = 'Copied!';
+    } catch {
+      button.textContent = 'Copy failed';
+    }
+    setTimeout(() => {
+      button.textContent = 'Copy';
+    }, 2000);
+  });
+</script>

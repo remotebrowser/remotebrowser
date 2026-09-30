@@ -1,0 +1,18 @@
+<% layout('layout', { title: 'Check your email', bodyClass: 'auth' }) %> <%~ include('partials/auth-aside') %>
+<main class="signin-main">
+  <h1 class="auth-brand">Remote Browser</h1>
+  <div class="signin-panel">
+    <h2>Welcome</h2>
+    <div class="sent-box">
+      <p class="sent-lead">To sign in, click the link sent to</p>
+      <p class="sent-email"><%= it.email %></p>
+      <p class="sent-hint">Don't forget to check your spam folder!</p>
+      <% if (!it.emailSent) { %>
+      <p class="sent-dev-note">
+        <em>Development mode:</em> no email is actually delivered. The sign-in link is printed to the server console.
+        Open that link to continue.
+      </p>
+      <% } %>
+    </div>
+  </div>
+</main>

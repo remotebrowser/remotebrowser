@@ -1,0 +1,73 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName }) %> <%~ include('/partials/topnav', it) %>
+<%~ include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<%~ include('/partials/screenshot-refresh', it) %> <%~ include('/partials/code-block-refresh', it) %> <%~
+include('/partials/code-copy', it) %>
+<main hx-get="<%= it.browserUrl %>" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">
+  <article class="browser-layout">
+    <div class="browser-main">
+      <p id="browser-status"><strong>Status:</strong> <%= it.browser.status %></p>
+      <% if (it.isConnectable) { %>
+      <div id="browser-connection-info">
+        <p>
+          To use this browser from
+          <a href="https://code.claude.com" target="_blank" rel="noopener">Claude Code</a>,
+          <a href="https://chatgpt.com/codex/" target="_blank" rel="noopener">Codex</a>,
+          <a href="https://cline.bot" target="_blank" rel="noopener">Cline</a>,
+          <a href="https://opencode.ai" target="_blank" rel="noopener">OpenCode</a>,
+          <a href="https://cursor.com" target="_blank" rel="noopener">Cursor</a>, or any similar coding assistant, copy
+          the following instruction and paste it there. This will let the coding assistant remotely control the browser
+          using
+          <a href="https://chromedevtools.github.io/devtools-protocol" target="_blank" rel="noopener">CDP</a> (Chrome
+          DevTools Protocol).
+        </p>
+        <p>
+          🔒 Note that the instruction includes a private CDP URL. Anyone can control the browser with that CDP URL, so
+          <strong>do not</strong> share this instruction.
+        </p>
+
+        <div class="instruction-block">
+          <button type="button" class="code-copy-button hidden">Copy</button>
+          <pre
+            id="instruction-block-playwright-js"
+            data-copy-value="<%= it.fullJsSource %>"
+          ><code><%= it.playwrightJavascriptExample %></code></pre>
+        </div>
+      </div>
+      <% } else if (it.browser.status === 'error') { %>
+      <p id="browser-error-notice">
+        This browser is temporarily unreachable. It may come back on its own; if it doesn't, it will be marked as
+        stopped soon.
+      </p>
+      <% } else if (it.browser.status === 'terminated') { %>
+      <p id="browser-terminated-notice">This browser has been stopped and can no longer be reached.</p>
+      <% } else { %>
+      <p id="browser-starting-notice">Connection details will appear here once the browser is ready.</p>
+      <% } %>
+      <p><a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a></p>
+    </div>
+    <% if (!it.isConnectable) { %>
+    <div class="browser-preview">
+      <div class="browser-preview-placeholder" aria-hidden="true"></div>
+    </div>
+    <% } else if (it.pages !== null) { %>
+    <div class="browser-preview">
+      <% if (it.pages.length >= 2) { %>
+      <p id="browser-page-count">
+        <a href="<%= it.pagesUrl %>"><%= it.pages.length %> pages</a>
+      </p>
+      <% } %> <% it.pages.forEach(function(page) { %>
+      <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
+        <img
+          class="browser-screenshot"
+          id="screenshot-<%= page.pageId %>"
+          src="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/view?t=<%= it.screenshotCacheBust %>"
+          alt="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
+          decoding="async"
+        />
+      </a>
+      <% }) %>
+    </div>
+    <% } %>
+  </article>
+</main>

@@ -1,0 +1,11 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName + ' - Page' }) %> <%~
+include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.pageViewUrl) { %>
+    <img class="page-screenshot" src="<%= it.pageViewUrl %>" alt="Live view of this page" />
+    <% } else { %>
+    <p id="browser-page-starting-notice">This page's live view will appear here once the browser is ready.</p>
+    <% } %>
+  </article>
+</main>

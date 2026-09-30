@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "none",
+  "quoteProps": "consistent",
+  "sortPackageJson": false,
+  "ignorePatterns": ["package-lock.json", "public/htmx.min.js"]
+}

@@ -1,0 +1,14 @@
+<% layout('/layout', { title: 'Remote Browser - Invite sent' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1>Invite sent</h1>
+    <% if (it.invitedEmail) { %>
+    <p>We sent an invite to <strong><%= it.invitedEmail %></strong>.</p>
+    <% } else { %>
+    <p>We sent the invite.</p>
+    <% } %>
+    <p>Ask them to follow the instructions in the email to join <%= it.workspace.name %>.</p>
+    <p>If the email hasn't arrived within 5 minutes, they should check their spam folder.</p>
+  </article>
+</main>

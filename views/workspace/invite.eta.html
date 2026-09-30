@@ -1,0 +1,19 @@
+<% layout('/layout', { title: 'Remote Browser - Invite to ' + it.workspace.name }) %> <%~ include('/partials/topnav',
+it) %> <%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <p>We will email an invite link. They join the workspace as soon as they sign in with that address.</p>
+    <form method="post" action="/workspace/invite" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required maxlength="254" />
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Send invite</button>
+        <a href="/workspace" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </article>
+</main>

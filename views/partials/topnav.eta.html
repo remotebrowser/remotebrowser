@@ -1,0 +1,10 @@
+<nav class="topnav">
+  <div class="topnav-brand">Remote Browser</div>
+  <div class="topnav-account">
+    <span><%= it.email %></span>
+    <form method="post" action="/signout" class="inline-form">
+      <%~ include('csrf', it) %>
+      <button type="submit" class="link-button">Sign out</button>
+    </form>
+  </div>
+</nav>

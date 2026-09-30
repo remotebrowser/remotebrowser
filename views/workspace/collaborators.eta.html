@@ -1,0 +1,74 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.workspace.name + ' collaborators' }) %> <%~
+include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %> <% if (it.canManage) { %>
+    <div class="roster-table-actions">
+      <a href="/workspace/invite" class="btn-primary">Invite</a>
+    </div>
+    <% } %>
+    <table class="roster-table">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% it.roster.forEach(function(collaborator) { %>
+        <tr>
+          <td><%= collaborator.email %></td>
+          <td>
+            <% if (it.canManage && collaborator.role !== 'Owner') { %>
+            <form method="post" action="/workspace/<%= collaborator.userPublicId %>/role" class="inline-form">
+              <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+              <select name="role">
+                <% it.roleOptions.forEach(function(option) { %> <% if (option === collaborator.role) { %>
+                <option value="<%= option %>" selected><%= option %></option>
+                <% } else { %>
+                <option value="<%= option %>"><%= option %></option>
+                <% } %> <% }) %>
+              </select>
+              <button type="submit" class="link-button">Update</button>
+            </form>
+            <% } else { %> <%= collaborator.role %> <% } %>
+          </td>
+          <td>
+            <% if (collaborator.userPublicId === it.currentUserPublicId) { %>
+            <form method="post" action="/workspace/<%= collaborator.userPublicId %>/remove" class="inline-form">
+              <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+              <button type="submit" class="link-button">Leave workspace</button>
+            </form>
+            <% } else if (it.canManage && collaborator.role !== 'Owner') { %>
+            <form method="post" action="/workspace/<%= collaborator.userPublicId %>/remove" class="inline-form">
+              <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+              <button type="submit" class="link-button">Remove</button>
+            </form>
+            <% } %> <% if (it.isOwner && collaborator.role !== 'Owner') { %>
+            <form method="post" action="/workspace/transfer" class="inline-form">
+              <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+              <input type="hidden" name="publicId" value="<%= collaborator.userPublicId %>" />
+              <button type="submit" class="link-button">Make owner</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+        <% }) %> <% if (it.canManage) { %> <% it.invitations.forEach(function(invitation) { %>
+        <tr>
+          <td><%= invitation.email %></td>
+          <td>Pending invite</td>
+          <td></td>
+        </tr>
+        <% }) %> <% } %>
+      </tbody>
+    </table>
+
+    <% if (it.isOwner) { %>
+    <h2>Delete workspace</h2>
+    <p><a href="/workspace/delete" class="btn-danger">Delete this workspace</a></p>
+    <% } %>
+  </article>
+</main>

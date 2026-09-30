@@ -1,4 +1,5 @@
 name: Static Analysis
+
 on:
   pull_request:
   push:
@@ -6,60 +7,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  backend-format:
+  format-check:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Prepare back-end environment
-        uses: ./.github/actions/prepare-backend
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
 
-      - name: Check backend formatting
-        run: uv run ruff check .
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Check backend code style
-        run: uv run ruff format --check .
+      - name: Run format check
+        run: npm run format -- --check
 
-  frontend-format:
+  typecheck:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Prepare front-end environment
-        uses: ./.github/actions/prepare-frontend
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
 
-      - name: Check frontend formatting
-        run: make check-frontend-format
+      - name: Install dependencies
+        run: npm ci
 
-  backend-types:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Prepare back-end environment
-        uses: ./.github/actions/prepare-backend
-
-      - name: Check backend types with ty
-        run: uv run ty check
-
-      - name: Check backend types with pyright
-        run: uv run pyright .
-
-  yaml-format:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Prepare back-end environment
-        uses: ./.github/actions/prepare-backend
-
-      - name: Check YAML formatting
-        run: uv run yamlfix --check $(find . -type f -name '*.yml' -o -name '*.yaml' | grep -v -E '\.venv/|node_modules/')
+      - run: npm run typecheck
