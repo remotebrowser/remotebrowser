@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  clientAddress,
   routeTemplate,
   isRouteMatched,
   requestSpanName,
@@ -10,6 +11,59 @@ import {
 } from './http.js';
 
 const { describe } = test;
+
+describe('clientAddress', () => {
+  const PROXY = '172.17.0.1';
+
+  test('uses the socket peer when no proxy is trusted', () => {
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor: '6.6.6.6' }), PROXY);
+  });
+
+  test('takes the address that a single trusted proxy saw', () => {
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor: '203.0.113.7', trustedProxyHops: 1 }), '203.0.113.7');
+  });
+
+  // A proxy that appends to X-Forwarded-For keeps whatever the client sent on the left.
+  test('ignores entries that the client forged ahead of the trusted proxy', () => {
+    const forwardedFor = '6.6.6.6, 203.0.113.7';
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor, trustedProxyHops: 1 }), '203.0.113.7');
+  });
+
+  test('walks back through each trusted hop', () => {
+    const forwardedFor = '6.6.6.6, 203.0.113.7, 10.0.0.5';
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor, trustedProxyHops: 2 }), '203.0.113.7');
+  });
+
+  // Reaching the app directly, bypassing the proxy, must not let a client pick its own address.
+  test('ignores the header when the peer is a public address', () => {
+    const forwardedFor = '6.6.6.6';
+    assert.equal(clientAddress({ peer: '198.51.100.9', forwardedFor, trustedProxyHops: 1 }), '198.51.100.9');
+  });
+
+  test('falls back to the peer when the chain is shorter than the trusted hops', () => {
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor: '203.0.113.7', trustedProxyHops: 3 }), PROXY);
+    assert.equal(clientAddress({ peer: PROXY, trustedProxyHops: 1 }), PROXY);
+  });
+
+  test('falls back to the peer when the trusted entry is not an IP address', () => {
+    const forwardedFor = '<script>';
+    assert.equal(clientAddress({ peer: PROXY, forwardedFor, trustedProxyHops: 1 }), PROXY);
+  });
+
+  test('unwraps IPv4-mapped IPv6 addresses', () => {
+    const forwardedFor = '::ffff:203.0.113.7';
+    assert.equal(clientAddress({ peer: '::ffff:172.17.0.1', forwardedFor, trustedProxyHops: 1 }), '203.0.113.7');
+  });
+
+  test('trusts a private IPv6 peer', () => {
+    const forwardedFor = '2001:db8::1';
+    assert.equal(clientAddress({ peer: 'fdaa::2', forwardedFor, trustedProxyHops: 1 }), '2001:db8::1');
+  });
+
+  test('is null without a peer', () => {
+    assert.equal(clientAddress({ peer: undefined, forwardedFor: '6.6.6.6', trustedProxyHops: 1 }), null);
+  });
+});
 
 describe('routeTemplate', () => {
   test('drops an inline regex constraint, quantifier and all', () => {

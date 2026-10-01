@@ -30,5 +30,6 @@ The table below lists the environment variables that the app uses in production:
 | `SMTP_PASSWORD`               | Yes      | SMTP password                                      |
 | `SMTP_PORT`                   | No       | SMTP port (default: `587`)                         |
 | `SMTP_USER`                   | Yes      | SMTP username                                      |
+| `TRUSTED_PROXY_HOPS`          | No       | Reverse proxies in front of the app (default: `0`) |
 
 See [Security](security.md), [Sign-in](sign-in.md), [Database](database.md), and [Instrumentation](instrumentation.md) for details.

@@ -1,3 +1,5 @@
+import { BlockList, isIP } from 'node:net';
+
 // Strip inline regex constraints from route templates; count braces for nesting.
 const routeTemplate = (route) => {
   if (!route || !route.includes('{')) {
@@ -19,6 +21,43 @@ const routeTemplate = (route) => {
 
 // Collapse unmatched requests to '/*' instead of echoing the client.
 const isRouteMatched = (route) => Boolean(route) && route !== '/*' && route !== '*';
+
+// Loopback and private ranges, where a reverse proxy on the same host or network connects from.
+const PRIVATE_PEERS = new BlockList();
+PRIVATE_PEERS.addSubnet('127.0.0.0', 8, 'ipv4');
+PRIVATE_PEERS.addSubnet('10.0.0.0', 8, 'ipv4');
+PRIVATE_PEERS.addSubnet('172.16.0.0', 12, 'ipv4');
+PRIVATE_PEERS.addSubnet('192.168.0.0', 16, 'ipv4');
+PRIVATE_PEERS.addAddress('::1', 'ipv6');
+PRIVATE_PEERS.addSubnet('fc00::', 7, 'ipv6');
+PRIVATE_PEERS.addSubnet('fe80::', 10, 'ipv6');
+
+// Dual-stack sockets report IPv4 peers as ::ffff:a.b.c.d.
+const normalizeAddress = (address) => {
+  const unmapped = address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  return isIP(unmapped) ? unmapped : null;
+};
+
+const isPrivatePeer = (address) => PRIVATE_PEERS.check(address, isIP(address) === 6 ? 'ipv6' : 'ipv4');
+
+// Each trusted proxy appends the address it saw, so the leftmost entries may be
+// forged by the client. Walk back from the socket peer only through trusted
+// hops. A public peer is not one of our proxies, so its header is ignored.
+const clientAddress = ({ peer, forwardedFor, trustedProxyHops = 0 }) => {
+  const peerAddress = peer ? normalizeAddress(peer) : null;
+  if (!peerAddress || trustedProxyHops === 0 || !isPrivatePeer(peerAddress)) {
+    return peerAddress;
+  }
+  const chain = (forwardedFor || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  chain.push(peerAddress);
+  const index = chain.length - 1 - trustedProxyHops;
+  // A short chain means fewer proxies than configured; never guess past it.
+  const candidate = index >= 0 ? normalizeAddress(chain[index]) : null;
+  return candidate || peerAddress;
+};
 
 // Semconv's known-method set. Anything outside it collapses to _OTHER.
 const KNOWN_METHODS = new Set(['CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'TRACE']);
@@ -83,4 +122,12 @@ const consolaTypeForStatus = (status) => {
   return status >= 400 ? 'warn' : 'log';
 };
 
-export { routeTemplate, isRouteMatched, consolaTypeForStatus, requestSpanName, requestAttributes, responseAttributes };
+export {
+  clientAddress,
+  routeTemplate,
+  isRouteMatched,
+  consolaTypeForStatus,
+  requestSpanName,
+  requestAttributes,
+  responseAttributes
+};

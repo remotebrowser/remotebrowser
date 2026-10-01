@@ -341,3 +341,31 @@ describe('browser capacity limits', () => {
     assert.deepEqual(readLimits({ MAX_PERSONAL_BROWSERS: '5', MAX_TEAM_BROWSERS: '25' }), [5, 25]);
   });
 });
+
+describe('trustedProxyHops', () => {
+  const readHops = (env) => {
+    const result = spawnSync(
+      process.execPath,
+      ['-e', "process.stdout.write(String(require('./config').config.trustedProxyHops))"],
+      { cwd: __dirname, env: { ...process.env, ...BASE_ENV, ...env } }
+    );
+    return { status: result.status, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+  };
+
+  // Trusting X-Forwarded-For must be opt-in, or any client could pick its own address.
+  test('defaults to 0 when unset', () => {
+    assert.equal(readHops({ TRUSTED_PROXY_HOPS: '' }).stdout, '0');
+  });
+
+  test('honors TRUSTED_PROXY_HOPS when set', () => {
+    assert.equal(readHops({ TRUSTED_PROXY_HOPS: '1' }).stdout, '1');
+  });
+
+  test('refuses to start with an invalid TRUSTED_PROXY_HOPS', () => {
+    for (const value of ['abc', '-1', '1.5']) {
+      const result = readHops({ TRUSTED_PROXY_HOPS: value });
+      assert.equal(result.status, 1, `expected ${value} to be rejected`);
+      assert.match(result.stderr, /TRUSTED_PROXY_HOPS must be a non-negative integer/);
+    }
+  });
+});
