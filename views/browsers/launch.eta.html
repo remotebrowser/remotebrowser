@@ -1,0 +1,38 @@
+<% layout('/layout', { title: 'Remote Browser - Launch Browser' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1>Launch a browser</h1>
+    <% if (it.capacity && it.capacity.atCapacity) { %>
+    <div role="alert" class="danger">
+      This workspace has reached its limit of <%= it.capacity.limit %> browsers. Wait for an existing one to finish
+      before launching another.
+    </div>
+    <% } else { %> <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <form method="post" action="/browsers/launch" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
+      <label for="description">Description</label>
+      <input type="text" id="description" name="description" value="<%= it.description %>" maxlength="140" />
+      <label class="checkbox-label field-checkbox">
+        <% if (it.enableScreenRecording) { %>
+        <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" checked />
+        <% } else { %>
+        <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" />
+        <% } %> Enable screen recording
+      </label>
+      <label class="checkbox-label field-checkbox">
+        <% if (it.blockAdsAndTrackers) { %>
+        <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" checked />
+        <% } else { %>
+        <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" />
+        <% } %> Block ads and trackers
+      </label>
+      <button type="submit" class="btn-primary">Launch</button>
+    </form>
+    <% } %>
+  </article>
+</main>

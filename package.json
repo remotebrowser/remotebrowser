@@ -1,27 +1,45 @@
 {
   "name": "remotebrowser",
-  "version": "0.0.0",
+  "version": "0.0.1",
+  "description": "Remote Browser",
+  "license": "AGPL-3.0-only",
   "type": "module",
-  "volta": {
-    "node": "22.18.0",
-    "npm": "10.8.2"
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
-    "dev": "make dev",
-    "dev:backend": "make dev",
-    "frontend:check:format": "make check-frontend-format",
-    "frontend:format": "make format-frontend",
-    "backend:check:format": "make check-backend-format",
-    "backend:format": "make format-backend",
-    "backend:check:type-safety": "make typecheck",
-    "yaml:check:format": "make check-yaml-format",
-    "yaml:format": "make format-yaml",
-    "check:all": "make check",
-    "format": "make format",
-    "package": "make package",
-    "prepare": "husky"
+    "start": "node src/index",
+    "db:console": "node src/db/console.js",
+    "test": "node --test --test-concurrency=4 \"src/**/*_tests.js\"",
+    "test:e2e": "playwright test",
+    "format": "oxfmt \"src/**/*.js\" \"views/**/*.eta.html\" \"public/**/*.css\" \"*.{json,md}\"",
+    "typecheck": "oxlint --type-aware"
+  },
+  "dependencies": {
+    "@hono/node-server": "~2.0.12",
+    "@opentelemetry/api": "~1.9.1",
+    "@opentelemetry/api-logs": "~0.221.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "~0.221.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "~0.221.0",
+    "@opentelemetry/resources": "~2.10.0",
+    "@opentelemetry/sdk-logs": "~0.221.0",
+    "@opentelemetry/sdk-trace-node": "~2.10.0",
+    "consola": "~3.4.2",
+    "eta": "~3.5.0",
+    "hono": "~4.13.10",
+    "nanoid": "~3.3.16",
+    "nodemailer": "~10.0.10",
+    "pg": "^8.23.0",
+    "ws": "~8.21.1"
   },
   "devDependencies": {
-    "husky": "^9.1.7"
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "~1.62.0",
+    "@types/node": "~26.1.2",
+    "@types/ws": "^8.18.1",
+    "oxfmt": "~0.60.0",
+    "oxlint": "~1.75.0",
+    "oxlint-tsgolint": "~7.0.2001"
   }
 }

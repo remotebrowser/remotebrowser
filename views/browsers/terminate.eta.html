@@ -1,0 +1,43 @@
+<% layout('/layout', { title: 'Remote Browser - Terminate browser' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <p><strong>This is permanent and cannot be undone.</strong></p>
+    <p>
+      Terminating <strong><%= it.browser.browserName %></strong> stops it immediately and it can never be reached again.
+    </p>
+    <form method="post" action="/browsers/<%= it.browser.publicId %>/terminate" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <label for="name">Confirm browser name</label>
+      <input
+        type="text"
+        id="name"
+        name="name"
+        required
+        autocomplete="off"
+        data-confirm-name="<%= it.browser.browserName %>"
+      />
+      <div class="form-actions">
+        <button type="submit" class="btn-danger" id="terminate-button">Terminate</button>
+        <a href="/browsers/<%= it.browser.publicId %>" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </article>
+</main>
+<script nonce="<%= it.scriptNonce %>">
+  // The typed-name check on the server (src/routes/browsers/terminate.js) is
+  // the real gate - this only disables the button until the input matches, so
+  // a visitor cannot fire the request by an accidental click. The button
+  // starts enabled in markup so submission still works with JavaScript off.
+  const nameInput = document.getElementById('name');
+  const terminateButton = document.getElementById('terminate-button');
+  const expected = nameInput.dataset.confirmName;
+  const syncTerminateButton = () => {
+    terminateButton.disabled = nameInput.value !== expected;
+  };
+  syncTerminateButton();
+  nameInput.addEventListener('input', syncTerminateButton);
+</script>

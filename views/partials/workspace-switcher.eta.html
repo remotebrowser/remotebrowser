@@ -1,0 +1,18 @@
+<div class="breadcrumb-switcher">
+  <a href="/" class="breadcrumb-switcher-trigger"><%= it.workspace.name %></a>
+  <input type="checkbox" id="breadcrumb-switcher-toggle" class="breadcrumb-switcher-toggle-input" />
+  <label for="breadcrumb-switcher-toggle" aria-label="Toggle workspace menu" class="breadcrumb-switcher-toggle"></label>
+  <div class="breadcrumb-switcher-menu">
+    <% const workspaces = it.workspaces; %> <% workspaces.forEach(function(option) { %> <% if (option.isActive) { %>
+    <span class="breadcrumb-switcher-active">▸ <%= option.name %></span>
+    <% } else { %>
+    <form method="post" action="/workspaces/switch" class="inline-form">
+      <%~ include('/partials/csrf', it) %>
+      <input type="hidden" name="workspace" value="<%= option.id %>" />
+      <button type="submit" class="breadcrumb-switcher-item"><%= option.name %></button>
+    </form>
+    <% } %> <% }) %>
+    <hr class="breadcrumb-switcher-divider" />
+    <a href="/workspaces/create" class="breadcrumb-switcher-item">New workspace</a>
+  </div>
+</div>

@@ -1,0 +1,6 @@
+{
+  "ignorePatterns": ["src/**/*_tests.js", "tests/"],
+  "rules": {
+    "typescript/no-useless-default-assignment": "off"
+  }
+}

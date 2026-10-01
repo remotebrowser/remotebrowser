@@ -1,0 +1,1420 @@
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+
+h1 {
+  font-size: 1.75em;
+}
+
+h2 {
+  font-size: 1.25em;
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+  line-height: 1.15;
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+}
+
+body {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+button,
+input {
+  font-family: inherit;
+  font-size: 100%;
+  line-height: 1.15;
+  margin: 0;
+}
+
+button,
+[type='submit'] {
+  -webkit-appearance: button;
+}
+
+form {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  max-width: 24rem;
+  align-items: center;
+}
+
+label {
+  text-align: right;
+}
+
+.page-form {
+  margin-top: 2.5rem;
+}
+
+input {
+  width: 100%;
+}
+
+button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+footer {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid lightgray;
+  font-size: 0.95rem;
+  color: #555;
+}
+.signin-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100dvh - 7rem);
+  padding: 1rem 0;
+}
+
+.signin-panel {
+  width: 100%;
+  max-width: 34rem;
+  margin: auto;
+}
+
+.auth-brand {
+  align-self: flex-start;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: bold;
+}
+
+.signin-panel h2 {
+  margin: 0 0 4rem;
+  font-size: clamp(2rem, 9vw, 3rem);
+  font-weight: 400;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.signin-intro {
+  margin: 0 auto 1.5rem;
+  text-align: center;
+  color: #555;
+}
+
+#signin-content {
+  min-height: 20rem;
+  margin: 0;
+  padding: 0;
+}
+
+.signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 21rem;
+  margin: 0 auto;
+}
+
+.signin-form input,
+.signin-form button {
+  width: 100%;
+  max-width: 21rem;
+}
+
+.signin-form input {
+  padding: 0.9rem 1rem;
+  font-size: 1.05rem;
+  border: 1px solid #c0c0c0;
+  border-radius: 0;
+  background-color: #fff;
+}
+
+.signin-form button {
+  margin: 0.5rem 0 0;
+  padding: 0.9rem 1rem;
+  font-size: 1.05rem;
+}
+
+.signin-spinner {
+  display: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top: 2px solid #fff;
+  border-radius: 50%;
+  animation: signin-spin 1.2s infinite linear;
+  vertical-align: -0.15em;
+}
+
+@keyframes signin-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.htmx-request .signin-submit-label {
+  display: none;
+}
+
+.htmx-request .signin-spinner {
+  display: inline-block;
+}
+
+button.signin-submit[disabled] {
+  background-color: #b0b0b0;
+  cursor: default;
+}
+
+.signin-terms {
+  max-width: 21rem;
+  margin: 2rem auto 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.signin-terms a {
+  color: inherit;
+}
+
+.signin-retry {
+  display: block;
+  width: 100%;
+  max-width: 21rem;
+  margin: 0 auto;
+  padding: 0.9rem 1rem;
+  background-color: #d9d9d9;
+  color: #333;
+  font-size: 1.05rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.signin-retry:hover {
+  background-color: #c4c4c4;
+}
+
+.signin-panel .danger {
+  text-align: center;
+}
+
+.sent-box {
+  width: 100%;
+  max-width: 21rem;
+  min-height: 20rem;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.sent-lead {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  color: #3a3a3a;
+}
+
+.sent-email {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.75rem 1.25rem;
+  background-color: #d9d9d9;
+  border-radius: 0.25rem;
+  color: #33332f;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sent-hint {
+  margin: 1rem 0 0;
+  color: #5a5a5a;
+}
+
+.sent-dev-note {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem;
+  background-color: #fff3cd;
+  font-size: 0.85rem;
+  color: #555;
+}
+/* align-items: flex-start rather than center, so a checkbox next to a
+   multi-line label sits at the top of the text instead of centered against
+   its full wrapped height. The label text is its own flex item (a single
+   <span>) so it wraps as normal prose, not as several independently-wrapping
+   flex items. */
+.checkbox-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.checkbox-label.field-checkbox {
+  grid-column: 2;
+}
+
+.checkbox-label input[type='checkbox'] {
+  width: auto;
+}
+
+.btn-primary {
+  background-color: #0088f6;
+  color: #fcfcfc;
+  border: none;
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+a.btn-primary {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background-color: #0069d9;
+}
+
+/* A disabled "Launch a browser" is a <span>, not an <a> with no href - an
+   anchor can't be given a real disabled state, and one still stripped of its
+   href would sit there inert with no visual cue why. */
+.btn-primary[aria-disabled='true'] {
+  background-color: #b0b0b0;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background-color: #d93025;
+  color: #fcfcfc;
+  border: none;
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+a.btn-danger {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.btn-danger:hover {
+  background-color: #b1271b;
+}
+
+.danger {
+  background-color: #fdecea;
+  color: #b1271b;
+  border: 1px solid #f5c2c0;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+/* The border is subtracted from the padding so a secondary button lines up
+   with a borderless primary one sitting next to it. */
+.btn-secondary {
+  background-color: #fcfcfc;
+  color: #333;
+  border: 1px solid #c0c0c0;
+  padding: calc(0.375rem - 1px) calc(0.75rem - 1px);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+a.btn-secondary {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.btn-secondary:hover {
+  background-color: #ededed;
+}
+
+/* Keeps a row of buttons together in the form grid's second column,
+   alongside the inputs rather than under the labels. */
+.form-actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-note {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.icon-caret-right {
+  display: inline-block;
+  margin-left: 0.25em;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.topnav-brand {
+  font-weight: bold;
+  font-size: 1.125rem;
+}
+
+.topnav-account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: #555;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: #0088f6;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  grid-column: auto;
+  justify-self: start;
+}
+
+.link-button:hover {
+  color: #0069d9;
+}
+
+.roster-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 40rem;
+  margin: 1rem 0;
+}
+
+.roster-table-actions {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 40rem;
+}
+
+.roster-table th,
+.roster-table td {
+  text-align: left;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.browser-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 40rem;
+  margin-bottom: 1rem;
+}
+
+.key-table-actions {
+  max-width: 40rem;
+  margin-bottom: 1rem;
+}
+
+.key-preview {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.inline-form {
+  display: inline;
+  margin: 0;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.breadcrumb-separator {
+  color: #999;
+}
+
+.breadcrumbs [aria-current='page'] {
+  color: #555;
+  font-weight: bold;
+}
+
+.breadcrumb-switcher {
+  position: relative;
+  display: inline-flex;
+}
+
+.breadcrumb-switcher-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #0088f6;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.breadcrumb-switcher-menu {
+  visibility: hidden;
+  transition: visibility 0s linear 0s;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 20rem;
+  background: #fff;
+  border: 1px solid #c0c0c0;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+  z-index: 10;
+}
+
+/* Scoped to hover-capable pointers only: touch has no real "unhover", so a tap
+   would otherwise leave this stuck open regardless of the checkbox below.
+   Delayed so brushing past the trigger on the way to click it doesn't pop the
+   menu open. */
+@media (hover: hover) {
+  .breadcrumb-switcher:hover .breadcrumb-switcher-menu {
+    visibility: visible;
+    transition-delay: 0.3s;
+  }
+}
+
+/* Hover has no touch equivalent, and tapping the trigger navigates instead of
+   opening the menu - this checkbox hack gives every input a tap/click/keyboard
+   target of its own, with no JS. Also the only way keyboard users open the
+   menu: Tab focuses the trigger link then this checkbox, Space toggles it.
+   Visually hidden but still focusable/toggleable via its label. */
+.breadcrumb-switcher-toggle-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.breadcrumb-switcher-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.25rem;
+  padding: 0 0.25rem;
+  color: #0088f6;
+  cursor: pointer;
+}
+
+.breadcrumb-switcher-toggle::before {
+  content: '▼';
+}
+
+.breadcrumb-switcher-toggle-input:checked ~ .breadcrumb-switcher-toggle::before {
+  content: '▲';
+}
+
+.breadcrumb-switcher-toggle-input:checked ~ .breadcrumb-switcher-menu {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.breadcrumb-switcher-item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  color: #0088f6;
+  text-decoration: underline;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.breadcrumb-switcher-active {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  color: #555;
+  text-align: left;
+}
+
+.breadcrumb-switcher-divider {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 0.25rem 0;
+}
+
+/* Two columns - details on the left, the live preview on the right - rather
+   than the preview floating alongside the text, so its width is a real
+   fraction of the page instead of a fixed pixel box wherever the text
+   happens to wrap around it. */
+.browser-layout {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* No screenshot yet (the browser is still starting) - the details column is
+   the grid's only child then, so let it use the full width instead of
+   leaving the second column an empty gap. */
+.browser-layout > .browser-main:only-child {
+  grid-column: 1 / -1;
+}
+
+/* Grid items default to a min-width driven by their content's min-content
+   size, not 0 - so without this, the long unbroken CDP URL and code samples
+   in .browser-main would force the whole grid wider than the viewport on a
+   narrow screen, pushing .browser-preview (and the image inside it) off
+   to the side instead of letting pre's own overflow-x: auto scroll it. */
+.browser-layout > * {
+  min-width: 0;
+}
+
+/* One <img> per open page, stacked top to bottom rather than side by side -
+   the column is already only 25% wide, so a row would squeeze each preview
+   into a sliver. */
+.browser-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Right-aligned so the count sits flush with the column's right edge above
+   the previews below it, rather than trailing off to the left like body text. */
+#browser-page-count {
+  text-align: right;
+}
+
+.browser-screenshot {
+  display: block;
+  /* height stays auto so the screenshot scales down with its column's width
+     without distorting its own aspect ratio. aspect-ratio's "auto" keeps
+     that true once the image has loaded and reports its real intrinsic
+     size; the 16/9 fallback only applies before then, so the <img> reserves
+     the same box as .browser-preview-placeholder instead of collapsing to
+     zero height and jumping the layout when the screenshot arrives. */
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: auto 16 / 9;
+  border: 1px solid #a0a0a0;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Stands in for .browser-screenshot while starting - same border and radius
+   so the right column doesn't change shape once a real screenshot swaps
+   this out, light gray rather than white so it reads as "loading" and not
+   as a blank space. */
+.browser-preview-placeholder {
+  aspect-ratio: 16 / 9;
+  background-color: #e0e0e0;
+  border: 1px solid #a0a0a0;
+  border-radius: 0.25rem;
+}
+
+/* Wraps each preview <img> so the whole thumbnail is the link target, not
+   just some text next to it. display: block because an anchor's default
+   inline sizing would otherwise leave it only as wide as the image itself
+   reports before layout, rather than stretching with .browser-preview's
+   flex column like the <img> inside it does. */
+.page-preview-link {
+  display: block;
+}
+
+/* Unlike .browser-screenshot's small floated preview, a single page's own
+   view page has nothing else to share space with, so it renders at up to its
+   own natural size instead of a thumbnail. width: auto (rather than 100%)
+   keeps it from being stretched past that natural size, which would just
+   blur a screenshot that's already full resolution; max-width still caps it
+   to <main>'s width for a page view wider than that. */
+.page-screenshot {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  /* Same auto/16:9 fallback as .browser-screenshot: reserves a 16:9 box
+     before the image has loaded, then defers to its real intrinsic ratio. */
+  aspect-ratio: auto 16 / 9;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.25rem;
+}
+
+/* auto-fill/minmax rather than a fixed column count: as many 200px-or-wider
+   cards fit the viewport, wrapping to fewer on a narrow screen, with no
+   breakpoint needed. */
+.pages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.page-card {
+  margin: 0;
+}
+
+/* .browser-screenshot's own max-width: 100% is enough to keep it inside a
+   grid cell, but auto-fill cells can still grow wide on a large viewport -
+   cap each thumbnail so the grid stays a grid of small previews. */
+.pages-grid .browser-screenshot {
+  max-width: 240px;
+}
+
+.page-card figcaption {
+  margin-top: 0.375rem;
+}
+
+.page-card-url {
+  font-size: 0.85rem;
+  color: #555;
+  /* The title above already links to the page; this is just the address it
+     is at, so it stays plain text rather than a second link to the same
+     place. */
+  overflow-wrap: anywhere;
+}
+
+pre {
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  background-color: #fcfcfc;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.25rem;
+}
+
+/* position: relative lives here, not on pre itself - pre's own overflow-x:
+   auto scrolls its content horizontally, and a button positioned relative to
+   pre would scroll away with it instead of staying pinned to the corner. */
+.instruction-block {
+  position: relative;
+}
+
+.code-copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  color: #333;
+  background-color: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.code-copy-button:hover {
+  background-color: #f0f0f0;
+}
+
+/* Set directly on the button in the server-rendered markup (views/browsers/
+   show.eta.html); views/partials/code-copy.eta.html removes it once JS has
+   actually run, so a visitor with no JavaScript never sees a dead button. */
+.hidden {
+  display: none;
+}
+
+.auth-aside {
+  display: none;
+}
+
+@media (min-width: 64rem) and (orientation: landscape) {
+  body.auth {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    background-color: #fafafa;
+  }
+
+  body.auth .auth-aside {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #141414;
+  }
+
+  body.auth .signin-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+    padding: 2rem 2.5rem;
+  }
+
+  body.auth .signin-panel {
+    max-width: 26rem;
+  }
+
+  body.auth .signin-panel h2 {
+    margin-bottom: 2.5rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    text-align: left;
+  }
+
+  body.auth .signin-form,
+  body.auth .signin-form input,
+  body.auth .signin-form button,
+  body.auth .sent-box,
+  body.auth .signin-retry,
+  body.auth .signin-terms {
+    max-width: none;
+  }
+
+  body.auth .signin-intro,
+  body.auth .signin-panel .danger {
+    text-align: left;
+  }
+
+  body.auth .signin-terms {
+    margin: 2rem 0 0;
+    text-align: left;
+  }
+
+  body.auth .signin-terms a {
+    white-space: nowrap;
+  }
+
+  body.auth footer {
+    display: none;
+  }
+}
+
+.tagline {
+  max-width: 30rem;
+  margin: 0;
+  padding: 12vh 3rem 0;
+  font-size: 1.75rem;
+  line-height: 1.35;
+  color: #e8e8e8;
+}
+
+.tagline-phrase {
+  transition: opacity 0.4s ease;
+}
+
+.tagline-phrase-hidden {
+  opacity: 0;
+}
+
+.auth-sky {
+  position: relative;
+  flex: 1;
+  margin-top: 1.5rem;
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 6rem);
+}
+
+.auth-stars {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  border-radius: 50%;
+  animation: auth-stars-drift linear infinite;
+}
+
+.auth-stars::after {
+  content: '';
+  position: absolute;
+  top: 2000px;
+  left: 0;
+  width: inherit;
+  height: inherit;
+  border-radius: inherit;
+  box-shadow: inherit;
+}
+
+.auth-stars-small {
+  width: 2px;
+  height: 2px;
+  animation-duration: 150s;
+  box-shadow:
+    98px 346px rgba(255, 255, 255, 0.6),
+    18px 332px rgba(255, 255, 255, 0.6),
+    -89px 361px rgba(255, 255, 255, 0.6),
+    -23px 34px rgba(255, 255, 255, 0.6),
+    -105px 736px rgba(255, 255, 255, 0.6),
+    22px 328px rgba(255, 255, 255, 0.6),
+    106px 278px rgba(255, 255, 255, 0.6),
+    -45px 512px rgba(255, 255, 255, 0.6),
+    -60px 1777px rgba(255, 255, 255, 0.6),
+    -37px 996px rgba(255, 255, 255, 0.6),
+    279px 96px rgba(255, 255, 255, 0.6),
+    -62px 688px rgba(255, 255, 255, 0.6),
+    -56px 1424px rgba(255, 255, 255, 0.6),
+    -24px 1973px rgba(255, 255, 255, 0.6),
+    133px 1161px rgba(255, 255, 255, 0.6),
+    72px 1276px rgba(255, 255, 255, 0.6),
+    -246px 1485px rgba(255, 255, 255, 0.6),
+    19px 1090px rgba(255, 255, 255, 0.6),
+    89px 1630px rgba(255, 255, 255, 0.6),
+    -136px 280px rgba(255, 255, 255, 0.6),
+    -158px 921px rgba(255, 255, 255, 0.6),
+    119px 1093px rgba(255, 255, 255, 0.6),
+    24px 1505px rgba(255, 255, 255, 0.6),
+    125px 1384px rgba(255, 255, 255, 0.6),
+    -185px 1219px rgba(255, 255, 255, 0.6),
+    -63px 881px rgba(255, 255, 255, 0.6),
+    -56px 1823px rgba(255, 255, 255, 0.6),
+    121px 592px rgba(255, 255, 255, 0.6),
+    114px 776px rgba(255, 255, 255, 0.6),
+    -2px 458px rgba(255, 255, 255, 0.6),
+    172px 472px rgba(255, 255, 255, 0.6),
+    8px 1797px rgba(255, 255, 255, 0.6),
+    -98px 233px rgba(255, 255, 255, 0.6),
+    0px 1800px rgba(255, 255, 255, 0.6),
+    -47px 27px rgba(255, 255, 255, 0.6),
+    -220px 973px rgba(255, 255, 255, 0.6),
+    278px 1694px rgba(255, 255, 255, 0.6),
+    86px 793px rgba(255, 255, 255, 0.6),
+    27px 87px rgba(255, 255, 255, 0.6),
+    197px 1679px rgba(255, 255, 255, 0.6),
+    -26px 1775px rgba(255, 255, 255, 0.6),
+    75px 465px rgba(255, 255, 255, 0.6),
+    -93px 1517px rgba(255, 255, 255, 0.6),
+    78px 1551px rgba(255, 255, 255, 0.6),
+    194px 1403px rgba(255, 255, 255, 0.6),
+    49px 676px rgba(255, 255, 255, 0.6),
+    1px 1046px rgba(255, 255, 255, 0.6),
+    21px 486px rgba(255, 255, 255, 0.6),
+    -104px 330px rgba(255, 255, 255, 0.6),
+    -213px 457px rgba(255, 255, 255, 0.6),
+    -234px 1669px rgba(255, 255, 255, 0.6),
+    24px 193px rgba(255, 255, 255, 0.6),
+    57px 1269px rgba(255, 255, 255, 0.6),
+    19px 194px rgba(255, 255, 255, 0.6),
+    120px 1265px rgba(255, 255, 255, 0.6),
+    26px 1802px rgba(255, 255, 255, 0.6),
+    111px 1613px rgba(255, 255, 255, 0.6),
+    71px 1838px rgba(255, 255, 255, 0.6),
+    46px 894px rgba(255, 255, 255, 0.6),
+    62px 1219px rgba(255, 255, 255, 0.6),
+    71px 1664px rgba(255, 255, 255, 0.6),
+    -103px 331px rgba(255, 255, 255, 0.6),
+    40px 1191px rgba(255, 255, 255, 0.6),
+    35px 920px rgba(255, 255, 255, 0.6),
+    -97px 1309px rgba(255, 255, 255, 0.6),
+    10px 429px rgba(255, 255, 255, 0.6),
+    -6px 311px rgba(255, 255, 255, 0.6),
+    -12px 1859px rgba(255, 255, 255, 0.6),
+    24px 85px rgba(255, 255, 255, 0.6),
+    7px 124px rgba(255, 255, 255, 0.6),
+    6px 1850px rgba(255, 255, 255, 0.6),
+    259px 186px rgba(255, 255, 255, 0.6),
+    159px 568px rgba(255, 255, 255, 0.6),
+    56px 832px rgba(255, 255, 255, 0.6),
+    73px 184px rgba(255, 255, 255, 0.6),
+    -113px 467px rgba(255, 255, 255, 0.6),
+    4px 21px rgba(255, 255, 255, 0.6),
+    190px 1558px rgba(255, 255, 255, 0.6),
+    246px 1661px rgba(255, 255, 255, 0.6),
+    190px 78px rgba(255, 255, 255, 0.6),
+    -38px 245px rgba(255, 255, 255, 0.6),
+    -89px 1204px rgba(255, 255, 255, 0.6),
+    144px 1095px rgba(255, 255, 255, 0.6),
+    144px 480px rgba(255, 255, 255, 0.6),
+    -21px 567px rgba(255, 255, 255, 0.6),
+    -177px 218px rgba(255, 255, 255, 0.6),
+    244px 1980px rgba(255, 255, 255, 0.6),
+    -74px 44px rgba(255, 255, 255, 0.6),
+    -25px 1894px rgba(255, 255, 255, 0.6),
+    77px 1778px rgba(255, 255, 255, 0.6),
+    -154px 1878px rgba(255, 255, 255, 0.6),
+    81px 129px rgba(255, 255, 255, 0.6),
+    -116px 794px rgba(255, 255, 255, 0.6),
+    57px 1681px rgba(255, 255, 255, 0.6),
+    -190px 1412px rgba(255, 255, 255, 0.6),
+    -99px 1090px rgba(255, 255, 255, 0.6),
+    -124px 1508px rgba(255, 255, 255, 0.6),
+    -48px 1140px rgba(255, 255, 255, 0.6),
+    133px 298px rgba(255, 255, 255, 0.6),
+    -152px 1904px rgba(255, 255, 255, 0.6),
+    36px 866px rgba(255, 255, 255, 0.6),
+    -139px 1670px rgba(255, 255, 255, 0.6),
+    40px 864px rgba(255, 255, 255, 0.6),
+    -99px 113px rgba(255, 255, 255, 0.6),
+    279px 12px rgba(255, 255, 255, 0.6),
+    -3px 250px rgba(255, 255, 255, 0.6),
+    98px 479px rgba(255, 255, 255, 0.6),
+    110px 1757px rgba(255, 255, 255, 0.6),
+    180px 1906px rgba(255, 255, 255, 0.6),
+    -71px 1952px rgba(255, 255, 255, 0.6),
+    188px 1348px rgba(255, 255, 255, 0.6),
+    58px 1990px rgba(255, 255, 255, 0.6),
+    -51px 508px rgba(255, 255, 255, 0.6),
+    43px 218px rgba(255, 255, 255, 0.6),
+    -28px 1086px rgba(255, 255, 255, 0.6),
+    -43px 70px rgba(255, 255, 255, 0.6),
+    105px 615px rgba(255, 255, 255, 0.6),
+    -13px 1983px rgba(255, 255, 255, 0.6),
+    89px 538px rgba(255, 255, 255, 0.6),
+    -139px 1410px rgba(255, 255, 255, 0.6),
+    39px 262px rgba(255, 255, 255, 0.6),
+    7px 1822px rgba(255, 255, 255, 0.6),
+    36px 252px rgba(255, 255, 255, 0.6),
+    -56px 364px rgba(255, 255, 255, 0.6),
+    -48px 638px rgba(255, 255, 255, 0.6),
+    -28px 310px rgba(255, 255, 255, 0.6),
+    -30px 73px rgba(255, 255, 255, 0.6),
+    -11px 463px rgba(255, 255, 255, 0.6),
+    41px 1450px rgba(255, 255, 255, 0.6),
+    65px 789px rgba(255, 255, 255, 0.6),
+    -134px 1261px rgba(255, 255, 255, 0.6),
+    -1px 1758px rgba(255, 255, 255, 0.6),
+    199px 679px rgba(255, 255, 255, 0.6),
+    62px 1718px rgba(255, 255, 255, 0.6),
+    -58px 1611px rgba(255, 255, 255, 0.6),
+    -144px 1977px rgba(255, 255, 255, 0.6),
+    -71px 650px rgba(255, 255, 255, 0.6),
+    118px 811px rgba(255, 255, 255, 0.6),
+    164px 974px rgba(255, 255, 255, 0.6),
+    -48px 1181px rgba(255, 255, 255, 0.6),
+    -121px 1374px rgba(255, 255, 255, 0.6),
+    -22px 128px rgba(255, 255, 255, 0.6),
+    -196px 1638px rgba(255, 255, 255, 0.6),
+    76px 599px rgba(255, 255, 255, 0.6),
+    92px 1082px rgba(255, 255, 255, 0.6),
+    -30px 325px rgba(255, 255, 255, 0.6),
+    -92px 1011px rgba(255, 255, 255, 0.6),
+    -44px 1334px rgba(255, 255, 255, 0.6),
+    124px 902px rgba(255, 255, 255, 0.6),
+    48px 1245px rgba(255, 255, 255, 0.6),
+    215px 1018px rgba(255, 255, 255, 0.6),
+    0px 1635px rgba(255, 255, 255, 0.6),
+    124px 1603px rgba(255, 255, 255, 0.6),
+    43px 1032px rgba(255, 255, 255, 0.6),
+    81px 1681px rgba(255, 255, 255, 0.6),
+    -35px 401px rgba(255, 255, 255, 0.6),
+    -137px 1356px rgba(255, 255, 255, 0.6),
+    101px 960px rgba(255, 255, 255, 0.6),
+    -14px 1297px rgba(255, 255, 255, 0.6),
+    -22px 1636px rgba(255, 255, 255, 0.6),
+    227px 445px rgba(255, 255, 255, 0.6),
+    97px 171px rgba(255, 255, 255, 0.6),
+    -30px 660px rgba(255, 255, 255, 0.6),
+    -50px 1508px rgba(255, 255, 255, 0.6),
+    1px 1858px rgba(255, 255, 255, 0.6),
+    -98px 1493px rgba(255, 255, 255, 0.6),
+    177px 1764px rgba(255, 255, 255, 0.6),
+    150px 732px rgba(255, 255, 255, 0.6),
+    -7px 1712px rgba(255, 255, 255, 0.6),
+    147px 544px rgba(255, 255, 255, 0.6),
+    59px 424px rgba(255, 255, 255, 0.6),
+    -206px 1935px rgba(255, 255, 255, 0.6),
+    -41px 429px rgba(255, 255, 255, 0.6),
+    -81px 1295px rgba(255, 255, 255, 0.6),
+    354px 1250px rgba(255, 255, 255, 0.6),
+    -13px 718px rgba(255, 255, 255, 0.6),
+    -188px 620px rgba(255, 255, 255, 0.6),
+    23px 289px rgba(255, 255, 255, 0.6),
+    223px 422px rgba(255, 255, 255, 0.6),
+    -73px 78px rgba(255, 255, 255, 0.6),
+    -43px 602px rgba(255, 255, 255, 0.6),
+    -112px 697px rgba(255, 255, 255, 0.6),
+    -49px 684px rgba(255, 255, 255, 0.6),
+    15px 893px rgba(255, 255, 255, 0.6),
+    79px 1489px rgba(255, 255, 255, 0.6),
+    -128px 404px rgba(255, 255, 255, 0.6),
+    -113px 14px rgba(255, 255, 255, 0.6),
+    174px 156px rgba(255, 255, 255, 0.6),
+    70px 795px rgba(255, 255, 255, 0.6),
+    -6px 1306px rgba(255, 255, 255, 0.6),
+    -23px 398px rgba(255, 255, 255, 0.6),
+    -116px 1640px rgba(255, 255, 255, 0.6),
+    286px 486px rgba(255, 255, 255, 0.6),
+    -78px 17px rgba(255, 255, 255, 0.6),
+    202px 144px rgba(255, 255, 255, 0.6),
+    181px 680px rgba(255, 255, 255, 0.6),
+    9px 421px rgba(255, 255, 255, 0.6),
+    57px 1155px rgba(255, 255, 255, 0.6),
+    -15px 182px rgba(255, 255, 255, 0.6),
+    99px 1770px rgba(255, 255, 255, 0.6),
+    -89px 1114px rgba(255, 255, 255, 0.6),
+    -60px 1414px rgba(255, 255, 255, 0.6),
+    20px 1775px rgba(255, 255, 255, 0.6),
+    -61px 654px rgba(255, 255, 255, 0.6),
+    47px 761px rgba(255, 255, 255, 0.6),
+    -111px 1599px rgba(255, 255, 255, 0.6),
+    -230px 89px rgba(255, 255, 255, 0.6),
+    84px 1600px rgba(255, 255, 255, 0.6),
+    233px 461px rgba(255, 255, 255, 0.6),
+    40px 810px rgba(255, 255, 255, 0.6),
+    -48px 1062px rgba(255, 255, 255, 0.6),
+    -4px 1544px rgba(255, 255, 255, 0.6),
+    -28px 579px rgba(255, 255, 255, 0.6),
+    -66px 1969px rgba(255, 255, 255, 0.6),
+    -93px 1989px rgba(255, 255, 255, 0.6),
+    -82px 1794px rgba(255, 255, 255, 0.6),
+    -15px 184px rgba(255, 255, 255, 0.6),
+    -61px 873px rgba(255, 255, 255, 0.6),
+    16px 1290px rgba(255, 255, 255, 0.6),
+    101px 982px rgba(255, 255, 255, 0.6),
+    6px 490px rgba(255, 255, 255, 0.6),
+    -49px 1964px rgba(255, 255, 255, 0.6),
+    -119px 1874px rgba(255, 255, 255, 0.6),
+    68px 1947px rgba(255, 255, 255, 0.6),
+    99px 257px rgba(255, 255, 255, 0.6),
+    -33px 997px rgba(255, 255, 255, 0.6),
+    -73px 1548px rgba(255, 255, 255, 0.6),
+    -163px 236px rgba(255, 255, 255, 0.6),
+    -27px 74px rgba(255, 255, 255, 0.6),
+    -128px 1804px rgba(255, 255, 255, 0.6),
+    92px 911px rgba(255, 255, 255, 0.6),
+    -9px 921px rgba(255, 255, 255, 0.6),
+    -11px 1463px rgba(255, 255, 255, 0.6),
+    111px 1326px rgba(255, 255, 255, 0.6),
+    -110px 158px rgba(255, 255, 255, 0.6),
+    -17px 1410px rgba(255, 255, 255, 0.6),
+    9px 1749px rgba(255, 255, 255, 0.6),
+    -58px 124px rgba(255, 255, 255, 0.6),
+    205px 1249px rgba(255, 255, 255, 0.6),
+    -45px 933px rgba(255, 255, 255, 0.6),
+    -8px 631px rgba(255, 255, 255, 0.6),
+    199px 527px rgba(255, 255, 255, 0.6),
+    44px 860px rgba(255, 255, 255, 0.6),
+    0px 414px rgba(255, 255, 255, 0.6),
+    -66px 1383px rgba(255, 255, 255, 0.6),
+    117px 1629px rgba(255, 255, 255, 0.6),
+    -116px 574px rgba(255, 255, 255, 0.6),
+    59px 1387px rgba(255, 255, 255, 0.6),
+    -49px 635px rgba(255, 255, 255, 0.6),
+    -17px 1313px rgba(255, 255, 255, 0.6),
+    10px 1736px rgba(255, 255, 255, 0.6),
+    -173px 1670px rgba(255, 255, 255, 0.6),
+    -34px 1663px rgba(255, 255, 255, 0.6),
+    199px 486px rgba(255, 255, 255, 0.6),
+    -129px 1412px rgba(255, 255, 255, 0.6),
+    182px 463px rgba(255, 255, 255, 0.6),
+    -8px 1130px rgba(255, 255, 255, 0.6),
+    -50px 1719px rgba(255, 255, 255, 0.6),
+    2px 894px rgba(255, 255, 255, 0.6),
+    78px 575px rgba(255, 255, 255, 0.6),
+    -119px 212px rgba(255, 255, 255, 0.6),
+    74px 1476px rgba(255, 255, 255, 0.6),
+    0px 1184px rgba(255, 255, 255, 0.6),
+    -178px 453px rgba(255, 255, 255, 0.6),
+    -71px 50px rgba(255, 255, 255, 0.6),
+    -58px 121px rgba(255, 255, 255, 0.6),
+    -46px 895px rgba(255, 255, 255, 0.6),
+    -139px 1711px rgba(255, 255, 255, 0.6),
+    -57px 459px rgba(255, 255, 255, 0.6),
+    56px 890px rgba(255, 255, 255, 0.6),
+    62px 1010px rgba(255, 255, 255, 0.6),
+    152px 844px rgba(255, 255, 255, 0.6),
+    52px 1845px rgba(255, 255, 255, 0.6),
+    -31px 14px rgba(255, 255, 255, 0.6),
+    9px 1933px rgba(255, 255, 255, 0.6),
+    -89px 807px rgba(255, 255, 255, 0.6),
+    53px 1251px rgba(255, 255, 255, 0.6),
+    82px 1182px rgba(255, 255, 255, 0.6),
+    -82px 1267px rgba(255, 255, 255, 0.6),
+    -124px 1158px rgba(255, 255, 255, 0.6),
+    113px 478px rgba(255, 255, 255, 0.6),
+    81px 533px rgba(255, 255, 255, 0.6),
+    -143px 1765px rgba(255, 255, 255, 0.6),
+    -19px 447px rgba(255, 255, 255, 0.6),
+    60px 1223px rgba(255, 255, 255, 0.6),
+    259px 1361px rgba(255, 255, 255, 0.6),
+    -64px 1888px rgba(255, 255, 255, 0.6),
+    6px 1534px rgba(255, 255, 255, 0.6),
+    -106px 1161px rgba(255, 255, 255, 0.6),
+    -71px 726px rgba(255, 255, 255, 0.6),
+    -156px 394px rgba(255, 255, 255, 0.6),
+    -107px 1535px rgba(255, 255, 255, 0.6),
+    -43px 1917px rgba(255, 255, 255, 0.6),
+    59px 1145px rgba(255, 255, 255, 0.6),
+    279px 1424px rgba(255, 255, 255, 0.6),
+    -65px 1069px rgba(255, 255, 255, 0.6),
+    91px 855px rgba(255, 255, 255, 0.6),
+    -111px 1578px rgba(255, 255, 255, 0.6),
+    107px 1492px rgba(255, 255, 255, 0.6),
+    61px 505px rgba(255, 255, 255, 0.6),
+    -237px 1644px rgba(255, 255, 255, 0.6),
+    -78px 857px rgba(255, 255, 255, 0.6),
+    -132px 841px rgba(255, 255, 255, 0.6),
+    105px 1896px rgba(255, 255, 255, 0.6),
+    -266px 1505px rgba(255, 255, 255, 0.6),
+    -213px 1786px rgba(255, 255, 255, 0.6),
+    -201px 584px rgba(255, 255, 255, 0.6),
+    35px 278px rgba(255, 255, 255, 0.6),
+    -61px 108px rgba(255, 255, 255, 0.6),
+    21px 1071px rgba(255, 255, 255, 0.6),
+    278px 81px rgba(255, 255, 255, 0.6),
+    -18px 1030px rgba(255, 255, 255, 0.6),
+    3px 37px rgba(255, 255, 255, 0.6),
+    -184px 1281px rgba(255, 255, 255, 0.6),
+    194px 1979px rgba(255, 255, 255, 0.6),
+    67px 979px rgba(255, 255, 255, 0.6),
+    11px 1768px rgba(255, 255, 255, 0.6),
+    -11px 18px rgba(255, 255, 255, 0.6),
+    92px 1363px rgba(255, 255, 255, 0.6),
+    84px 1943px rgba(255, 255, 255, 0.6),
+    -24px 1097px rgba(255, 255, 255, 0.6),
+    96px 500px rgba(255, 255, 255, 0.6),
+    -56px 445px rgba(255, 255, 255, 0.6),
+    72px 392px rgba(255, 255, 255, 0.6),
+    242px 1956px rgba(255, 255, 255, 0.6),
+    -18px 724px rgba(255, 255, 255, 0.6),
+    61px 1238px rgba(255, 255, 255, 0.6),
+    167px 1911px rgba(255, 255, 255, 0.6),
+    19px 547px rgba(255, 255, 255, 0.6),
+    -84px 1413px rgba(255, 255, 255, 0.6),
+    -147px 1643px rgba(255, 255, 255, 0.6),
+    -56px 176px rgba(255, 255, 255, 0.6),
+    -167px 1746px rgba(255, 255, 255, 0.6),
+    195px 1919px rgba(255, 255, 255, 0.6),
+    -243px 1397px rgba(255, 255, 255, 0.6),
+    -205px 1092px rgba(255, 255, 255, 0.6),
+    55px 1701px rgba(255, 255, 255, 0.6),
+    16px 292px rgba(255, 255, 255, 0.6),
+    22px 1306px rgba(255, 255, 255, 0.6),
+    188px 1822px rgba(255, 255, 255, 0.6);
+}
+
+.auth-stars-medium {
+  width: 3px;
+  height: 3px;
+  animation-duration: 100s;
+  box-shadow:
+    63px 1569px rgba(255, 255, 255, 0.8),
+    50px 677px rgba(255, 255, 255, 0.8),
+    4px 220px rgba(255, 255, 255, 0.8),
+    -136px 1363px rgba(255, 255, 255, 0.8),
+    -189px 324px rgba(255, 255, 255, 0.8),
+    -52px 241px rgba(255, 255, 255, 0.8),
+    15px 1165px rgba(255, 255, 255, 0.8),
+    142px 369px rgba(255, 255, 255, 0.8),
+    -17px 1583px rgba(255, 255, 255, 0.8),
+    -202px 819px rgba(255, 255, 255, 0.8),
+    173px 1086px rgba(255, 255, 255, 0.8),
+    -168px 910px rgba(255, 255, 255, 0.8),
+    221px 371px rgba(255, 255, 255, 0.8),
+    -66px 1461px rgba(255, 255, 255, 0.8),
+    188px 1632px rgba(255, 255, 255, 0.8),
+    77px 1857px rgba(255, 255, 255, 0.8),
+    -36px 787px rgba(255, 255, 255, 0.8),
+    126px 1061px rgba(255, 255, 255, 0.8),
+    -27px 1424px rgba(255, 255, 255, 0.8),
+    -134px 561px rgba(255, 255, 255, 0.8),
+    -84px 479px rgba(255, 255, 255, 0.8),
+    112px 1279px rgba(255, 255, 255, 0.8),
+    -24px 1232px rgba(255, 255, 255, 0.8),
+    47px 545px rgba(255, 255, 255, 0.8),
+    119px 891px rgba(255, 255, 255, 0.8),
+    -10px 911px rgba(255, 255, 255, 0.8),
+    98px 521px rgba(255, 255, 255, 0.8),
+    -41px 1870px rgba(255, 255, 255, 0.8),
+    -33px 1208px rgba(255, 255, 255, 0.8),
+    -111px 1922px rgba(255, 255, 255, 0.8),
+    266px 777px rgba(255, 255, 255, 0.8),
+    -109px 1870px rgba(255, 255, 255, 0.8),
+    -123px 932px rgba(255, 255, 255, 0.8),
+    -4px 317px rgba(255, 255, 255, 0.8),
+    51px 74px rgba(255, 255, 255, 0.8),
+    -19px 957px rgba(255, 255, 255, 0.8),
+    166px 1037px rgba(255, 255, 255, 0.8),
+    108px 37px rgba(255, 255, 255, 0.8),
+    222px 299px rgba(255, 255, 255, 0.8),
+    -240px 1157px rgba(255, 255, 255, 0.8),
+    164px 639px rgba(255, 255, 255, 0.8),
+    18px 1069px rgba(255, 255, 255, 0.8),
+    35px 1494px rgba(255, 255, 255, 0.8),
+    -157px 93px rgba(255, 255, 255, 0.8),
+    13px 1103px rgba(255, 255, 255, 0.8),
+    -107px 1965px rgba(255, 255, 255, 0.8),
+    72px 730px rgba(255, 255, 255, 0.8),
+    124px 80px rgba(255, 255, 255, 0.8),
+    52px 554px rgba(255, 255, 255, 0.8),
+    70px 1943px rgba(255, 255, 255, 0.8),
+    33px 1965px rgba(255, 255, 255, 0.8),
+    180px 1033px rgba(255, 255, 255, 0.8),
+    5px 695px rgba(255, 255, 255, 0.8),
+    74px 769px rgba(255, 255, 255, 0.8),
+    -181px 329px rgba(255, 255, 255, 0.8),
+    202px 872px rgba(255, 255, 255, 0.8),
+    -11px 898px rgba(255, 255, 255, 0.8),
+    227px 1603px rgba(255, 255, 255, 0.8),
+    240px 1245px rgba(255, 255, 255, 0.8),
+    -1px 106px rgba(255, 255, 255, 0.8),
+    -90px 1492px rgba(255, 255, 255, 0.8),
+    -181px 1000px rgba(255, 255, 255, 0.8),
+    143px 1865px rgba(255, 255, 255, 0.8),
+    -154px 290px rgba(255, 255, 255, 0.8),
+    -95px 1186px rgba(255, 255, 255, 0.8),
+    233px 1247px rgba(255, 255, 255, 0.8),
+    -70px 1220px rgba(255, 255, 255, 0.8),
+    80px 1047px rgba(255, 255, 255, 0.8),
+    54px 563px rgba(255, 255, 255, 0.8),
+    -146px 1228px rgba(255, 255, 255, 0.8),
+    -141px 546px rgba(255, 255, 255, 0.8),
+    76px 1322px rgba(255, 255, 255, 0.8),
+    146px 596px rgba(255, 255, 255, 0.8),
+    63px 1006px rgba(255, 255, 255, 0.8),
+    194px 213px rgba(255, 255, 255, 0.8),
+    4px 1586px rgba(255, 255, 255, 0.8),
+    226px 102px rgba(255, 255, 255, 0.8),
+    138px 308px rgba(255, 255, 255, 0.8),
+    -43px 697px rgba(255, 255, 255, 0.8),
+    -64px 648px rgba(255, 255, 255, 0.8),
+    209px 1088px rgba(255, 255, 255, 0.8),
+    152px 94px rgba(255, 255, 255, 0.8),
+    -126px 33px rgba(255, 255, 255, 0.8),
+    -121px 1784px rgba(255, 255, 255, 0.8),
+    -84px 1924px rgba(255, 255, 255, 0.8),
+    -55px 1411px rgba(255, 255, 255, 0.8),
+    11px 1189px rgba(255, 255, 255, 0.8),
+    -47px 1854px rgba(255, 255, 255, 0.8),
+    -119px 1268px rgba(255, 255, 255, 0.8),
+    70px 705px rgba(255, 255, 255, 0.8),
+    184px 1786px rgba(255, 255, 255, 0.8),
+    77px 114px rgba(255, 255, 255, 0.8),
+    -64px 704px rgba(255, 255, 255, 0.8),
+    -69px 1791px rgba(255, 255, 255, 0.8),
+    -77px 1624px rgba(255, 255, 255, 0.8),
+    260px 389px rgba(255, 255, 255, 0.8),
+    -140px 1005px rgba(255, 255, 255, 0.8),
+    -195px 1660px rgba(255, 255, 255, 0.8),
+    -195px 425px rgba(255, 255, 255, 0.8),
+    43px 1306px rgba(255, 255, 255, 0.8),
+    160px 1975px rgba(255, 255, 255, 0.8),
+    -82px 312px rgba(255, 255, 255, 0.8),
+    90px 1257px rgba(255, 255, 255, 0.8),
+    -139px 279px rgba(255, 255, 255, 0.8),
+    -39px 802px rgba(255, 255, 255, 0.8),
+    -103px 1808px rgba(255, 255, 255, 0.8),
+    -69px 54px rgba(255, 255, 255, 0.8),
+    126px 1923px rgba(255, 255, 255, 0.8),
+    84px 863px rgba(255, 255, 255, 0.8),
+    -82px 721px rgba(255, 255, 255, 0.8),
+    17px 682px rgba(255, 255, 255, 0.8),
+    -221px 588px rgba(255, 255, 255, 0.8),
+    -260px 1909px rgba(255, 255, 255, 0.8),
+    -208px 1176px rgba(255, 255, 255, 0.8),
+    -221px 1987px rgba(255, 255, 255, 0.8),
+    -46px 1704px rgba(255, 255, 255, 0.8),
+    -77px 1584px rgba(255, 255, 255, 0.8),
+    -1px 671px rgba(255, 255, 255, 0.8),
+    -49px 259px rgba(255, 255, 255, 0.8),
+    21px 1625px rgba(255, 255, 255, 0.8),
+    52px 1193px rgba(255, 255, 255, 0.8),
+    -135px 1861px rgba(255, 255, 255, 0.8),
+    -41px 1551px rgba(255, 255, 255, 0.8),
+    -140px 647px rgba(255, 255, 255, 0.8),
+    121px 1684px rgba(255, 255, 255, 0.8),
+    -150px 494px rgba(255, 255, 255, 0.8),
+    106px 1294px rgba(255, 255, 255, 0.8),
+    0px 910px rgba(255, 255, 255, 0.8),
+    109px 754px rgba(255, 255, 255, 0.8),
+    -232px 685px rgba(255, 255, 255, 0.8),
+    79px 1639px rgba(255, 255, 255, 0.8),
+    93px 1845px rgba(255, 255, 255, 0.8),
+    -63px 1034px rgba(255, 255, 255, 0.8),
+    117px 1724px rgba(255, 255, 255, 0.8),
+    11px 1969px rgba(255, 255, 255, 0.8),
+    -98px 882px rgba(255, 255, 255, 0.8),
+    -121px 291px rgba(255, 255, 255, 0.8),
+    -176px 1590px rgba(255, 255, 255, 0.8),
+    20px 1016px rgba(255, 255, 255, 0.8),
+    146px 74px rgba(255, 255, 255, 0.8);
+}
+
+.auth-stars-large {
+  width: 4px;
+  height: 4px;
+  animation-duration: 50s;
+  box-shadow:
+    98px 1568px #fff,
+    74px 1374px #fff,
+    37px 20px #fff,
+    57px 360px #fff,
+    74px 223px #fff,
+    -201px 1787px #fff,
+    58px 1373px #fff,
+    -145px 125px #fff,
+    -84px 1779px #fff,
+    14px 1953px #fff,
+    -103px 171px #fff,
+    3px 1756px #fff,
+    157px 1551px #fff,
+    -123px 1656px #fff,
+    -169px 1133px #fff,
+    188px 893px #fff,
+    149px 1958px #fff,
+    -35px 1248px #fff,
+    -32px 306px #fff,
+    -46px 34px #fff,
+    0px 481px #fff,
+    263px 392px #fff,
+    133px 4px #fff,
+    161px 1213px #fff,
+    123px 190px #fff,
+    -20px 1837px #fff,
+    2px 409px #fff,
+    71px 1420px #fff,
+    194px 1785px #fff,
+    -139px 1404px #fff,
+    -201px 287px #fff,
+    137px 1446px #fff,
+    -246px 1090px #fff,
+    -90px 373px #fff,
+    -173px 235px #fff,
+    255px 1865px #fff,
+    -58px 923px #fff,
+    65px 1465px #fff,
+    211px 924px #fff,
+    -209px 812px #fff,
+    14px 1303px #fff,
+    -99px 599px #fff,
+    -71px 1743px #fff,
+    44px 1258px #fff,
+    -125px 909px #fff,
+    81px 1611px #fff,
+    -121px 312px #fff,
+    -57px 478px #fff,
+    -61px 1742px #fff,
+    -46px 128px #fff,
+    -147px 277px #fff,
+    -120px 1380px #fff,
+    162px 1925px #fff,
+    -113px 1784px #fff,
+    -206px 1848px #fff,
+    -108px 396px #fff,
+    225px 577px #fff,
+    3px 960px #fff,
+    -160px 492px #fff,
+    -50px 1621px #fff;
+}
+
+@keyframes auth-stars-drift {
+  to {
+    transform: translateY(-2000px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-stars {
+    animation: none;
+  }
+}

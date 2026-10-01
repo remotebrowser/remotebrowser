@@ -1,0 +1,38 @@
+<% layout('layout', { title: 'Complete Sign In', bodyClass: 'auth' }) %> <%~ include('partials/auth-aside') %>
+<main class="signin-main">
+  <h1 class="auth-brand">Remote Browser</h1>
+  <div class="signin-panel">
+    <h2>Almost there</h2>
+    <% if (it.linkInvalid) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <a href="/signin" class="signin-retry">Try again</a>
+    <% } else { %>
+    <p class="signin-intro">Confirm the email address this sign-in link was sent to.</p>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <form method="post" action="/continue" class="signin-form">
+      <%~ include('partials/csrf', it) %>
+      <input type="hidden" name="nonce" value="<%= it.nonce %>" />
+      <input
+        type="email"
+        id="email"
+        name="email"
+        value="<%= it.email %>"
+        autocomplete="email"
+        placeholder="email"
+        aria-label="Email"
+        required
+        autofocus
+      />
+      <button type="submit" class="btn-primary">
+        Sign In <span class="icon-caret-right" aria-hidden="true">&#9656;</span>
+      </button>
+    </form>
+    <p class="signin-terms">
+      By continuing, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Use</a> and the
+      <a href="/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>.
+    </p>
+    <% } %>
+  </div>
+</main>

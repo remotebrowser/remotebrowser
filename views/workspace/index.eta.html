@@ -1,0 +1,23 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.workspace.name }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<main hx-get="/" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">
+  <article>
+    <h2>Browser</h2>
+    <%~ include('/partials/browser-instances-table', it) %>
+    <div class="browser-table-actions">
+      <% if (it.capacity.atCapacity) { %>
+      <span class="btn-primary" aria-disabled="true">Launch a browser</span>
+      <% } else { %>
+      <a href="/browsers/launch" class="btn-primary">Launch a browser</a>
+      <% } %> <% if (it.hasAnyBrowsers) { %>
+      <a href="/browsers">Show all browsers</a>
+      <% } %>
+    </div>
+
+    <% if (!it.workspace.isPersonal) { %>
+    <h2>Workspace Management</h2>
+    <p><a href="/workspace">Manage collaborators</a></p>
+    <% } %>
+  </article>
+</main>

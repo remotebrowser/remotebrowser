@@ -1,0 +1,22 @@
+<% layout('/layout', { title: 'Remote Browser - Delete workspace' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <p><strong>This is permanent and cannot be undone.</strong></p>
+    <p>
+      Deleting the workspace removes every collaborator and pending invite, and no one will be able to reach it again.
+    </p>
+    <form method="post" action="/workspace/delete" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <label for="name">Confirm workspace name</label>
+      <input type="text" id="name" name="name" required autocomplete="off" />
+      <div class="form-actions">
+        <button type="submit" class="btn-danger">Delete</button>
+        <a href="/workspace" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </article>
+</main>

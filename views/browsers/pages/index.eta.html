@@ -1,0 +1,43 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName + ' - Pages' }) %> <%~
+include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<script nonce="<%= it.scriptNonce %>">
+  document.addEventListener('DOMContentLoaded', () => {
+    // Kept outside <main> so the swap below never removes the interval
+    // itself - see views/browsers/show.eta.html for the same approach.
+    setInterval(() => {
+      htmx.ajax('GET', window.location.pathname, { target: 'main', select: 'main', swap: 'outerHTML' });
+    }, 3000);
+  });
+</script>
+<%~ include('/partials/screenshot-refresh', it) %>
+<main>
+  <article>
+    <h1>Pages</h1>
+    <% if (it.pages === null) { %>
+    <p id="browser-pages-unavailable">Pages will appear here once the browser is ready.</p>
+    <% } else if (it.pages.length === 0) { %>
+    <p id="browser-pages-empty">No pages are currently open.</p>
+    <% } else { %>
+    <div class="pages-grid">
+      <% it.pages.forEach(function(page) { const trim = (value, max) => value && value.length > max ? value.slice(0, max
+      - 1) + '\u2026' : value; const title = trim(page.title || '', 16); let domain = ''; try { domain = new
+      URL(page.url).hostname; } catch {} domain = trim(domain || page.url || '', 80); %>
+      <figure class="page-card">
+        <img
+          class="browser-screenshot"
+          id="screenshot-<%= page.pageId %>"
+          src="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/view?t=<%= it.screenshotCacheBust %>"
+          alt="<%= title %>"
+          decoding="async"
+        />
+        <figcaption>
+          <a href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>"><%= title %></a>
+          <div class="page-card-url"><%= domain %></div>
+        </figcaption>
+      </figure>
+      <% }) %>
+    </div>
+    <% } %>
+  </article>
+</main>
