@@ -148,6 +148,19 @@ describe('production', () => {
       assert.match(result.stderr.toString(), /SMTP_PORT must be a port number/);
     }
   });
+
+  test('refuses to start with an invalid SESSION_NOT_BEFORE', () => {
+    for (const value of ['abc', 'Infinity']) {
+      const result = runConfig({ NODE_ENV: 'production', SESSION_NOT_BEFORE: value });
+      assert.equal(result.status, 1, `expected ${value} to be rejected`);
+      assert.match(result.stderr.toString(), /SESSION_NOT_BEFORE must be a non-negative integer/);
+    }
+  });
+
+  test('starts with a valid SESSION_NOT_BEFORE', () => {
+    const result = runConfig({ NODE_ENV: 'production', SESSION_NOT_BEFORE: '1704067200000' });
+    assert.equal(result.status, 0);
+  });
 });
 
 describe('development', () => {
