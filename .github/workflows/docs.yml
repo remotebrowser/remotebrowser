@@ -6,6 +6,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   docs:
     runs-on: ubuntu-22.04
@@ -21,3 +24,39 @@ jobs:
 
       - name: Wait for the server
         run: timeout 60 bash -c 'until curl -fsS http://127.0.0.1:8000/ > /dev/null; do sleep 1; done'
+
+  deploy:
+    # Only publish on a merge to main (or a manual run on main).
+    if: github.ref == 'refs/heads/main'
+    needs: docs
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Build docs
+        run: uv run zensical build --clean
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
