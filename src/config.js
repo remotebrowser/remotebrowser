@@ -72,6 +72,11 @@ const buildConfig = (env) => {
     errors.push('SMTP_PORT must be a port number between 1 and 65535, e.g. 587');
   }
 
+  const sessionNotBefore = env.SESSION_NOT_BEFORE ? Number(env.SESSION_NOT_BEFORE) : 0;
+  if (env.SESSION_NOT_BEFORE && (!Number.isInteger(sessionNotBefore) || sessionNotBefore < 0)) {
+    errors.push('SESSION_NOT_BEFORE must be a non-negative integer, e.g. 1704067200000');
+  }
+
   // A bare postgres connection string; DB access never goes through an emulator.
   const DATABASE_URL = env.DATABASE_URL;
   if (DATABASE_URL && !/^postgres(ql)?:\/\//.test(DATABASE_URL)) {
@@ -99,7 +104,6 @@ const buildConfig = (env) => {
   const sessionSecret = Buffer.from(sessionSecrets[0] || 'dummy-session-secret');
   const previousSessionSecret = sessionSecrets[1] ? Buffer.from(sessionSecrets[1]) : null;
   const resourceHmacSecret = Buffer.from(env.RESOURCE_HMAC_SECRET || 'dummy-resource-hmac-secret');
-  const sessionNotBefore = Number(env.SESSION_NOT_BEFORE || 0);
   const sessionTtlSeconds = 7 * 60 * 60;
   const browserFleetUrl = BROWSERFLEET_URL || null;
   // Local dev/test only, when DATABASE_URL is unset; PGlite is not installed in production.
