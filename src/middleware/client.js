@@ -2,8 +2,10 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import { consola } from 'consola/basic';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { routePath } from 'hono/route';
+import { config } from '../config.js';
 import { tracer } from '../logging.js';
 import {
+  clientAddress,
   routeTemplate,
   isRouteMatched,
   requestSpanName,
@@ -13,11 +15,17 @@ import {
 } from './http.js';
 
 const remoteAddress = (c) => {
+  let peer;
   try {
-    return getConnInfo(c).remote.address || null;
+    peer = getConnInfo(c).remote.address;
   } catch {
     return null;
   }
+  return clientAddress({
+    peer,
+    forwardedFor: c.req.header('X-Forwarded-For'),
+    trustedProxyHops: config.trustedProxyHops
+  });
 };
 
 // Map the matched Hono route to a template so logs stay stable across paths with dynamic params.

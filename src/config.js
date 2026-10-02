@@ -90,6 +90,14 @@ const buildConfig = (env) => {
   const MAX_PERSONAL_BROWSERS = Number(env.MAX_PERSONAL_BROWSERS) || 3;
   const MAX_TEAM_BROWSERS = Number(env.MAX_TEAM_BROWSERS) || 10;
 
+  // Reverse proxies in front of the app, e.g. nginx, a load balancer, or a CDN.
+  // X-Forwarded-For is client-controlled, so only this many entries from the
+  // right are trusted.
+  const trustedProxyHops = env.TRUSTED_PROXY_HOPS ? Number(env.TRUSTED_PROXY_HOPS) : 0;
+  if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 0) {
+    errors.push('TRUSTED_PROXY_HOPS must be a non-negative integer, e.g. 1 behind a single reverse proxy');
+  }
+
   const publicOrigin = PUBLIC_ORIGIN || null;
   // The full sender address, e.g. login@example.com. It is configured rather
   // than derived from PUBLIC_ORIGIN, since the sending domain may differ from
@@ -136,7 +144,8 @@ const buildConfig = (env) => {
     smtpPassword,
     mailConfigured,
     maxPersonalBrowsers: MAX_PERSONAL_BROWSERS,
-    maxTeamBrowsers: MAX_TEAM_BROWSERS
+    maxTeamBrowsers: MAX_TEAM_BROWSERS,
+    trustedProxyHops
   });
 
   return { config, errors };

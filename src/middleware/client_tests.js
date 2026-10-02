@@ -70,6 +70,12 @@ describe('client address', () => {
     assert.deepEqual(await res.json(), { ip: null });
   });
 
+  test('uses the socket peer', async () => {
+    const env = { incoming: { socket: { remoteAddress: '::ffff:203.0.113.7' } } };
+    const res = await setupApp().request('/whoami', { headers: { 'X-Forwarded-For': '6.6.6.6' } }, env);
+    assert.deepEqual(await res.json(), { ip: '203.0.113.7' });
+  });
+
   test('is null when no real socket connection is available', async () => {
     const { res } = await request('/whoami');
     assert.deepEqual(await res.json(), { ip: null });
