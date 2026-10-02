@@ -6,7 +6,8 @@ import { requireUser } from '../../middleware/auth.js';
 import {
   requireWorkspaceRole,
   buildBrowsersBreadcrumbs,
-  loadWorkspaceSwitcherItems
+  loadWorkspaceSwitcherItems,
+  canTerminateBrowser
 } from '../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { absoluteOrigin } from '../../origin.js';
@@ -57,6 +58,8 @@ const renderBrowser = async (c) => {
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, result.data.browserName),
     browser: result.data,
+    // Only the creator (or an Admin/Owner) sees the Terminate control.
+    canTerminate: canTerminateBrowser(result.data, workspace, user),
     // Gates the code sample and the preview column; the URL itself never
     // reaches the view.
     isConnectable,

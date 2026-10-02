@@ -9,6 +9,12 @@ const PERSONAL_WORKSPACE_LABEL = 'Personal workspace';
 
 const hasRole = (role, minRole) => Boolean(ROLE_RANK[role]) && ROLE_RANK[role] >= ROLE_RANK[minRole];
 
+const hasAdminRole = (role) => hasRole(role, 'Admin');
+
+// Only the browser's creator may terminate it. Admin and Owner are exempt.
+const canTerminateBrowser = (browser, workspace, user) =>
+  hasAdminRole(workspace.role) || browser.creatorUserId === user.id;
+
 const loadActiveWorkspace = async (c) => {
   const user = c.get('user');
   // The session's choice, else the workspace every user has, so a session that
@@ -127,6 +133,8 @@ const buildBrowserPageBreadcrumbs = (workspace, browserInstanceId, browserName, 
 export {
   ROLE_RANK,
   hasRole,
+  hasAdminRole,
+  canTerminateBrowser,
   loadActiveWorkspace,
   loadWorkspaceSwitcherItems,
   requireWorkspaceRole,
