@@ -30,7 +30,20 @@ if (health.error) {
   });
 }
 
-const server = serve({ fetch: app.fetch, port: config.port });
+const server = serve({ fetch: app.fetch, port: config.port }, () => {
+  consola.info('SERVER listening on port', config.port, { 'event.domain': 'server' });
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    consola.error(`SERVER port ${config.port} is in use. Stop the other process or set PORT.`, {
+      'event.domain': 'server'
+    });
+  } else {
+    consola.error('SERVER failed to start:', error, { 'event.domain': 'server' });
+  }
+  process.exit(1);
+});
 
 // CDP needs the raw socket for WebSocket handshake, which app.fetch does not expose.
 const cdpRelay = mountCdpRelay({ server });
@@ -49,4 +62,3 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     void shutdown(signal);
   });
 }
-consola.info('SERVER listening on port', config.port, { 'event.domain': 'server' });
