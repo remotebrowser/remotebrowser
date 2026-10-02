@@ -30,7 +30,7 @@ if (health.error) {
   });
 }
 
-const server = serve({ fetch: app.fetch, port: config.port }, () => {
+const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, () => {
   consola.info('SERVER listening on port', config.port, { 'event.domain': 'server' });
 });
 
