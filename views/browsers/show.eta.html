@@ -43,8 +43,9 @@ include('/partials/code-copy', it) %>
       <p id="browser-terminated-notice">This browser has been stopped and can no longer be reached.</p>
       <% } else { %>
       <p id="browser-starting-notice">Connection details will appear here once the browser is ready.</p>
-      <% } %>
+      <% } %> <% if (it.canTerminate) { %>
       <p><a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a></p>
+      <% } %>
     </div>
     <% if (!it.isConnectable) { %>
     <div class="browser-preview">

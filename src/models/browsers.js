@@ -15,7 +15,8 @@ const map = (r) => ({
   browserName: r.browser_name,
   status: r.status,
   browserHandle: r.browser_handle,
-  internalBrowserId: r.internal_browser_id
+  internalBrowserId: r.internal_browser_id,
+  creatorUserId: r.user_id
 });
 
 // Repairs a deleted personal workspace before the query runs; a browser count

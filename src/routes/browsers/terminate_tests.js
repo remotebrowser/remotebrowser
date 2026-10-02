@@ -10,7 +10,7 @@ const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./terminate.js');
 const { findOrCreateUser } = await import('../../models/users.js');
-const { ensurePersonalWorkspace } = await import('../../models/workspaces.js');
+const { ensurePersonalWorkspace, createWorkspace, createCollaborator } = await import('../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, getBrowserInstance, browserIdForHandle } =
   await import('../../models/browsers.js');
 const { closeDatabase } = await import('../../db/database.js');
@@ -73,6 +73,30 @@ const makeRunningBrowser = async (workspaceId, { browserName = 'calm-otter', int
 
 const cookieFor = (activeWorkspaceId) => makeSessionCookie({ activeWorkspaceId: activeWorkspaceId });
 
+// A shared workspace where the signed-in user holds `role`; the browser belongs
+// to a different user, so only an Admin/Owner may terminate it.
+const makeForeignBrowserInSharedWorkspace = async ({ role }) => {
+  const owner = await findOrCreateUser({ email: 'owner@example.com' });
+  const creator = await findOrCreateUser({ email: 'creator@example.com' });
+  const workspace = await createWorkspace({ name: 'Acme Corp', ownerId: owner.data.id });
+  const workspaceId = workspace.data.workspaceId;
+  await createCollaborator({ workspaceId, userId, email: 'user@example.com', role, workspaceName: 'Acme Corp' });
+  const launched = await launchBrowserInstance({
+    workspaceId,
+    userId: creator.data.id,
+    browserName: 'calm-otter',
+    browserDescription: ''
+  });
+  const browserInstanceId = launched.data.browserInstanceId;
+  await recordProvisionedBrowser({
+    workspaceId,
+    browserInstanceId,
+    internalBrowserId: 'br-1',
+    userId: creator.data.id
+  });
+  return { workspaceId, browserInstanceId, publicId: launched.data.publicId };
+};
+
 const stubFetchByRoute = (routes) => {
   const original = globalThis.fetch;
   const calls = [];
@@ -97,12 +121,17 @@ const stubFetchByRoute = (routes) => {
 // No trailing slash issues here since stopBrowser always appends the id.
 const FLEET_STOP_ROUTE = { match: /\/api\/v1\/browsers\//, responses: [() => new Response(null, { status: 204 })] };
 
-const postTerminate = (app, workspaceId, publicId, { name, csrfId = 'a'.repeat(32), workspace = workspaceId }) =>
+const postTerminate = (
+  app,
+  workspaceId,
+  publicId,
+  { name, csrfId = 'a'.repeat(32), workspace = workspaceId, activeWorkspaceId = undefined }
+) =>
   app.request(`/browsers/${publicId}/terminate`, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${cookieFor()}; csrf_id=${csrfId}`
+      'cookie': `session=${cookieFor(activeWorkspaceId)}; csrf_id=${csrfId}`
     },
     body: new URLSearchParams({ name, workspace, csrf: makeCsrfToken(csrfId) }).toString()
   });
@@ -237,6 +266,68 @@ test('POST /browsers/:browserId/terminate terminates a browser that never finish
     assert.equal(calls.length, 0, 'nothing to stop on the fleet, and no handle to revoke');
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data, null);
+  } finally {
+    restore();
+  }
+});
+
+test('GET /browsers/:browserId/terminate forbids a User from a browser they did not create', async () => {
+  await makeUser();
+  const { workspaceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'User' });
+  const app = setupApp();
+  const res = await app.request(`/browsers/${publicId}/terminate`, {
+    headers: { cookie: `session=${cookieFor(workspaceId)}` }
+  });
+  assert.equal(res.status, 403);
+});
+
+test('POST /browsers/:browserId/terminate forbids a User from terminating a browser they did not create', async () => {
+  await makeUser();
+  const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'User' });
+  const { calls, restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, {
+      name: 'calm-otter',
+      activeWorkspaceId: workspaceId
+    });
+    assert.equal(res.status, 403);
+    assert.equal(calls.length, 0, 'the fleet must not be asked to stop the browser');
+    const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+    assert.ok(fetched.data, 'the browser must still exist');
+  } finally {
+    restore();
+  }
+});
+
+test('POST /browsers/:browserId/terminate lets an Admin terminate a browser they did not create', async () => {
+  await makeUser();
+  const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'Admin' });
+  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, {
+      name: 'calm-otter',
+      activeWorkspaceId: workspaceId
+    });
+    assert.equal(res.status, 303);
+    const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+    assert.equal(fetched.data, null, 'an Admin may terminate any browser');
+  } finally {
+    restore();
+  }
+});
+
+test('POST /browsers/:browserId/terminate lets an Owner terminate a browser they did not create', async () => {
+  await makeUser();
+  const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'Owner' });
+  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, {
+      name: 'calm-otter',
+      activeWorkspaceId: workspaceId
+    });
+    assert.equal(res.status, 303);
+    const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+    assert.equal(fetched.data, null, 'an Owner may terminate any browser');
   } finally {
     restore();
   }

@@ -7,7 +7,8 @@ import {
   requireWorkspaceRole,
   requireSubmittedWorkspace,
   buildBrowsersBreadcrumbs,
-  loadWorkspaceSwitcherItems
+  loadWorkspaceSwitcherItems,
+  canTerminateBrowser
 } from '../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, deleteBrowserInstance } from '../../models/browsers.js';
 import { stopBrowser } from '../../fleet.js';
@@ -44,7 +45,13 @@ const renderTerminate = async (c, data = {}) => {
 
 routes.get('/:browserId/terminate', requireUser, requireWorkspaceRole('User'), async (c) => {
   const browser = await loadBrowser(c);
-  return browser ? c.html(renderTerminate(c, { browser })) : c.text('Not found', 404);
+  if (!browser) {
+    return c.text('Not found', 404);
+  }
+  if (!canTerminateBrowser(browser, c.get('workspace'), c.get('user'))) {
+    return c.text('Forbidden', 403);
+  }
+  return c.html(renderTerminate(c, { browser }));
 });
 
 routes.post(
@@ -57,6 +64,9 @@ routes.post(
     const browser = await loadBrowser(c);
     if (!browser) {
       return c.text('Not found', 404);
+    }
+    if (!canTerminateBrowser(browser, c.get('workspace'), c.get('user'))) {
+      return c.text('Forbidden', 403);
     }
     if (!verifyCsrfToken(c, body.csrf)) {
       return c.html(await renderTerminate(c, { browser, error: 'Your session expired. Please try again.' }), 403);
