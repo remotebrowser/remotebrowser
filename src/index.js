@@ -23,11 +23,12 @@ if (health.error) {
     'error.type': String(health.error),
     'server.address': config.browserFleetUrl
   });
+} else {
+  consola.log('BROWSERFLEET health check passed', {
+    'event.domain': 'browserfleet',
+    'server.address': config.browserFleetUrl
+  });
 }
-consola.log('BROWSERFLEET health check passed', {
-  'event.domain': 'browserfleet',
-  'server.address': config.browserFleetUrl
-});
 
 const server = serve({ fetch: app.fetch, port: config.port });
 
