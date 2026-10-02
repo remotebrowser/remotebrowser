@@ -1,0 +1,94 @@
+name: Container
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: remotebrowser
+          POSTGRES_PASSWORD: remotebrowser
+          POSTGRES_DB: remotebrowser
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U remotebrowser"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            --tag remotebrowser:ci \
+            --load .
+
+      - name: Run container
+        run: |
+          # Publish the app port and reach the service container through the
+          # Docker host gateway. `--network host` is not portable: the service
+          # container is on its own bridge, so 127.0.0.1 inside the app would
+          # not reach Postgres.
+          docker run --detach --name remotebrowser \
+            --platform ${{ matrix.platform }} \
+            --add-host host.docker.internal:host-gateway \
+            --publish 3000:3000 \
+            --env NODE_ENV=production \
+            --env PORT=3000 \
+            --env DATABASE_URL=postgres://remotebrowser:remotebrowser@host.docker.internal:5432/remotebrowser \
+            --env DATABASE_SSL_MODE=disable \
+            --env SESSION_SECRET=dummy-session-secret-dummy-session-secret \
+            --env RESOURCE_HMAC_SECRET=dummy-resource-hmac-secret-dummy \
+            --env PUBLIC_ORIGIN=https://localhost \
+            --env SIGNIN_SENDER_EMAIL=no-reply@example.com \
+            --env SMTP_HOST=smtp.example.com \
+            --env SMTP_USER=dummy \
+            --env SMTP_PASSWORD=dummy \
+            --env BROWSERFLEET_URL=http://127.0.0.1:9999 \
+            remotebrowser:ci
+
+      - name: Wait for the health endpoint
+        run: |
+          sleep 3
+          for _ in $(seq 1 180); do
+            if [ "$(docker inspect -f '{{.State.Running}}' remotebrowser 2>/dev/null)" != "true" ]; then
+              echo "Container exited before the health endpoint came up"
+              docker logs remotebrowser
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:3000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Timed out waiting for the health endpoint"
+          docker logs remotebrowser
+          exit 1
+
+      - name: Show container logs
+        if: always()
+        run: docker logs remotebrowser
