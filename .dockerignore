@@ -55,8 +55,13 @@
 # Yarn Integrity file
 **/.yarn-integrity
 
-# dotenv environment variables file
+# dotenv environment variables file and other secrets
 **/.env
+**/.env*
+**/*.pem
+**/*.key
+**/*.crt
+**/id_rsa*
 
 # next.js build output
 **/.next
@@ -69,3 +74,14 @@
 # Documentation build output and Python env
 **/site
 **/.venv
+
+# Local-only / untracked artifacts that must never enter the image
+tests
+.coverage
+**/__pycache__
+**/*.pyc
+data
+pyproject.toml
+uv.lock
+zensical.toml
+**/*_tests.js
