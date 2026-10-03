@@ -702,28 +702,48 @@ pre {
   border-radius: 0.25rem;
 }
 
-/* position: relative lives here, not on pre itself - pre's own overflow-x:
-   auto scrolls its content horizontally, and a button positioned relative to
-   pre would scroll away with it instead of staying pinned to the corner. */
 .instruction-block {
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .code-copy-button {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.75rem;
-  padding: 0.15rem 0.5rem;
-  font-size: 0.8rem;
-  color: #333;
-  background-color: #fff;
-  border: 1px solid #d0d0d0;
-  border-radius: 0.25rem;
-  cursor: pointer;
+  align-self: flex-end;
+  margin-bottom: 0.5rem;
 }
 
-.code-copy-button:hover {
-  background-color: #f0f0f0;
+.instruction-box {
+  background-color: #fcfcfc;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.25rem;
+}
+
+.instruction-preamble {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.15;
+}
+
+.instruction-box pre {
+  padding: 0 1rem 0.75rem;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Set directly on the button in the server-rendered markup (views/browsers/

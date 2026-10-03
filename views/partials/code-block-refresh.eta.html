@@ -1,31 +1,30 @@
 <script nonce="<%= it.scriptNonce %>">
   // Same problem as screenshot-refresh.eta.html, different element: an
   // outerHTML swap destroys and recreates every element in the swapped
-  // fragment, including the code sample's <pre>. The snippet never actually
-  // changes once the browser is running, so recreating the <pre> node on
-  // every 3s poll buys nothing - it just makes Firefox on macOS replay its
-  // "new scrollable content" reveal animation on pre's own overflow-x
-  // scrollbar, flickering it on every poll even though nothing changed.
+  // fragment, including the instruction block. The snippet never actually
+  // changes once the browser is running, so recreating its node on every 3s
+  // poll buys nothing - it just makes the browser replay its "new scrollable
+  // content" reveal animation on every poll even though nothing changed.
   // Reusing the same node, and only touching its content when it actually
-  // differs, leaves the scrollbar's own state alone.
+  // differs, leaves that state alone.
   let outgoingCodeBlocks = new Map();
 
   document.body.addEventListener('htmx:beforeSwap', (event) => {
     outgoingCodeBlocks = new Map(
-      [...event.detail.target.querySelectorAll('pre[id^="instruction-block-"]')].map((pre) => [pre.id, pre])
+      [...event.detail.target.querySelectorAll('[id^="instruction-block-"]')].map((block) => [block.id, block])
     );
   });
 
   document.body.addEventListener('htmx:afterSwap', (event) => {
-    for (const pre of event.detail.elt.querySelectorAll('pre[id^="instruction-block-"]')) {
-      const outgoing = outgoingCodeBlocks.get(pre.id);
+    for (const block of event.detail.elt.querySelectorAll('[id^="instruction-block-"]')) {
+      const outgoing = outgoingCodeBlocks.get(block.id);
       if (!outgoing) {
         continue;
       }
-      if (outgoing.innerHTML !== pre.innerHTML) {
-        outgoing.innerHTML = pre.innerHTML;
+      if (outgoing.innerHTML !== block.innerHTML) {
+        outgoing.innerHTML = block.innerHTML;
       }
-      pre.replaceWith(outgoing);
+      block.replaceWith(outgoing);
     }
     outgoingCodeBlocks.clear();
   });
