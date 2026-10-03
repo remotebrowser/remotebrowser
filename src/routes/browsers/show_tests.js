@@ -184,11 +184,16 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(body, /connectOverCDP\(\*+\)/);
   assert.doesNotMatch(body, new RegExp(`<code>[\\s\\S]*/cdp/${handle}`));
   // The code sample gets its own Copy button, hidden until JS enables it.
-  // The instruction preamble leads both the copy payload and the display.
+  // The instruction is a prose preamble and a <pre> inside one box so the two
+  // share a single seamless panel. The full source the Copy button reads lives
+  // on the wrapper. The fences around the sample are visually hidden but stay
+  // in the DOM, so the sample still copies as a fenced block.
   assert.match(
     body,
     new RegExp(
-      `<div class="instruction-block">\\s*<button type="button" class="code-copy-button hidden">Copy</button>\\s*<pre\\s+id="instruction-block-playwright-js"\\s+data-copy-value="Use the reference code below[^"]*${handle}[^"]*"\\s*><code>Use the reference code below`
+      '<div class="instruction-block" data-copy-value="Use the reference code below[^"]*' +
+        `${handle}[^"]*">\\s*<button type="button" class="btn-primary code-copy-button hidden">Copy instructions</button>\\s*<div class="instruction-box">\\s*<p class="instruction-preamble">Use the reference code below[\\s\\S]*?</p>\\s*<pre id="instruction-block-playwright-js"><span class="visually-hidden">` +
+        '```js\\s*</span><code>const \\{ chromium \\} = require\\(&#39;playwright&#39;\\);'
     )
   );
   // Click handler in its own nonce'd partial; confirm it's in the page.
