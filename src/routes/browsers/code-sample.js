@@ -15,7 +15,9 @@ const browserExampleBody = `  const [context] = browser.contexts();
 // It leads both the display source and the copied source, so what the
 // visitor sees and what they paste differ only in the masked CDP URL.
 const INSTRUCTION_PREAMBLE = `Use the reference code below to write and run a Playwright script
-that connects to this browser over CDP and navigates to Wikipedia.
+that connects to this browser over CDP.  Navigate to Kagi News and
+extract 7 random headlines.
+
 Choose Node.js or Python, whichever is available. Work step by step:
 after each step, inspect the page before moving on to the next one.`;
 
