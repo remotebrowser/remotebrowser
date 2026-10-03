@@ -164,6 +164,44 @@ describe('production', () => {
 });
 
 describe('development', () => {
+  test('defaults to loopback and allows dummy secrets there', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        "const c = require('./config').config; process.stdout.write(JSON.stringify([c.host, c.sessionSecret.toString(), c.resourceHmacSecret.toString()]))"
+      ],
+      {
+        cwd: __dirname,
+        env: {
+          ...process.env,
+          ...BASE_ENV,
+          NODE_ENV: 'development',
+          HOST: '',
+          SESSION_SECRET: '',
+          RESOURCE_HMAC_SECRET: ''
+        }
+      }
+    );
+    assert.equal(result.status, 0);
+    assert.deepEqual(JSON.parse(result.stdout.toString()), [
+      '127.0.0.1',
+      'dummy-session-secret',
+      'dummy-resource-hmac-secret'
+    ]);
+  });
+
+  test('allows non-loopback binds with dummy secrets and no fixed origin', () => {
+    const result = runConfig({
+      NODE_ENV: 'development',
+      HOST: '0.0.0.0',
+      SESSION_SECRET: '',
+      RESOURCE_HMAC_SECRET: '',
+      PUBLIC_ORIGIN: ''
+    });
+    assert.equal(result.status, 0);
+  });
+
   test('allows a custom PGlite data directory', () => {
     const result = spawnSync(
       process.execPath,

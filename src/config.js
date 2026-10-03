@@ -9,6 +9,7 @@ const buildConfig = (env) => {
   const errors = [];
   const isProduction = env.NODE_ENV === 'production';
   const secureCookies = isProduction || env.SECURE_COOKIES === 'true';
+  const host = env.HOST || '127.0.0.1';
   if (isProduction && env.SECURE_COOKIES === 'false') {
     errors.push('SECURE_COOKIES cannot be false when NODE_ENV=production');
   }
@@ -125,6 +126,7 @@ const buildConfig = (env) => {
   const config = Object.freeze({
     isProduction,
     secureCookies,
+    host,
     port: Number(env.PORT) || 3000,
     viewsDir: path.join(__dirname, '..', 'views'),
     publicOrigin,

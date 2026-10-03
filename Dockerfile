@@ -12,6 +12,7 @@ COPY --chown=node:node public ./public
 EXPOSE 3000
 
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 
 USER node
 
