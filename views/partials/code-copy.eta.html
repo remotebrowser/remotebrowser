@@ -25,8 +25,8 @@
     // The displayed code hides the CDP URL (see src/routes/browsers/
     // code-sample.js), so textContent alone would copy the masked text. The
     // full, real source lives in data-copy-value; use that instead.
-    const pre = button.nextElementSibling;
-    const code = pre.dataset.copyValue || pre.querySelector('code').textContent;
+    const block = button.closest('.instruction-block');
+    const code = block.dataset.copyValue || block.querySelector('code').textContent;
     try {
       await navigator.clipboard.writeText(code);
       button.textContent = 'Copied!';
@@ -34,7 +34,7 @@
       button.textContent = 'Copy failed';
     }
     setTimeout(() => {
-      button.textContent = 'Copy';
+      button.textContent = 'Copy instructions';
     }, 2000);
   });
 </script>

@@ -12,7 +12,7 @@ import {
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { absoluteOrigin } from '../../origin.js';
 import { listBrowserPages } from '../../cdp.js';
-import { playwrightJavascriptDisplaySource, playwrightJavascriptSource } from './code-sample.js';
+import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
 
 export const routes = new Hono();
 
@@ -36,10 +36,10 @@ const renderBrowser = async (c) => {
   const handle = isRunning ? result.data.browserHandle : null;
   const cdpUrl = handle ? cdpUrlFor(c, handle) : null;
   const isConnectable = Boolean(cdpUrl);
-  // No masked URL reaches the view: the code sample masks the whole CDP URL
-  // on screen (see code-sample.js), so only fullJsSource - the Copy payload -
-  // carries the real one.
-  const fullJsSource = cdpUrl ? playwrightJavascriptSource(cdpUrl, handle) : null;
+  // No masked URL reaches the visible blocks: the code sample masks the whole
+  // CDP URL on screen (see code-sample.js), so only fullInstruction - the Copy
+  // payload - carries the real one.
+  const fullInstruction = cdpUrl ? fullInstructionSource(cdpUrl, handle) : null;
   // null for not-ready, unreachable, stopped; reverts preview too.
   let pages = null;
   if (isRunning && result.data.internalBrowserId) {
@@ -64,7 +64,10 @@ const renderBrowser = async (c) => {
     // reaches the view.
     isConnectable,
     // Full value for clipboard copy (data-copy-value)
-    fullJsSource,
+    fullInstruction,
+    // Prose preamble the page lays out as a flowing paragraph; the fenced code
+    // itself is playwrightJavascriptExample below.
+    instructionPreamble: isConnectable ? INSTRUCTION_PREAMBLE : null,
     pages,
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 const OWNER_EMAIL = 'e2e-browser-owner@example.com';
 const COPY_BUTTON_OWNER_EMAIL = 'e2e-browser-copy-owner@example.com';
 const NO_JS_COPY_BUTTON_OWNER_EMAIL = 'e2e-browser-no-js-copy-owner@example.com';
-const PRE_IDENTITY_OWNER_EMAIL = 'e2e-browser-pre-identity-owner@example.com';
+const INSTRUCTION_IDENTITY_OWNER_EMAIL = 'e2e-browser-instruction-identity-owner@example.com';
 
 const requestSignInLink = async (page, email) => {
   await page.goto('/signin');
@@ -106,7 +106,7 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 10000 });
 
   const copyButtons = page.locator('.code-copy-button');
-  const codeBlocks = page.locator('#browser-connection-info pre code');
+  const codeBlocks = page.locator('#browser-connection-info #instruction-block-playwright-js code');
   await expect(copyButtons).toHaveCount(1);
   // Rendered with the hidden class (views/browsers/show.eta.html) and
   // revealed by code-copy.eta.html once script has run - this is what
@@ -116,13 +116,19 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
 
   // The displayed code hides the whole CDP URL, so the visible text differs
   // from what Copy should put on the clipboard. The full JS source, with the
-  // real URL and handle, lives in data-copy-value instead.
-  const expectedText = await codeBlocks.first().evaluate((el) => el.closest('pre').dataset.copyValue);
+  // real URL and handle, lives in the block's data-copy-value instead.
+  const expectedText = await codeBlocks
+    .first()
+    .evaluate((el) => el.closest('.instruction-block').dataset.copyValue);
   const handle = expectedText.match(/const handle = '([^']+)'/)[1];
   expect(handle).toMatch(/^H\w+$/);
 
   expect(expectedText).toContain(handle);
   expect(await codeBlocks.first().textContent()).not.toContain(handle);
+  // The copy payload is the whole instruction: the prose preamble and the
+  // fenced code, joined - not just the <pre> on screen.
+  expect(expectedText).toContain('Use the reference code below');
+  expect(expectedText).toContain('```js');
   await copyButtons.first().click();
   // Confirms the button's own feedback, not just the clipboard side effect.
   await expect(copyButtons.first()).toHaveText('Copied!');
@@ -139,29 +145,28 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   expect(displayedText).not.toContain('/cdp/');
 });
 
-// The page's 3s poll (hx-trigger="every 3s" on <main>) used to recreate every
-// <pre> from scratch on every tick even though the snippet never changes
-// once the browser is running - which is what made Firefox on macOS
-// replay its overlay-scrollbar reveal animation on each poll (visible as a
-// flicker of the horizontal scrollbar). code-block-refresh.eta.html now
-// splices the outgoing <pre> node back in instead of keeping the freshly
-// parsed one. A brand-new node from the server would never carry a
-// data-e2e-identity attribute stamped on directly via JS, so this only stays
-// set across a poll if that exact node survived it.
-test("code sample <pre> elements survive the page's 3s poll instead of being recreated", async ({ page }) => {
-  await signIn(page, PRE_IDENTITY_OWNER_EMAIL);
+// The page's 3s poll (hx-trigger="every 3s" on <main>) would otherwise recreate
+// the whole instruction block from scratch on every tick even though the
+// snippet never changes once the browser is running - making the browser
+// replay its "new scrollable content" reveal animation on every poll.
+// code-block-refresh.eta.html splices the outgoing node back in instead of
+// keeping the freshly parsed one. A brand-new node from the server would never
+// carry a data-e2e-identity attribute stamped on directly via JS, so this only
+// stays set across a poll if that exact node survived it.
+test("the instruction block survives the page's 3s poll instead of being recreated", async ({ page }) => {
+  await signIn(page, INSTRUCTION_IDENTITY_OWNER_EMAIL);
   await expect(page).toHaveURL('/');
 
   await page.goto('/browsers/launch');
-  await page.locator('#name').fill('e2e-pre-identity-otter');
+  await page.locator('#name').fill('e2e-instruction-identity-otter');
   await page.getByRole('button', { name: 'Launch' }).click();
   await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
   const browserInstanceId = new URL(page.url()).pathname.split('/').pop();
 
   await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 10000 });
 
-  const pre = page.locator('pre#instruction-block-playwright-js');
-  await pre.evaluate((el) => {
+  const instruction = page.locator('#instruction-block-playwright-js');
+  await instruction.evaluate((el) => {
     el.dataset.e2eIdentity = 'original';
   });
 
@@ -172,7 +177,7 @@ test("code sample <pre> elements survive the page's 3s poll instead of being rec
     (response) => response.request().method() === 'GET' && response.url().endsWith(`/browsers/${browserInstanceId}`)
   );
 
-  await expect(pre).toHaveAttribute('data-e2e-identity', 'original');
+  await expect(instruction).toHaveAttribute('data-e2e-identity', 'original');
 });
 
 test('the Copy button stays hidden without JavaScript, even once the browser is running', async ({ browser }) => {

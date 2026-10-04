@@ -26,12 +26,14 @@ include('/partials/code-copy', it) %>
           <strong>do not</strong> share this instruction.
         </p>
 
-        <div class="instruction-block">
-          <button type="button" class="code-copy-button hidden">Copy</button>
-          <pre
-            id="instruction-block-playwright-js"
-            data-copy-value="<%= it.fullJsSource %>"
-          ><code><%= it.playwrightJavascriptExample %></code></pre>
+        <div class="instruction-block" data-copy-value="<%= it.fullInstruction %>">
+          <button type="button" class="btn-primary code-copy-button hidden">Copy instructions</button>
+          <div class="instruction-box">
+            <p class="instruction-preamble"><%= it.instructionPreamble %></p>
+            <pre id="instruction-block-playwright-js"><span class="visually-hidden">```js
+</span><code><%= it.playwrightJavascriptExample %></code><span class="visually-hidden">
+```</span></pre>
+          </div>
         </div>
       </div>
       <% } else if (it.browser.status === 'error') { %>
