@@ -767,7 +767,7 @@ describe('listBrowserPages', () => {
 
   test('reports an error rather than dialing when the origin is unconfigured', async () => {
     const result = await listBrowserPages({ browserId: 'anything', cdpUrlFor: () => null });
-    assert.equal(result.error, 'BROWSERFLEET_URL is not configured');
+    assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
 });
 
@@ -854,7 +854,7 @@ describe('capturePageScreenshot', () => {
 
   test('reports an error rather than dialing when the origin is unconfigured', async () => {
     const result = await capturePageScreenshot({ browserId: 'anything', pageId: 'page1', cdpUrlFor: () => null });
-    assert.equal(result.error, 'BROWSERFLEET_URL is not configured');
+    assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
 });
 
@@ -970,7 +970,7 @@ describe('navigateBrowserToUrl', () => {
       url: 'https://google.com',
       cdpUrlFor: () => null
     });
-    assert.equal(result.error, 'BROWSERFLEET_URL is not configured');
+    assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
 });
 

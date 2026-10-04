@@ -263,10 +263,9 @@ describe('browserFleetUrl', () => {
     return result.stdout.toString().trim();
   };
 
-  test('refuses to start in production without BROWSERFLEET_URL, since no browser could be provisioned', () => {
+  test('starts in production without BROWSERFLEET_URL, since the app manages containers itself', () => {
     const result = runConfig({ NODE_ENV: 'production', BROWSERFLEET_URL: '' });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr.toString(), /Missing required environment variable\(s\): BROWSERFLEET_URL/);
+    assert.equal(result.status, 0);
   });
 
   test('trims trailing slashes so the appended API path is not doubled', () => {
@@ -278,6 +277,56 @@ describe('browserFleetUrl', () => {
 
   test('is null outside production when unset', () => {
     assert.equal(readBrowserFleetUrl({ NODE_ENV: 'development', BROWSERFLEET_URL: '' }), 'null');
+  });
+});
+
+describe('container runtime', () => {
+  const readContainer = (env) => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        "const c = require('./config').config; process.stdout.write(JSON.stringify([c.containerImage, c.containerHost, c.containerRuntime]))"
+      ],
+      { cwd: __dirname, env: { ...process.env, ...BASE_ENV, ...env } }
+    );
+    assert.equal(result.status, 0);
+    return JSON.parse(result.stdout.toString());
+  };
+
+  test('defaults to the published Chrome image, a local host, and auto-detection', () => {
+    assert.deepEqual(readContainer({ CONTAINER_IMAGE: '', CONTAINER_HOST: '', CONTAINER_RUNTIME: '' }), [
+      'ghcr.io/remotebrowser/chrome-live',
+      '',
+      ''
+    ]);
+  });
+
+  test('honors CONTAINER_IMAGE, CONTAINER_HOST, and CONTAINER_RUNTIME when set', () => {
+    assert.deepEqual(
+      readContainer({
+        CONTAINER_IMAGE: 'example/chrome:2',
+        CONTAINER_HOST: 'unix:///run/podman.sock',
+        CONTAINER_RUNTIME: 'docker'
+      }),
+      ['example/chrome:2', 'unix:///run/podman.sock', 'docker']
+    );
+  });
+
+  test('accepts podman and docker for CONTAINER_RUNTIME', () => {
+    for (const runtime of ['podman', 'docker']) {
+      assert.equal(
+        runConfig({ NODE_ENV: 'production', CONTAINER_RUNTIME: runtime }).status,
+        0,
+        `expected ${runtime} to be accepted`
+      );
+    }
+  });
+
+  test('refuses an unsupported CONTAINER_RUNTIME', () => {
+    const result = runConfig({ CONTAINER_RUNTIME: 'containerd' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr.toString(), /CONTAINER_RUNTIME must be one of podman, docker/);
   });
 });
 

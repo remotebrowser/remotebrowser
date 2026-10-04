@@ -1,13 +1,22 @@
 # Getting Started
 
-At the moment, Remote Browser depends on [Podman Fleet](https://github.com/remotebrowser/podman-fleet) to run containerized Google Chrome. This may change in the future.
+You need the latest [Node.js LTS](https://nodejs.org) and a working [Podman](https://podman.io) or [Docker](https://www.docker.com) installation.
 
-First, follow the instructions in the [Podman Fleet repository](https://github.com/remotebrowser/podman-fleet). In short, you need [Podman](https://podman.io), [Python](https://www.python.org) with [uv](https://docs.astral.sh/uv), and you start it with `make`. After a few seconds, Podman Fleet will run at `localhost:8400`. Open that URL to check its simple web interface.
-
-Next, start Remote Browser. You need the latest [Node.js LTS](https://nodejs.org):
+Verify that the `podman` (or `docker`) CLI is on your `PATH` and can run containers:
 
 ```bash
-export BROWSERFLEET_URL=http://127.0.0.1:8400
+podman info    # or: docker info
+```
+
+Pull the browser image once, so the first launch is fast:
+
+```bash
+podman pull ghcr.io/remotebrowser/chrome-live
+```
+
+Then start Remote Browser:
+
+```bash
 npm install && npm start
 ```
 

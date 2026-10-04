@@ -1,8 +1,14 @@
 import { rmSync } from 'node:fs';
 
-// Remove the throwaway PGlite directory this run created, if any.
+// Removes the throwaway PGlite dirs this run created, one per app instance.
 export default function globalTeardown() {
-  if (process.env.PGLITE_DATA_DIR_CLEANUP === '1') {
-    rmSync(process.env.PGLITE_DATA_DIR, { recursive: true, force: true });
+  let dirs = [];
+  try {
+    dirs = JSON.parse(process.env.E2E_PGLITE_DIRS || '[]');
+  } catch {
+    dirs = [];
+  }
+  for (const dir of dirs) {
+    rmSync(dir, { recursive: true, force: true });
   }
 }

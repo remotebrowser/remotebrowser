@@ -22,7 +22,6 @@ const buildConfig = (env) => {
     'SMTP_HOST',
     'SMTP_USER',
     'SMTP_PASSWORD',
-    'BROWSERFLEET_URL',
     'DATABASE_URL'
   ];
 
@@ -84,8 +83,23 @@ const buildConfig = (env) => {
     errors.push('DATABASE_URL must be a postgres connection string, e.g. postgres://user:password@host:5432/dbname');
   }
 
-  // Fleet origin; src/fleet.js appends API path so trailing slash must not double.
+  // Optional external fleet origin. When unset, the app manages its own Chrome
+  // containers via the container CLI (src/container.js). Trailing slashes are
+  // stripped so src/fleet.js never appends a doubled API path.
   const BROWSERFLEET_URL = (env.BROWSERFLEET_URL || '').replace(/\/+$/, '');
+
+  // In-process container management. CONTAINER_RUNTIME forces podman or docker;
+  // unset auto-detects (podman first).
+  // CONTAINER_IMAGE is the Chrome image to run.
+  // For a remote Podman socket, CONTAINER_HOST is the value podman itself
+  // reads (it also needs --remote); Docker reads DOCKER_HOST instead.
+  const CONTAINER_IMAGE = env.CONTAINER_IMAGE || 'ghcr.io/remotebrowser/chrome-live';
+  const CONTAINER_HOST = env.CONTAINER_HOST || '';
+  const SUPPORTED_CONTAINER_RUNTIMES = ['podman', 'docker'];
+  const CONTAINER_RUNTIME = (env.CONTAINER_RUNTIME || '').toLowerCase();
+  if (CONTAINER_RUNTIME && !SUPPORTED_CONTAINER_RUNTIMES.includes(CONTAINER_RUNTIME)) {
+    errors.push(`CONTAINER_RUNTIME must be one of ${SUPPORTED_CONTAINER_RUNTIMES.join(', ')}, or unset to auto-detect`);
+  }
 
   // Max browsers per workspace; personal for one user, shared pools across team.
   const MAX_PERSONAL_BROWSERS = Number(env.MAX_PERSONAL_BROWSERS) || 3;
@@ -136,6 +150,9 @@ const buildConfig = (env) => {
     sessionNotBefore,
     sessionTtlSeconds,
     browserFleetUrl,
+    containerImage: CONTAINER_IMAGE,
+    containerHost: CONTAINER_HOST,
+    containerRuntime: CONTAINER_RUNTIME,
     pgliteDataDir,
     databaseUrl,
     databaseSsl,

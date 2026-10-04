@@ -1,16 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // Set before ./config is first required, since config freezes what it read.
 // The trailing slash is deliberate: it must not survive into the request URL.
+// With an origin set the facade delegates to an external fleet; the in-process
+// container path is covered in src/fleet_local_tests.js.
 process.env.BROWSERFLEET_URL = 'http://browserfleet.test/';
 
 const { isWellFormedBrowserId, startBrowser, checkBrowserFleetHealth, browserExists, browserCdpUrl, stopBrowser } =
   await import('./fleet.js');
+const { setContainerClient, createContainerClient } = await import('./container.js');
 
 const jsonResponse = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -29,6 +28,36 @@ const stubFetch = (respond) => {
     }
   };
 };
+
+// Precedence: with an origin configured, every operation must go to the
+// external fleet and never fall through to the local container runtime.
+test('a configured BROWSERFLEET_URL takes precedence over the local container manager', async () => {
+  const containerCalls = [];
+  const recording = (name, result) => async () => {
+    containerCalls.push(name);
+    return result;
+  };
+  setContainerClient({
+    launchBrowser: recording('launchBrowser', { browserId: 'local-should-not-be-used' }),
+    browserIsRunning: recording('browserIsRunning', true),
+    browserExists: recording('browserExists', true),
+    stopBrowser: recording('stopBrowser', undefined),
+    resolveCdpUrl: recording('resolveCdpUrl', 'ws://local-should-not-be-used'),
+    health: recording('health', true)
+  });
+  const { restore } = stubFetch(() => jsonResponse({ browser_id: 'fleet-1' }));
+  try {
+    assert.deepEqual(await startBrowser(), { data: { browserId: 'fleet-1' } });
+    assert.deepEqual(await checkBrowserFleetHealth(), { data: { healthy: true } });
+    assert.deepEqual(await browserExists({ browserId: 'fleet-1' }), { data: true });
+    assert.deepEqual(await stopBrowser({ browserId: 'fleet-1' }), { data: true });
+    assert.equal(await browserCdpUrl({ browserId: 'fleet-1' }), 'ws://browserfleet.test/api/v1/browsers/fleet-1/cdp');
+  } finally {
+    restore();
+    setContainerClient(createContainerClient());
+  }
+  assert.deepEqual(containerCalls, [], 'the external fleet path must not consult the local container runtime');
+});
 
 test('startBrowser posts to /api/v1/browsers and returns the id the server assigned', async () => {
   const { calls, restore } = stubFetch(() => jsonResponse({ browser_id: 'foobar', ws_url: 'ignored', extra: 1 }));
@@ -135,26 +164,6 @@ test('checkBrowserFleetHealth reports an unreachable server', async () => {
   }
 });
 
-test('checkBrowserFleetHealth reports a missing BROWSERFLEET_URL rather than calling out', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['-e', "require('./fleet').checkBrowserFleetHealth().then((r) => process.stdout.write(r.error))"],
-    { cwd: __dirname, env: { ...process.env, BROWSERFLEET_URL: '' } }
-  );
-  assert.equal(result.status, 0);
-  assert.match(result.stdout.toString(), /BROWSERFLEET_URL/);
-});
-
-test('startBrowser reports a missing BROWSERFLEET_URL rather than calling out', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['-e', "require('./fleet').startBrowser().then((r) => process.stdout.write(r.error))"],
-    { cwd: __dirname, env: { ...process.env, BROWSERFLEET_URL: '' } }
-  );
-  assert.equal(result.status, 0);
-  assert.match(result.stdout.toString(), /BROWSERFLEET_URL/);
-});
-
 test('browserExists GETs /api/v1/browsers/{id} and reports the browser as alive', async () => {
   const { calls, restore } = stubFetch(() => jsonResponse({ browser_id: 'foobar', status: 'running' }));
   try {
@@ -201,43 +210,33 @@ test('browserExists reports an unreachable server', async () => {
   }
 });
 
-test('browserExists reports a missing BROWSERFLEET_URL rather than calling out', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['-e', "require('./fleet').browserExists({ browserId: 'foobar' }).then((r) => process.stdout.write(r.error))"],
-    { cwd: __dirname, env: { ...process.env, BROWSERFLEET_URL: '' } }
-  );
-  assert.equal(result.status, 0);
-  assert.match(result.stdout.toString(), /BROWSERFLEET_URL/);
-});
-
 // The relay dials this URL for every CDP connection, so the scheme swap and the
 // single slash between origin and path are what the whole endpoint rests on.
-test('browserCdpUrl builds the upstream CDP URL from the configured origin', () => {
+test('browserCdpUrl builds the upstream CDP URL from the configured origin', async () => {
   // The configured origin above carries a trailing slash; it must not survive
   // into a doubled one here.
-  assert.equal(browserCdpUrl({ browserId: 'foobar' }), 'ws://browserfleet.test/api/v1/browsers/foobar/cdp');
+  assert.equal(await browserCdpUrl({ browserId: 'foobar' }), 'ws://browserfleet.test/api/v1/browsers/foobar/cdp');
 });
 
-test('browserCdpUrl upgrades an https origin to wss', () => {
+test('browserCdpUrl upgrades an https origin to wss', async () => {
   assert.equal(
-    browserCdpUrl({ browserId: 'foobar', origin: 'https://browsers.example.com' }),
+    await browserCdpUrl({ browserId: 'foobar', origin: 'https://browsers.example.com' }),
     'wss://browsers.example.com/api/v1/browsers/foobar/cdp'
   );
 });
 
 // A base path in the origin belongs to the upstream server's mount point, so it
 // is kept rather than replaced.
-test('browserCdpUrl preserves a base path in the origin', () => {
+test('browserCdpUrl preserves a base path in the origin', async () => {
   assert.equal(
-    browserCdpUrl({ browserId: 'foobar', origin: 'http://gateway.test/rb' }),
+    await browserCdpUrl({ browserId: 'foobar', origin: 'http://gateway.test/rb' }),
     'ws://gateway.test/rb/api/v1/browsers/foobar/cdp'
   );
 });
 
-test('browserCdpUrl returns null for an origin that is not http or https', () => {
+test('browserCdpUrl returns null for an origin that is not http or https', async () => {
   for (const origin of ['ftp://host', 'file:///etc', 'wss://already-ws', 'host-without-scheme']) {
-    assert.equal(browserCdpUrl({ browserId: 'foobar', origin }), null, `for ${JSON.stringify(origin)}`);
+    assert.equal(await browserCdpUrl({ browserId: 'foobar', origin }), null, `for ${JSON.stringify(origin)}`);
   }
 });
 
@@ -298,26 +297,6 @@ test('stopBrowser is a no-op success for an empty browser id, without calling ou
   } finally {
     restore();
   }
-});
-
-test('stopBrowser reports a missing BROWSERFLEET_URL rather than calling out', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['-e', "require('./fleet').stopBrowser({ browserId: 'foobar' }).then((r) => process.stdout.write(r.error))"],
-    { cwd: __dirname, env: { ...process.env, BROWSERFLEET_URL: '' } }
-  );
-  assert.equal(result.status, 0);
-  assert.match(result.stdout.toString(), /BROWSERFLEET_URL/);
-});
-
-test('browserCdpUrl returns null when BROWSERFLEET_URL is not configured', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['-e', "process.stdout.write(String(require('./fleet').browserCdpUrl({ browserId: 'foobar' })))"],
-    { cwd: __dirname, env: { ...process.env, BROWSERFLEET_URL: '' } }
-  );
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout.toString(), 'null');
 });
 
 test('isWellFormedBrowserId accepts letters, digits, underscore and hyphen', () => {

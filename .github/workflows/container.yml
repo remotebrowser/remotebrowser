@@ -68,7 +68,6 @@ jobs:
             --env SMTP_HOST=smtp.example.com \
             --env SMTP_USER=dummy \
             --env SMTP_PASSWORD=dummy \
-            --env BROWSERFLEET_URL=http://127.0.0.1:9999 \
             remotebrowser:ci
 
       - name: Wait for the health endpoint
