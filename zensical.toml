@@ -1,6 +1,6 @@
 [project]
 site_name = "Remote Browser"
-site_url = "https://docs.remotebrowser.ai/"
+site_url = "https://remotebrowser.ai/"
 docs_dir = "docs"
 site_dir = "site"
 nav = [
