@@ -15,6 +15,9 @@ const createPgliteDatabase = async ({ dataDir }) => {
   const pglite = await PGlite.create(dataDir);
 
   return {
+    // The raw instance, for consumers that need PGlite's own API rather than the
+    // app's query/exec/transaction shape (pg-boss adapts it via fromPglite).
+    pglite,
     query: async (sql, parameters = []) => normalize(await pglite.query(sql, parameters)),
     exec: async (sql) => {
       const results = await pglite.exec(sql);

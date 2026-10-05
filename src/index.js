@@ -16,6 +16,14 @@ try {
   process.exit(1);
 }
 
+const { startScheduler, drainScheduler } = await import('./scheduler.js');
+try {
+  await startScheduler();
+} catch (error) {
+  consola.error('Unable to start the scheduler:', error, { 'event.domain': 'scheduler' });
+  process.exit(1);
+}
+
 const health = await checkBrowserFleetHealth().catch((error) => ({ error }));
 if (health.error) {
   consola.error('BROWSERFLEET health check failed; server will start without fleet connectivity', {
@@ -52,6 +60,7 @@ const cdpRelay = mountCdpRelay({ server });
 const shutdown = async (signal) => {
   consola.info('SERVER shutting down on', signal, { 'event.domain': 'server' });
   server.close();
+  await drainScheduler().catch(() => {});
   // Open CDP WebSocket sessions would outlive server.close().
   await Promise.allSettled([cdpRelay.close(), shutdownTelemetry(), closeDatabase()]);
   process.exit(0);
