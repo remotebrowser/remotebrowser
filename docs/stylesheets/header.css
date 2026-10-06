@@ -1,0 +1,31 @@
+.md-header__left,
+.md-header__right {
+  display: contents;
+}
+
+@media screen and (min-width: 60em) {
+  .md-header__inner {
+    padding-right: 13.3rem;
+  }
+
+  .md-header__left {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .md-header__right {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  /* Material sets only a left margin in LTR, which nudges the centred link off
+     centre; make the spacing symmetric. */
+  .md-header .md-header__source {
+    margin-left: 1.4rem;
+    margin-right: 1.4rem;
+  }
+}
