@@ -1,4 +1,4 @@
-# Security
+# Controls
 
 Three important security settings come from environment variables: `SESSION_SECRET`, `RESOURCE_HMAC_SECRET`, and `SECURE_COOKIES`.
 
