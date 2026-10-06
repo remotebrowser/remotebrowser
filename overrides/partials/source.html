@@ -1,0 +1,14 @@
+{#-
+  Override of Zensical's bundled source partial.
+  Drops the data-md-component="source" hook, so the JS bundle does not fetch
+  and render the GitHub star and fork counts.
+-#}
+<a href="{{ config.repo_url }}" title="{{ lang.t('source') }}" class="md-source">
+  <div class="md-source__icon md-icon">
+    {% set icon = config.theme.icon.repo or "fontawesome/brands/git-alt" %}
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </div>
+  <div class="md-source__repository">
+    {{ config.repo_name }}
+  </div>
+</a>
