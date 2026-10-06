@@ -24,6 +24,7 @@ test('secureHeaders sets Content-Security-Policy with expected directives', asyn
   // token after it, so pin the whole directive value instead of a prefix.
   assert.match(csp, /script-src 'self' 'nonce-[A-Za-z0-9+/=]+'; /);
   assert.match(csp, /img-src 'self' data:/);
+  assert.match(csp, /font-src 'self'/);
   assert.match(csp, /form-action 'self'/);
   assert.match(csp, /base-uri 'self'/);
   assert.match(csp, /frame-ancestors 'none'/);

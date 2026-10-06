@@ -22,6 +22,7 @@ const mountSecurity = (app) => {
         // NONCE stashes a per-request nonce instead of 'unsafe-inline'.
         scriptSrc: ["'self'", NONCE],
         imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'"],
         formAction: ["'self'"],
         baseUri: ["'self'"],
         frameAncestors: ["'none'"],

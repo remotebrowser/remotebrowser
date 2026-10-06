@@ -12,8 +12,8 @@ const serveFile =
       return c.text('Not Found', 404);
     }
     const file = await readFile(url);
-    // A charset only makes sense for text; the icon is binary.
-    const charset = contentType === 'image/x-icon' ? '' : '; charset=utf-8';
+    // A charset only makes sense for text; the icon and font are binary.
+    const charset = contentType === 'image/x-icon' || contentType === 'font/woff2' ? '' : '; charset=utf-8';
     c.header('Content-Type', `${contentType}${charset}`);
     c.header('Cache-Control', 'public, max-age=3600');
     return c.body(file);
@@ -22,6 +22,7 @@ const serveFile =
 export const routes = new Hono();
 
 routes.get('/style.css', serveFile('style.css', 'text/css'));
+routes.get('/fonts/figtree-variable.woff2', serveFile('fonts/figtree-variable.woff2', 'font/woff2'));
 routes.get('/robots.txt', serveFile('robots.txt'));
 routes.get('/favicon.ico', serveFile('favicon.ico', 'image/x-icon'));
 routes.get('/tagline.js', serveFile('tagline.js', 'text/javascript'));
