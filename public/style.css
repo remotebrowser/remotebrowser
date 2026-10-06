@@ -642,6 +642,16 @@ a.btn-secondary {
   display: block;
 }
 
+@media (max-width: 40rem) {
+  .browser-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .browser-preview {
+    order: -1;
+  }
+}
+
 /* Unlike .browser-screenshot's small floated preview, a single page's own
    view page has nothing else to share space with, so it renders at up to its
    own natural size instead of a thumbnail. width: auto (rather than 100%)
