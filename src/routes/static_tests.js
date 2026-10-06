@@ -66,3 +66,11 @@ test('GET /favicon.ico serves the icon without a charset', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'image/x-icon');
 });
+
+test('GET /fonts/figtree-variable.woff2 serves the font as woff2 without a charset', async () => {
+  const app = setupApp();
+  const res = await app.request('/fonts/figtree-variable.woff2');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'font/woff2');
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
+});
