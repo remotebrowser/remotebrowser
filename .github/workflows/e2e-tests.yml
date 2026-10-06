@@ -24,6 +24,11 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Pre-pull the browser container image
+        run: |
+          podman pull ghcr.io/remotebrowser/chrome-live:latest
+          docker pull ghcr.io/remotebrowser/chrome-live:latest
+
       - name: Run E2E tests
         run: npx playwright test
         env:

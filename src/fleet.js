@@ -1,22 +1,17 @@
 import { config } from './config.js';
+import { containers, isWellFormedBrowserId } from './container.js';
 
-// A fleet request that does not answer this soon is treated as dead.
+// The fleet facade. By default it drives the in-process container manager
+// (src/container.js, podman or docker); when BROWSERFLEET_URL is set it
+// delegates to an external podman-fleet server instead, which is useful for
+// remote fleets and tests.
+
+// An external fleet request that does not answer this soon is treated as dead.
 const FLEET_TIMEOUT = 10000;
 
-// Unreserved URL chars only: a fleet id is a path segment and must never escape it.
-const BROWSER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const errorMessage = (error) => (error instanceof Error ? error.message : String(error));
 
-// Whether a fleet-provided id is safe to build a URL from and to store.
-const isWellFormedBrowserId = (browserId) => typeof browserId === 'string' && BROWSER_ID_PATTERN.test(browserId);
-
-/**
- * Asks the browser fleet server to start a browser.
- * @returns {Promise<{data?: {browserId: string}, error?: string}>}
- */
-const startBrowser = async () => {
-  if (!config.browserFleetUrl) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
-  }
+const startBrowserOnFleet = async () => {
   /** @type {Response} */
   let response;
   try {
@@ -45,16 +40,25 @@ const startBrowser = async () => {
   return { data: { browserId } };
 };
 
-/**
- * Checks the fleet server's health once at startup, before the server binds a
- * port. A broken fleet is fatal here, not later: every browser record written
- * after startup would just sit unprovisioned.
- * @returns {Promise<{data?: {healthy: true}, error?: string}>}
- */
-const checkBrowserFleetHealth = async () => {
-  if (!config.browserFleetUrl) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
+const startBrowserLocally = async () => {
+  try {
+    const { browserId } = await containers.launchBrowser();
+    if (!isWellFormedBrowserId(browserId)) {
+      return { error: 'INVALID_BROWSER_ID' };
+    }
+    return { data: { browserId } };
+  } catch (error) {
+    return { error: errorMessage(error) };
   }
+};
+
+/**
+ * Starts a browser, either on an external fleet server or in a local container.
+ * @returns {Promise<{data?: {browserId: string}, error?: string}>}
+ */
+const startBrowser = async () => (config.browserFleetUrl ? startBrowserOnFleet() : startBrowserLocally());
+
+const checkFleetHealth = async () => {
   /** @type {Response} */
   let response;
   try {
@@ -70,24 +74,24 @@ const checkBrowserFleetHealth = async () => {
   return { data: { healthy: true } };
 };
 
+const checkLocalHealth = async () => {
+  try {
+    await containers.health();
+    return { data: { healthy: true } };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
 /**
- * Checks that a browser id still exists on the fleet server. The CDP relay
- * calls this before dialing, so a stopped browser is refused cleanly instead of
- * failing with an unexplained close code.
- *
- * 404 means "no such browser". Any other non-2xx is an error in the check
- * itself, so the caller answers 503 rather than wrongly saying the browser is
- * gone.
- * @param {{browserId: string}} params
- * @returns {Promise<{data?: boolean, error?: string}>}
+ * Checks that a browser can be provisioned once at startup, before the server
+ * binds a port. A broken fleet is fatal here, not later: every browser record
+ * written after startup would just sit unprovisioned.
+ * @returns {Promise<{data?: {healthy: true}, error?: string}>}
  */
-const browserExists = async ({ browserId }) => {
-  if (!config.browserFleetUrl) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
-  }
-  if (!isWellFormedBrowserId(browserId)) {
-    return { data: false };
-  }
+const checkBrowserFleetHealth = async () => (config.browserFleetUrl ? checkFleetHealth() : checkLocalHealth());
+
+const browserExistsOnFleet = async ({ browserId }) => {
   /** @type {Response} */
   let response;
   try {
@@ -106,25 +110,30 @@ const browserExists = async ({ browserId }) => {
   return { data: true };
 };
 
+const browserExistsLocally = async ({ browserId }) => {
+  try {
+    return { data: await containers.browserIsRunning(browserId) };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
 /**
- * Stops a browser on the fleet server. Called when a collaborator terminates it.
- *
- * 404 is success: the browser is already stopped or never started (a 'starting'
- * browser has no fleet id yet). Either way, no browser is left running.
+ * Checks that a browser id still names a live browser. The CDP relay calls this
+ * before dialing, so a stopped browser is refused cleanly instead of failing
+ * with an unexplained close code. A missing browser is `{ data: false }`; a
+ * failure of the check itself is an error, so the caller answers 503.
  * @param {{browserId: string}} params
- * @returns {Promise<{data?: true, error?: string}>}
+ * @returns {Promise<{data?: boolean, error?: string}>}
  */
-const stopBrowser = async ({ browserId }) => {
-  if (!config.browserFleetUrl) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
-  }
-  if (typeof browserId !== 'string' || browserId === '') {
-    return { data: true };
-  }
-  // A non-empty id that fails the shape check is corruption, not an unprovisioned browser.
+const browserExists = async ({ browserId }) => {
   if (!isWellFormedBrowserId(browserId)) {
-    return { error: 'INVALID_BROWSER_ID' };
+    return { data: false };
   }
+  return config.browserFleetUrl ? browserExistsOnFleet({ browserId }) : browserExistsLocally({ browserId });
+};
+
+const stopBrowserOnFleet = async ({ browserId }) => {
   /** @type {Response} */
   let response;
   try {
@@ -141,20 +150,42 @@ const stopBrowser = async ({ browserId }) => {
   return { data: true };
 };
 
+const stopBrowserLocally = async ({ browserId }) => {
+  try {
+    // A browser that is already gone is the caller's goal already being true.
+    if (!(await containers.browserExists(browserId))) {
+      return { data: true };
+    }
+    await containers.stopBrowser(browserId);
+    return { data: true };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
+/**
+ * Stops a browser, removing its container. Called when a collaborator
+ * terminates it. Already stopped or never started is success: no browser is
+ * left running either way.
+ * @param {{browserId: string}} params
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const stopBrowser = async ({ browserId }) => {
+  if (typeof browserId !== 'string' || browserId === '') {
+    return { data: true };
+  }
+  // A non-empty id that fails the shape check is corruption, not an unprovisioned browser.
+  if (!isWellFormedBrowserId(browserId)) {
+    return { error: 'INVALID_BROWSER_ID' };
+  }
+  return config.browserFleetUrl ? stopBrowserOnFleet({ browserId }) : stopBrowserLocally({ browserId });
+};
+
 // Only http/https map to a websocket scheme; anything else is a misconfiguration.
 const CDP_SCHEME_FOR = { 'http:': 'ws:', 'https:': 'wss:' };
 
-/**
- * Builds the CDP websocket URL for a browser. Returns null when the origin or
- * id is unusable. The id comes from a handle lookup, so the schema has
- * already checked its shape and the relay can trust it.
- * @param {{browserId: string, origin?: string}} params
- * @returns {string | null}
- */
-const browserCdpUrl = ({ browserId, origin = config.browserFleetUrl }) => {
-  if (!origin || !isWellFormedBrowserId(browserId)) {
-    return null;
-  }
+// External fleet bridge URL, built from the configured origin.
+const browserCdpUrlOnFleet = ({ browserId, origin }) => {
   /** @type {URL} */
   let parsed;
   try {
@@ -170,6 +201,28 @@ const browserCdpUrl = ({ browserId, origin = config.browserFleetUrl }) => {
   // double it.
   const basePath = parsed.pathname.replace(/\/+$/, '');
   return `${scheme}//${parsed.host}${basePath}/api/v1/browsers/${encodeURIComponent(browserId)}/cdp`;
+};
+
+/**
+ * Builds the CDP websocket URL for a browser. For an external fleet this is the
+ * fleet's bridge URL; locally it is discovered from the container's CDP
+ * endpoint, which needs the container to be up, so this is async. Returns null
+ * when no URL can be resolved.
+ * @param {{browserId: string, origin?: string}} params
+ * @returns {Promise<string | null>}
+ */
+const browserCdpUrl = async ({ browserId, origin = config.browserFleetUrl }) => {
+  if (!isWellFormedBrowserId(browserId)) {
+    return null;
+  }
+  if (origin) {
+    return browserCdpUrlOnFleet({ browserId, origin });
+  }
+  try {
+    return await containers.resolveCdpUrl(browserId);
+  } catch {
+    return null;
+  }
 };
 
 export { isWellFormedBrowserId, startBrowser, checkBrowserFleetHealth, browserExists, browserCdpUrl, stopBrowser };

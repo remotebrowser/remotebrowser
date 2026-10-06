@@ -89,7 +89,7 @@ const forward = (from, to) => {
   from.on('error', () => {});
 };
 
-/** Relays a CDP websocket to the browserfleet server's browser; `server` is typed narrowly because @hono/node-server's serve() returns a union covering an HTTP/2 server too. @param {{server: {on: (event: 'upgrade', listener: (req: import('node:http').IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => void) => unknown}, cdpUrlFor?: (params: {browserId: string}) => string | null, browserIdForHandle?: (params: {handle: string}) => Promise<{data?: string | null, error?: string}>, browserExists?: (params: {browserId: string}) => Promise<{data?: boolean, error?: string}>}} params @returns {{close: () => Promise<void>}} */
+/** Relays a CDP websocket to a browser, whether it runs in a local container or on an external fleet; `server` is typed narrowly because @hono/node-server's serve() returns a union covering an HTTP/2 server too. @param {{server: {on: (event: 'upgrade', listener: (req: import('node:http').IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => void) => unknown}, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>, browserIdForHandle?: (params: {handle: string}) => Promise<{data?: string | null, error?: string}>, browserExists?: (params: {browserId: string}) => Promise<{data?: boolean, error?: string}>}} params @returns {{close: () => Promise<void>}} */
 const mountCdpRelay = ({
   server,
   cdpUrlFor = browserCdpUrl,
@@ -238,7 +238,12 @@ const mountCdpRelay = ({
         socket.destroy();
         return;
       }
-      const upstreamUrl = cdpUrlFor({ browserId: resolved.data });
+      const upstreamUrl = await cdpUrlFor({ browserId: resolved.data });
+      // Resolving can take a while (CDP discovery retries); the client may have left since.
+      if (hasClientGone()) {
+        socket.destroy();
+        return;
+      }
       if (!upstreamUrl) {
         refuseUpgrade(socket, 503, 'Service Unavailable');
         return;
@@ -346,11 +351,11 @@ const withCdpSession = async (url) => {
   return { socket, send };
 };
 
-/** Captures a PNG screenshot of one page target over CDP; an unknown pageId is a caller-facing miss, not a protocol error. @param {{browserId: string, pageId: string, cdpUrlFor?: (params: {browserId: string}) => string | null}} params @returns {Promise<{data?: Buffer, error?: string}>} */
+/** Captures a PNG screenshot of one page target over CDP; an unknown pageId is a caller-facing miss, not a protocol error. @param {{browserId: string, pageId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: Buffer, error?: string}>} */
 const capturePageScreenshot = async ({ browserId, pageId, cdpUrlFor = browserCdpUrl }) => {
-  const url = cdpUrlFor({ browserId });
+  const url = await cdpUrlFor({ browserId });
   if (!url) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
+    return { error: 'CDP_URL_UNAVAILABLE' };
   }
   /** @type {{socket: WebSocket, send: (method: string, params: any, sessionId?: string) => Promise<any>}} */
   let session;
@@ -383,11 +388,11 @@ const capturePageScreenshot = async ({ browserId, pageId, cdpUrlFor = browserCdp
   }
 };
 
-/** Lists a browser's open page targets over CDP, as full TargetInfo (title and url come free) with non-page targets left out. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null}} params @returns {Promise<{data?: Array<{targetId: string, type: string, title: string, url: string, attached: boolean}>, error?: string}>} */
+/** Lists a browser's open page targets over CDP, as full TargetInfo (title and url come free) with non-page targets left out. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: Array<{targetId: string, type: string, title: string, url: string, attached: boolean}>, error?: string}>} */
 const listBrowserPages = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
-  const url = cdpUrlFor({ browserId });
+  const url = await cdpUrlFor({ browserId });
   if (!url) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
+    return { error: 'CDP_URL_UNAVAILABLE' };
   }
   /** @type {{socket: WebSocket, send: (method: string, params: any, sessionId?: string) => Promise<any>}} */
   let session;
@@ -412,11 +417,11 @@ const listBrowserPages = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
   }
 };
 
-/** Navigates the browser's current page (its first `type: 'page'` target) right after provisioning, so something shows instead of Chrome's blank tab. @param {{browserId: string, url: string, cdpUrlFor?: (params: {browserId: string}) => string | null}} params @returns {Promise<{data?: true, error?: string}>} */
+/** Navigates the browser's current page (its first `type: 'page'` target) right after provisioning, so something shows instead of Chrome's blank tab. @param {{browserId: string, url: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: true, error?: string}>} */
 const navigateBrowserToUrl = async ({ browserId, url, cdpUrlFor = browserCdpUrl }) => {
-  const cdpUrl = cdpUrlFor({ browserId });
+  const cdpUrl = await cdpUrlFor({ browserId });
   if (!cdpUrl) {
-    return { error: 'BROWSERFLEET_URL is not configured' };
+    return { error: 'CDP_URL_UNAVAILABLE' };
   }
   /** @type {{socket: WebSocket, send: (method: string, params: any, sessionId?: string) => Promise<any>}} */
   let session;
@@ -446,9 +451,9 @@ const navigateBrowserToUrl = async ({ browserId, url, cdpUrlFor = browserCdpUrl 
   }
 };
 
-/** Liveness probe: true if the CDP handshake opens; an unconfigured origin counts as false, like any failure. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null}} params @returns {Promise<{data: boolean}>} */
+/** Liveness probe: true if the CDP handshake opens; an unconfigured origin counts as false, like any failure. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data: boolean}>} */
 const checkCdpConnection = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
-  const url = cdpUrlFor({ browserId });
+  const url = await cdpUrlFor({ browserId });
   if (!url) {
     return { data: false };
   }

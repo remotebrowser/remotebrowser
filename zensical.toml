@@ -6,6 +6,7 @@ site_dir = "site"
 nav = [
   { "Overview" = "index.md" },
   { "Getting Started" = "getting-started.md" },
+  { "Isolation" = "isolation.md" },
   { "Self-Hosting" = [
     { "Overview" = "self-hosting.md" },
     { "Security" = "security.md" },

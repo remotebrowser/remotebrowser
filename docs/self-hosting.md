@@ -8,7 +8,7 @@ The table below lists the environment variables that the app uses in production:
 
 | Env name                      | Required | Description                                        |
 | ----------------------------- | -------- | -------------------------------------------------- |
-| `BROWSERFLEET_URL`            | Yes      | Browser fleet origin                               |
+| `CONTAINER_RUNTIME`           | No       | `podman` or `docker`; unset auto-detects           |
 | `DATABASE_SSL_MODE`           | No       | `disable` turns off TLS to Postgres                |
 | `DATABASE_URL`                | Yes      | Postgres connection string                         |
 | `ENV`                         | No       | Telemetry environment name (default: `NODE_ENV`)   |

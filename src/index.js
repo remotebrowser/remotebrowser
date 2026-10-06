@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { shutdown as shutdownTelemetry } from './logging.js';
 import app from './app.js';
 import { checkBrowserFleetHealth } from './fleet.js';
+import { containers } from './container.js';
 import { mountCdpRelay } from './cdp.js';
 
 // Opens the database and runs migrations in every environment: Postgres when
@@ -25,16 +26,25 @@ try {
 }
 
 const health = await checkBrowserFleetHealth().catch((error) => ({ error }));
+// Local mode talks to the container CLI (podman or docker, per CONTAINER_RUNTIME);
+// external mode talks to BROWSERFLEET_URL.
+const browserProvider = config.browserFleetUrl || `${containers.runtime} (${config.containerImage})`;
+consola.info(
+  config.browserFleetUrl
+    ? `Browser provider: external browserfleet (${config.browserFleetUrl})`
+    : `Browser provider: ${containers.runtime}`,
+  { 'event.domain': 'browserfleet' }
+);
 if (health.error) {
-  consola.error('BROWSERFLEET health check failed; server will start without fleet connectivity', {
+  consola.error('Browser provider health check failed; server will start without browser provisioning', {
     'event.domain': 'browserfleet',
     'error.type': String(health.error),
-    'server.address': config.browserFleetUrl
+    'server.address': browserProvider
   });
 } else {
-  consola.log('BROWSERFLEET health check passed', {
+  consola.log('Browser provider health check passed', {
     'event.domain': 'browserfleet',
-    'server.address': config.browserFleetUrl
+    'server.address': browserProvider
   });
 }
 

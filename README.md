@@ -1,6 +1,6 @@
 # Remote Browser
 
-Remote Browser is an open-source, self-hostable tool for every autonomous assistant. It creates isolated, sandboxed browser environments for every user, always on and accessible 24/7 from anywhere at any time, delivering robust privacy, strict access control, and a complete audit trail.
+Remote Browser is an open-source, [self-hostable](https://remotebrowser.ai/self-hosting) tool for every autonomous assistant. It creates [isolated, sandboxed browser environments](https://remotebrowser.ai/isolation) for every user, always on and accessible 24/7 from anywhere at any time, delivering robust privacy, strict access control, and a complete audit trail.
 
 For the detailed documentation, visit [docs.remotebrowser.ai](http://docs.remotebrowser.ai).
 
