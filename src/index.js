@@ -6,6 +6,7 @@ import app from './app.js';
 import { checkBrowserFleetHealth } from './fleet.js';
 import { containers } from './container.js';
 import { mountCdpRelay } from './cdp.js';
+import { stopScreenshots } from './screenshots.js';
 
 // Opens the database and runs migrations in every environment: Postgres when
 // DATABASE_URL is set, PGlite otherwise.
@@ -72,7 +73,7 @@ const shutdown = async (signal) => {
   server.close();
   await drainScheduler().catch(() => {});
   // Open CDP WebSocket sessions would outlive server.close().
-  await Promise.allSettled([cdpRelay.close(), shutdownTelemetry(), closeDatabase()]);
+  await Promise.allSettled([cdpRelay.close(), stopScreenshots(), shutdownTelemetry(), closeDatabase()]);
   process.exit(0);
 };
 

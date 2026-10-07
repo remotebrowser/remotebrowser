@@ -1,51 +1,18 @@
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
-import { WebSocketServer } from 'ws';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
+// refreshPage resolves the CDP URL through browserCdpUrl, which needs an http
+// origin; the injected fake pool ignores the URL, so nothing is dialed.
+process.env.BROWSERFLEET_URL = 'http://fleet.test';
 
 const FAKE_PNG = Buffer.from('not a real png, just something to round-trip', 'utf8');
-// Stub-recognised id with no page match, exercising the no-such-page path.
-const NO_SUCH_PAGE_BROWSER_ID = 'no-such-page-browser';
-// Stub id answering with a CDP-level error, unlike NO_SUCH_PAGE.
-const CDP_ERROR_BROWSER_ID = 'cdp-error-browser';
-// Default recognised id for the happy-path screenshot tests.
-const DEFAULT_BROWSER_ID = 'default-browser';
-
-// CDP stub starts before config freezes env at import.
-const cdpStub = await new Promise((resolve) => {
-  const wss = new WebSocketServer({ port: 0, perMessageDeflate: false, maxPayload: 0 });
-  wss.on('connection', (socket, req) => {
-    const hasMatchingPage = !req.url.includes(`/${NO_SUCH_PAGE_BROWSER_ID}/`);
-    const shouldError = req.url.includes(`/${CDP_ERROR_BROWSER_ID}/`);
-    socket.on('message', (raw) => {
-      const { id, method, sessionId } = JSON.parse(raw.toString());
-      if (method === 'Target.getTargets') {
-        if (shouldError) {
-          socket.send(JSON.stringify({ id, error: { message: 'Inspected target navigated or closed' } }));
-          return;
-        }
-        socket.send(
-          JSON.stringify({
-            id,
-            result: { targetInfos: hasMatchingPage ? [{ targetId: 'page1', type: 'page' }] : [] }
-          })
-        );
-      } else if (method === 'Target.attachToTarget') {
-        socket.send(JSON.stringify({ id, result: { sessionId: 'session1' } }));
-      } else if (method === 'Page.captureScreenshot') {
-        socket.send(JSON.stringify({ id, sessionId, result: { data: FAKE_PNG.toString('base64') } }));
-      }
-    });
-  });
-  wss.once('listening', () => resolve(wss));
-});
-process.env.BROWSERFLEET_URL = `http://127.0.0.1:${cdpStub.address().port}`;
-after(() => new Promise((resolve) => cdpStub.close(resolve)));
+const BROWSER_ID = 'br-1';
 
 const { createSessionCookie } = await import('../../../auth/session.js');
 const { routes } = await import('./view.js');
+const { cache } = await import('../../../screenshots.js');
 const { findOrCreateUser } = await import('../../../models/users.js');
 const { ensurePersonalWorkspace } = await import('../../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus, getBrowserInstanceByPublicId } =
@@ -53,6 +20,25 @@ const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceSt
 const { closeDatabase } = await import('../../../db/database.js');
 
 test.afterEach(async () => closeDatabase());
+
+// Each test starts with an empty cache and a fake pool whose capture result it
+// picks, so no worker thread or CDP dial runs.
+let captureResult;
+const resetScreenshots = () => {
+  captureResult = { data: FAKE_PNG };
+  cache.screenshots = new Map();
+  cache.inFlight = new Map();
+  cache.pool = {
+    capture: async () => captureResult,
+    close: async () => {}
+  };
+};
+test.beforeEach(resetScreenshots);
+
+const isPng = (buffer) => buffer[0] === 0x89 && buffer.subarray(1, 4).toString('latin1') === 'PNG';
+
+// Lets the fire-and-forget capture queued by a miss settle.
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 const setupApp = () => {
   const app = new Hono();
@@ -79,8 +65,8 @@ const makeUser = async () => {
   return workspace.data.workspaceId;
 };
 
-// Launches a browser, marks it provisioned with the given internal (CDP
-// stub-recognised) id, and sets its status - the shape every test below needs.
+// Launches a browser, marks it provisioned with the given internal id, and sets
+// its status - the shape every test below needs.
 const makeBrowser = async (workspaceId, { internalBrowserId, status }) => {
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -138,11 +124,14 @@ test('GET /browsers/:browserId/pages/:pageId/view answers 503 while the browser 
   assert.equal(res.status, 503);
 });
 
-test('GET /browsers/:browserId/pages/:pageId/view returns a PNG screenshot of that page', async () => {
+test('GET /browsers/:browserId/pages/:pageId/view returns the cached PNG of that page', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: DEFAULT_BROWSER_ID,
-    status: 'running'
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
+  cache.screenshots.set(`${BROWSER_ID}:page1`, {
+    browserId: BROWSER_ID,
+    pageId: 'page1',
+    data: FAKE_PNG,
+    timestamp: Date.now()
   });
 
   const app = setupApp();
@@ -155,32 +144,47 @@ test('GET /browsers/:browserId/pages/:pageId/view returns a PNG screenshot of th
   assert.equal(res.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
   assert.equal(res.headers.get('pragma'), 'no-cache');
   assert.equal(res.headers.get('expires'), '0');
-  const body = Buffer.from(await res.arrayBuffer());
-  assert.deepEqual(body, FAKE_PNG);
+  assert.deepEqual(Buffer.from(await res.arrayBuffer()), FAKE_PNG);
 });
 
-test('GET /browsers/:browserId/pages/:pageId/view answers 404 when that page is no longer open', async () => {
+test('GET /browsers/:browserId/pages/:pageId/view serves a transparent placeholder while the cache warms', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: NO_SUCH_PAGE_BROWSER_ID,
-    status: 'running'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
   const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
     headers: { cookie: `session=${cookie}` }
   });
-  assert.equal(res.status, 404);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  const body = Buffer.from(await res.arrayBuffer());
+  assert.ok(isPng(body), 'the placeholder must be a PNG');
+  assert.notDeepEqual(body, FAKE_PNG, 'a miss must not serve the page frame');
 });
 
-// Successful capture proves reachability; it also feeds nextBrowserStatus.
+test('GET /browsers/:browserId/pages/:pageId/view queues a capture on a miss so the next request hits the cache', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
+
+  const app = setupApp();
+  const cookie = makeSessionCookie();
+  const first = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
+    headers: { cookie: `session=${cookie}` }
+  });
+  assert.ok(isPng(Buffer.from(await first.arrayBuffer())));
+
+  await flush();
+  const second = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
+    headers: { cookie: `session=${cookie}` }
+  });
+  assert.deepEqual(Buffer.from(await second.arrayBuffer()), FAKE_PNG);
+});
+
+// A successful capture proves reachability; it also feeds nextBrowserStatus.
 test('GET /browsers/:browserId/pages/:pageId/view opportunistically marks a recovering browser running on a successful capture', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: DEFAULT_BROWSER_ID,
-    status: 'error'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'error' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
@@ -192,30 +196,25 @@ test('GET /browsers/:browserId/pages/:pageId/view opportunistically marks a reco
   assert.equal(status, 'running', 'the status write should have run');
 });
 
-// NO_SUCH_PAGE means live: it only comes after the websocket answered.
+// NO_SUCH_PAGE means live: it only comes after the CDP connection answered.
 test('GET /browsers/:browserId/pages/:pageId/view still marks the browser running when the specific page is gone', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: NO_SUCH_PAGE_BROWSER_ID,
-    status: 'error'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'error' });
+  captureResult = { error: 'NO_SUCH_PAGE' };
 
   const app = setupApp();
   const cookie = makeSessionCookie();
   const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
     headers: { cookie: `session=${cookie}` }
   });
-  assert.equal(res.status, 404);
+  assert.equal(res.status, 200);
   const status = await settleStatus(workspaceId, browserPublicId, (s) => s === 'running');
-  assert.equal(status, 'running', 'the status write should have run despite the 404');
+  assert.equal(status, 'running', 'the status write should have run despite the missing page');
 });
 
 test('GET /browsers/:browserId/pages/:pageId/view writes nothing when an already-running browser stays connected', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: DEFAULT_BROWSER_ID,
-    status: 'running'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
@@ -229,36 +228,32 @@ test('GET /browsers/:browserId/pages/:pageId/view writes nothing when an already
   assert.equal(fetched.data.status, 'running');
 });
 
-test('GET /browsers/:browserId/pages/:pageId/view opportunistically demotes a running browser to error when the CDP connection fails', async () => {
+test('GET /browsers/:browserId/pages/:pageId/view opportunistically demotes a running browser to error when the capture fails', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: CDP_ERROR_BROWSER_ID,
-    status: 'running'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
+  captureResult = { error: 'CDP_ERROR' };
 
   const app = setupApp();
   const cookie = makeSessionCookie();
   const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
     headers: { cookie: `session=${cookie}` }
   });
-  assert.equal(res.status, 502);
+  assert.equal(res.status, 200);
   const status = await settleStatus(workspaceId, browserPublicId, (s) => s === 'error');
   assert.equal(status, 'error', 'the status write should have run');
 });
 
 test('GET /browsers/:browserId/pages/:pageId/view opportunistically terminates a browser still unreachable after erroring', async () => {
   const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, {
-    internalBrowserId: CDP_ERROR_BROWSER_ID,
-    status: 'error'
-  });
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'error' });
+  captureResult = { error: 'CDP_ERROR' };
 
   const app = setupApp();
   const cookie = makeSessionCookie();
   const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
     headers: { cookie: `session=${cookie}` }
   });
-  assert.equal(res.status, 502);
+  assert.equal(res.status, 200);
   const status = await settleStatus(workspaceId, browserPublicId, (s) => s === 'terminated');
   assert.equal(status, 'terminated', 'the status write should have run');
 });
