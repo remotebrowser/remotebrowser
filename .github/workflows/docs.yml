@@ -12,6 +12,7 @@ permissions:
 jobs:
   docs:
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -30,6 +31,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: docs
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
     permissions:
       pages: write
       id-token: write
