@@ -1,0 +1,18 @@
+@font-face {
+  font-family: 'Figtree';
+  src: url('fonts/figtree-variable.woff2') format('woff2');
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+:root {
+  --md-text-font:
+    'Figtree',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    sans-serif;
+  --md-text-font-family: var(--md-text-font);
+}
