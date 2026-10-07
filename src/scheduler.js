@@ -2,6 +2,7 @@ import { consola } from 'consola/basic';
 import { PgBoss, fromPglite } from 'pg-boss';
 import { config } from './config.js';
 import { getDatabase } from './db/database.js';
+import { cleanupScreenshots } from './screenshots.js';
 
 const CLEANUP_QUEUE = 'cleanup';
 const EVERY_MINUTE = '* * * * *';
@@ -24,6 +25,7 @@ const createScheduler = async () => {
   await boss.createQueue(CLEANUP_QUEUE);
   await boss.schedule(CLEANUP_QUEUE, EVERY_MINUTE);
   await boss.work(CLEANUP_QUEUE, async () => {
+    cleanupScreenshots();
     consola.info('SCHEDULER cleanup task ran', { 'event.domain': 'scheduler' });
   });
   consola.info('SCHEDULER started', { 'event.domain': 'scheduler' });

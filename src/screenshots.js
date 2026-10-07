@@ -5,6 +5,9 @@ import { createScreenshotPool } from './workers/screenshot.js';
 // A cached frame older than this is served once and refreshed in the background.
 const SCREENSHOT_MAX_AGE = 3000;
 
+// A frame nobody read for this long is dropped; the next read queues a capture.
+const SCREENSHOT_INACTIVE = 10 * 60 * 1000;
+
 // The frame key: browser and page ids joined with ':', which neither can contain.
 const screenshotKey = ({ browserId, pageId }) => `${browserId}:${pageId}`;
 
@@ -75,6 +78,15 @@ const getScreenshot = (browserId, pageId) => {
   return cached;
 };
 
+// Clean up frames idle for too long; deleting is safe because a later read re-queues a capture.
+const cleanupScreenshots = (now = Date.now()) => {
+  for (const [key, frame] of cache.screenshots) {
+    if (now - frame.timestamp > SCREENSHOT_INACTIVE) {
+      cache.screenshots.delete(key);
+    }
+  }
+};
+
 const stopScreenshots = async () => {
   const closing = cache.pool;
   cache.pool = null;
@@ -85,4 +97,4 @@ const stopScreenshots = async () => {
   cache.inFlight.clear();
 };
 
-export { getScreenshot, requestScreenshot, stopScreenshots, cache };
+export { getScreenshot, requestScreenshot, stopScreenshots, cleanupScreenshots, cache };
