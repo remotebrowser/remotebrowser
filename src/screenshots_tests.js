@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 // Pin a fleet origin so browserCdpUrl stays deterministic and no container is dialed.
 process.env.BROWSERFLEET_URL = 'http://fleet.test';
 
-const { getScreenshot, requestScreenshot, stopScreenshots, cache } = await import('./screenshots.js');
+const { getScreenshot, requestScreenshot, stopScreenshots, cleanupScreenshots, cache } =
+  await import('./screenshots.js');
 const { consola } = await import('consola/basic');
 
 // Silence the module's capture-failure logs so the suite's output stays readable.
@@ -144,6 +145,54 @@ test('getScreenshot does not stack workers when called again before the first fi
   release();
   await flush();
   assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'frame');
+});
+
+test('cleanupScreenshots drops frames idle past the inactive window, keeping the rest', () => {
+  resetCache();
+  const now = Date.now();
+  const inactive = 10 * 60 * 1000;
+  cache.screenshots.set('br-1:p1', {
+    browserId: 'br-1',
+    pageId: 'p1',
+    data: Buffer.from('old'),
+    timestamp: now - inactive - 1
+  });
+  cache.screenshots.set('br-1:p2', {
+    browserId: 'br-1',
+    pageId: 'p2',
+    data: Buffer.from('fresh'),
+    timestamp: now - inactive + 1
+  });
+  cleanupScreenshots(now);
+  assert.deepEqual([...cache.screenshots.keys()], ['br-1:p2']);
+});
+
+test('cleanupScreenshots keeps a frame exactly at the inactive window', () => {
+  resetCache();
+  const now = Date.now();
+  cache.screenshots.set('br-1:p1', {
+    browserId: 'br-1',
+    pageId: 'p1',
+    data: Buffer.from('edge'),
+    timestamp: now - 10 * 60 * 1000
+  });
+  cleanupScreenshots(now);
+  assert.equal(cache.screenshots.size, 1);
+});
+
+test('a cleaned up page is captured again on the next read', async () => {
+  const s = resetCache();
+  cache.screenshots.set('br-1:p1', {
+    browserId: 'br-1',
+    pageId: 'p1',
+    data: Buffer.from('old'),
+    timestamp: Date.now() - 10 * 60 * 1000 - 1
+  });
+  cleanupScreenshots();
+  assert.equal(getScreenshot('br-1', 'p1'), null);
+  await flush();
+  assert.equal(s.captureCalls.length, 1);
+  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'br-1:p1');
 });
 
 test('stopScreenshots closes the pool once and drops the frames', async () => {
