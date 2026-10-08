@@ -143,6 +143,13 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   const body = await res.text();
   assert.match(body, /calm-otter/);
   assert.match(body, /id="browser-status"[^>]*>\s*<strong>Status:<\/strong>\s*running/);
+  // The status line polls itself: refetch the page, select, swap just it.
+  assert.match(
+    body,
+    new RegExp(
+      `<p[^>]*id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}"[^>]*hx-trigger="every 3s"[^>]*hx-select="#browser-status"`
+    )
+  );
   // Per-page <img> to its own view route, wrapped in a link, ?t= not fixed.
   assert.match(
     body,
@@ -161,22 +168,20 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(body, /class="breadcrumb-switcher-trigger">Personal workspace</);
   assert.match(body, /href="\/browsers">Browsers/);
   assert.match(body, /aria-current="page">calm-otter/);
-  // Shortened into the right column above the preview stack.
-  assert.match(
-    body,
-    new RegExp(`id="browser-page-count">\\s*<a href="/browsers/${browserPublicId}/pages"\\s*>2 pages</a\\s*>`)
-  );
   assert.match(body, /id="browser-connection-info"/);
   assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
-  // One <main> poll covers status, connection info, and screenshots.
-  assert.doesNotMatch(body, /setInterval/);
+  // The <main> element itself carries no htmx attributes.
+  assert.match(body, /<main>/);
+  assert.doesNotMatch(body, /<main\s[^>]*hx-/);
+  assert.match(body, /<div\s+class="browser-preview"[^>]*>/);
+  // The preview reloads itself every 4s.
   assert.match(
     body,
     new RegExp(
-      `<main\\s+hx-get="/browsers/${browserPublicId}"\\s+hx-trigger="every 3s"\\s+hx-select="main"\\s+hx-swap="outerHTML"\\s*>`
+      `<div\\s+class="browser-preview"[^>]*hx-get="/browsers/${browserPublicId}"[^>]*hx-trigger="every 4s"[^>]*hx-select="\\.browser-preview"`
     )
   );
-  assert.match(body, /<div class="browser-preview">/);
+  assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`), 'a running browser offers Terminate');
   assert.doesNotMatch(body, /Browser handle/);
   assert.doesNotMatch(body, /hljs/);
   // The whole CDP URL is masked on screen; the real one only reaches the
@@ -198,9 +203,13 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   );
   // Click handler in its own nonce'd partial; confirm it's in the page.
   assert.match(body, /<script nonce="test-nonce-value">[\s\S]*navigator\.clipboard\.writeText[\s\S]*<\/script>/);
+  // The preview swap reuses the existing <img> nodes, so previews don't blank.
+  assert.match(body, /htmx:beforeSwap[\s\S]*img\[id\^="screenshot-"\]/);
+  // A timer refreshes the connection panel and the preview when the status changes.
+  assert.match(body, /setInterval\([\s\S]*#browser-status[\s\S]*#browser-connection-info[\s\S]*\.browser-preview/);
 });
 
-test('GET /browsers/:browserId omits the page count for a browser with exactly one page', async () => {
+test('GET /browsers/:browserId renders a preview for a browser with exactly one page', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: ONE_PAGE_BROWSER_ID });
 
@@ -209,8 +218,6 @@ test('GET /browsers/:browserId omits the page count for a browser with exactly o
   const res = await app.request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 200);
   const body = await res.text();
-  // Single page not worth a "1 page" line; thumbnail is enough.
-  assert.doesNotMatch(body, /browser-page-count/);
   assert.match(
     body,
     new RegExp(
@@ -220,7 +227,7 @@ test('GET /browsers/:browserId omits the page count for a browser with exactly o
   assert.doesNotMatch(body, /pages\/page1\/view/);
 });
 
-test('GET /browsers/:browserId omits the page count and previews when listing pages over CDP fails', async () => {
+test('GET /browsers/:browserId omits previews when listing pages over CDP fails', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: CDP_ERROR_BROWSER_ID });
 
@@ -229,11 +236,10 @@ test('GET /browsers/:browserId omits the page count and previews when listing pa
   const res = await app.request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.doesNotMatch(body, /browser-page-count/);
   assert.doesNotMatch(body, /browser-screenshot/);
-  // Placeholder gates on !isConnectable, not on pages being null.
-  assert.doesNotMatch(body, /class="browser-preview/);
-  // Rest of page still renders; CDP page-count hiccup shouldn't break UI.
+  // The preview column stays, empty, even when the page listing fails.
+  assert.match(body, /<div\s+class="browser-preview"[^>]*>\s*<\/div>/);
+  // Rest of page still renders; a CDP listing hiccup shouldn't break UI.
   assert.match(body, /id="browser-connection-info"/);
 });
 
@@ -248,17 +254,14 @@ test('GET /browsers/:browserId shows a distinct notice and reverts the preview w
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /id="browser-status"[^>]*>\s*<strong>Status:<\/strong>\s*error/);
-  assert.doesNotMatch(body, /browser-connection-info/);
+  // The unreachable notice lives inside the connection panel now.
+  assert.match(body, /<div id="browser-connection-info">[\s\S]*temporarily unreachable[\s\S]*<\/div>/);
+  assert.doesNotMatch(body, /browser-error-notice/);
   assert.doesNotMatch(body, /browser-starting-notice/);
-  assert.match(body, /id="browser-error-notice">[^<]+/);
   assert.doesNotMatch(body, /connectOverCDP/);
   assert.doesNotMatch(body, /browser-screenshot/);
-  assert.doesNotMatch(body, /browser-page-count/);
   // Revert the preview so a stale handle can't keep polling a dead browser.
-  assert.match(
-    body,
-    /<div class="browser-preview">\s*<div class="browser-preview-placeholder" aria-hidden="true"><\/div>\s*<\/div>/
-  );
+  assert.match(body, /<div\s+class="browser-preview"[^>]*>\s*<\/div>/, 'the preview column stays, empty');
 });
 
 test('GET /browsers/:browserId shows a distinct notice when the browser has been terminated', async () => {
@@ -271,13 +274,12 @@ test('GET /browsers/:browserId shows a distinct notice when the browser has been
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /id="browser-status"[^>]*>\s*<strong>Status:<\/strong>\s*terminated/);
-  assert.doesNotMatch(body, /browser-connection-info/);
+  // The stopped notice lives inside the connection panel now.
+  assert.match(body, /<div id="browser-connection-info">[\s\S]*has been stopped[\s\S]*<\/div>/);
+  assert.doesNotMatch(body, /browser-terminated-notice/);
   assert.doesNotMatch(body, /browser-error-notice/);
-  assert.match(body, /id="browser-terminated-notice">[^<]+/);
-  assert.match(
-    body,
-    /<div class="browser-preview">\s*<div class="browser-preview-placeholder" aria-hidden="true"><\/div>\s*<\/div>/
-  );
+  assert.match(body, /<div\s+class="browser-preview"[^>]*>\s*<\/div>/, 'the preview column stays, empty');
+  assert.doesNotMatch(body, /\/terminate"/, 'a stopped browser offers no Terminate');
 });
 
 // Deleting a personal workspace while the user's pointer still named it, then
@@ -318,20 +320,15 @@ test('GET /browsers/:browserId renders for the active shared workspace with unpr
   assert.match(body, /class="breadcrumb-switcher-trigger">Acme Corp</);
   assert.match(body, /<a href="\/browsers">Browsers<\/a>/);
   assert.match(body, /aria-current="page">calm-otter/);
-  assert.match(body, /id="browser-starting-notice">Connection details will appear here once the browser is ready\./);
-  // Everything waits on the same <main> poll, not a separate interval.
-  assert.doesNotMatch(body, /setInterval/);
+  // The starting notice lives inside the connection panel now.
+  assert.match(
+    body,
+    /<div id="browser-connection-info">[\s\S]*Connection details will appear here once the browser is ready\./
+  );
+  assert.doesNotMatch(body, /browser-starting-notice/);
   assert.doesNotMatch(body, /connectOverCDP/);
   assert.doesNotMatch(body, /browser-screenshot/, 'no screenshot until the browser is actually running');
   // Placeholder holds right column width so layout doesn't jump later.
-  assert.match(
-    body,
-    new RegExp(
-      `<main\\s+hx-get="/browsers/${browserPublicId}"\\s+hx-trigger="every 3s"\\s+hx-select="main"\\s+hx-swap="outerHTML"\\s*>`
-    )
-  );
-  assert.match(
-    body,
-    /<div class="browser-preview">\s*<div class="browser-preview-placeholder" aria-hidden="true"><\/div>\s*<\/div>/
-  );
+  assert.match(body, /<main>/);
+  assert.match(body, /<div\s+class="browser-preview"[^>]*>\s*<\/div>/, 'the preview column stays, empty');
 });

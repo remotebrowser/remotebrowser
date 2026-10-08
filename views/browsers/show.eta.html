@@ -1,14 +1,39 @@
 <% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName }) %> <%~ include('/partials/topnav', it) %>
 <%~ include('/partials/breadcrumbs', it) %>
 <script src="/htmx.min.js"></script>
-<%~ include('/partials/screenshot-refresh', it) %> <%~ include('/partials/code-block-refresh', it) %> <%~
-include('/partials/code-copy', it) %>
-<main hx-get="<%= it.browserUrl %>" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">
+<%~ include('/partials/screenshot-refresh', it) %> <%~ include('/partials/code-copy', it) %>
+<script nonce="<%= it.scriptNonce %>">
+  // The status line polls itself; when the status it shows changes, refresh the
+  // connection panel and the page previews.
+  document.addEventListener('DOMContentLoaded', () => {
+    const refresh = (selector) =>
+      htmx.ajax('GET', window.location.pathname, { target: selector, select: selector, swap: 'outerHTML' });
+    let previousStatus = document.querySelector('#browser-status').textContent;
+    setInterval(() => {
+      const status = document.querySelector('#browser-status').textContent;
+      if (status === previousStatus) {
+        return;
+      }
+      previousStatus = status;
+      refresh('#browser-connection-info');
+      refresh('.browser-preview');
+    }, 3000);
+  });
+</script>
+<main>
   <article class="browser-layout">
     <div class="browser-main">
-      <p id="browser-status"><strong>Status:</strong> <%= it.browser.status %></p>
-      <% if (it.isConnectable) { %>
+      <p
+        id="browser-status"
+        hx-get="<%= it.browserUrl %>"
+        hx-trigger="every 3s"
+        hx-select="#browser-status"
+        hx-swap="outerHTML"
+      >
+        <strong>Status:</strong> <%= it.browser.status %>
+      </p>
       <div id="browser-connection-info">
+        <% if (it.isConnectable) { %>
         <p>
           To use this browser from
           <a href="https://code.claude.com" target="_blank" rel="noopener">Claude Code</a>,
@@ -35,31 +60,29 @@ include('/partials/code-copy', it) %>
 ```</span></pre>
           </div>
         </div>
+        <% } else if (it.browser.status === 'error') { %>
+        <p>
+          This browser is temporarily unreachable. It may come back on its own; if it doesn't, it will be marked as
+          stopped soon.
+        </p>
+        <% } else if (it.browser.status === 'terminated') { %>
+        <p>This browser has been stopped and can no longer be reached.</p>
+        <% } else { %>
+        <p>Connection details will appear here once the browser is ready.</p>
+        <% } %>
       </div>
-      <% } else if (it.browser.status === 'error') { %>
-      <p id="browser-error-notice">
-        This browser is temporarily unreachable. It may come back on its own; if it doesn't, it will be marked as
-        stopped soon.
-      </p>
-      <% } else if (it.browser.status === 'terminated') { %>
-      <p id="browser-terminated-notice">This browser has been stopped and can no longer be reached.</p>
-      <% } else { %>
-      <p id="browser-starting-notice">Connection details will appear here once the browser is ready.</p>
-      <% } %> <% if (it.canTerminate) { %>
+      <% if (it.canTerminate && it.isConnectable) { %>
       <p><a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a></p>
       <% } %>
     </div>
-    <% if (!it.isConnectable) { %>
-    <div class="browser-preview">
-      <div class="browser-preview-placeholder" aria-hidden="true"></div>
-    </div>
-    <% } else if (it.pages !== null) { %>
-    <div class="browser-preview">
-      <% if (it.pages.length >= 2) { %>
-      <p id="browser-page-count">
-        <a href="<%= it.pagesUrl %>"><%= it.pages.length %> pages</a>
-      </p>
-      <% } %> <% it.pages.forEach(function(page) { %>
+    <div
+      class="browser-preview"
+      hx-get="<%= it.browserUrl %>"
+      hx-trigger="every 4s"
+      hx-select=".browser-preview"
+      hx-swap="outerHTML"
+    >
+      <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
       <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
         <img
           class="browser-screenshot"
@@ -69,8 +92,7 @@ include('/partials/code-copy', it) %>
           decoding="async"
         />
       </a>
-      <% }) %>
+      <% }) %> <% } %>
     </div>
-    <% } %>
   </article>
 </main>

@@ -122,10 +122,11 @@ test.describe('real container runtime', () => {
     const browserName = `e2e-${containerRuntime}-otter`;
     const publicId = await launchBrowser(page, browserName);
 
-    // The connection info panel only renders once the app has recorded the
-    // container id, which it does after `<runtime> run` returns.
-    await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 60000 });
-    await expect(page.locator('#browser-status')).toContainText('running');
+    // The status line self-refreshes every 3s; wait until the app has recorded
+    // the container id (which it does after `<runtime> run` returns) and
+    // flipped the browser to running.
+    await expect(page.locator('#browser-status')).toContainText('running', { timeout: 60000 });
+    await expect(page.locator('#browser-connection-info')).toContainText('Copy instructions', { timeout: 60000 });
 
     const created = (await listBrowserContainers(containerRuntime)).filter((name) => !baseline.includes(name));
     expect(created, 'exactly one new Google Chrome container should exist').toHaveLength(1);
@@ -146,7 +147,7 @@ test.describe('real container runtime', () => {
     await signIn(page, `e2e-${containerRuntime}-cdp@example.com`);
     const browserName = `e2e-${containerRuntime}-cdp-otter`;
     const publicId = await launchBrowser(page, browserName);
-    await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 60000 });
+    await expect(page.locator('#browser-status')).toContainText('running', { timeout: 60000 });
 
     // The preview only renders after the app has listed the browser's page
     // targets over CDP, so its presence proves Chrome is answering.

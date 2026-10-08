@@ -47,15 +47,19 @@ test('launching a browser answers right away, then records the id the browserfle
   await expect(page.locator('article p').filter({ hasText: 'Status:' })).toContainText('starting');
 
   // Still mid-flight: the page is already rendered while the mock is sitting on
-  // its response, which is what "returns immediately" has to mean. The
-  // connection info panel only appears once recordProvisionedBrowser() has
-  // filled in the internal browser id and handle, so its absence here proves
-  // provisioning did not block the response.
-  await expect(page.locator('#browser-connection-info')).not.toBeVisible();
+  // its response, which is what "returns immediately" has to mean. The panel is
+  // always present now and shows the starting placeholder; the instruction
+  // block only replaces it once recordProvisionedBrowser() has filled in the
+  // internal browser id and handle, so its absence here proves provisioning did
+  // not block the response.
+  const connectionInfo = page.locator('#browser-connection-info');
+  await expect(connectionInfo).toContainText('Connection details will appear here once the browser is ready.');
+  expect(await connectionInfo.locator('.instruction-block').count()).toBe(0);
 
-  // The panel appearing at all proves the assigned browser id and handle were
-  // recorded once the mock server answered.
-  await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 15000 });
+  // The instruction block appearing proves the assigned browser id and handle
+  // were recorded once the mock server answered; the status poll refreshes the
+  // panel.
+  await expect(connectionInfo.locator('.instruction-block')).toBeVisible({ timeout: 15000 });
 });
 
 // The code sample has its own Copy button; clicking it should put the full
@@ -99,11 +103,11 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
 
   // Provisioning finishes a little after the redirect (mock-remotebrowser.js
-  // holds its answer back on purpose); the connection info panel only
-  // appears once browser_handle lands, which the page's own 3s htmx poll
-  // picks up - no manual reload needed, and this also exercises the Copy
-  // button surviving that poll's hx-swap="outerHTML" on <main>.
-  await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 10000 });
+  // holds its answer back on purpose). The panel is always present now; wait
+  // for the instruction block it swaps in once browser_handle lands, which the
+  // page's own status poll picks up - no manual reload needed, and this also
+  // exercises the Copy button surviving that outerHTML swap.
+  await expect(page.locator('#browser-connection-info .instruction-block')).toBeVisible({ timeout: 15000 });
 
   const copyButtons = page.locator('.code-copy-button');
   const codeBlocks = page.locator('#browser-connection-info #instruction-block-playwright-js code');
@@ -145,10 +149,10 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   expect(displayedText).not.toContain('/cdp/');
 });
 
-// The page's 3s poll (hx-trigger="every 3s" on <main>) would otherwise recreate
-// the whole instruction block from scratch on every tick even though the
-// snippet never changes once the browser is running - making the browser
-// replay its "new scrollable content" reveal animation on every poll.
+// The page polls the status line every 3s; the instruction block is swapped
+// only when the connection panel refreshes, and a poll that recreated it would
+// make the browser replay its "new scrollable content" reveal animation even
+// though the snippet never changes once the browser is running.
 // code-block-refresh.eta.html splices the outgoing node back in instead of
 // keeping the freshly parsed one. A brand-new node from the server would never
 // carry a data-e2e-identity attribute stamped on directly via JS, so this only
@@ -170,7 +174,7 @@ test("the instruction block survives the page's 3s poll instead of being recreat
     el.dataset.e2eIdentity = 'original';
   });
 
-  // hx-get on <main> targets this same URL every 3s; waiting for the next
+  // The status line hx-gets this same URL every 3s; waiting for the next
   // matching response (rather than a fixed sleep) proves an actual poll
   // round-trip happened before asserting on its effect.
   await page.waitForResponse(
@@ -193,17 +197,17 @@ test('the Copy button stays hidden without JavaScript, even once the browser is 
     await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
 
     // No htmx without JavaScript, so nothing here auto-refreshes the way the
-    // other tests rely on - reload and check for the connection info panel
-    // until the handle has landed and a fresh server-rendered snapshot has it.
+    // other tests rely on - reload and check for the Copy button until the
+    // handle has landed and a fresh server-rendered snapshot has it.
     await expect
       .poll(
         async () => {
           await page.reload();
-          return page.locator('#browser-connection-info').isVisible();
+          return page.locator('.code-copy-button').count();
         },
-        { message: 'the connection info panel should appear once the server answers', timeout: 15000 }
+        { message: 'the Copy button should appear once the server answers', timeout: 15000 }
       )
-      .toBe(true);
+      .toBe(1);
     const copyButtons = page.locator('.code-copy-button');
     await expect(copyButtons).toHaveCount(1);
     for (const button of await copyButtons.all()) {
