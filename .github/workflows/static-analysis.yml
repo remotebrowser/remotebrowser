@@ -9,6 +9,7 @@ on:
 jobs:
   format-check:
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -26,6 +27,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

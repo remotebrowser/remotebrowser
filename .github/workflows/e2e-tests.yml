@@ -9,6 +9,7 @@ on:
 jobs:
   e2e-tests:
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
