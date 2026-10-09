@@ -6,7 +6,6 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { config } = await import('../../config.js');
 const { createSessionCookie, readSessionCookie } = await import('../../auth/session.js');
-const { isScheduled } = await import('../../browser.js');
 const { routes } = await import('./index.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../../models/workspaces.js');
@@ -143,8 +142,8 @@ test('GET /browsers shows a capacity notice and disables the launch link once at
   assert.doesNotMatch(body, /<a href="\/browsers\/launch"/);
 });
 
-// The 13s timer checks; a page load only schedules it, never synchronously.
-test('GET /browsers schedules a periodic status check for the workspace, rather than checking immediately', async () => {
+// A page load only reads; nothing about a browser's status is written synchronously.
+test('GET /browsers does not touch browser statuses on page load', async () => {
   const workspaceId = await makeUser();
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -164,7 +163,6 @@ test('GET /browsers schedules a periodic status check for the workspace, rather 
   assert.equal(res.status, 200);
   const fetched = await getBrowserInstance({ workspaceId, browserInstanceId: launched.data.browserInstanceId });
   assert.equal(fetched.data.status, 'running', 'nothing should be written synchronously after the page load');
-  assert.equal(isScheduled(workspaceId), true);
 });
 
 // Session names a workspace caller is no longer on; middleware heals it.

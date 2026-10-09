@@ -1,12 +1,10 @@
 import { consola } from 'consola/basic';
 import { config } from './config.js';
-import { checkCdpConnection as dialCdp } from './cdp.js';
-import {
-  updateBrowserInstanceStatus as writeStatus,
-  listBrowserInstancesByWorkspace as listInstances
-} from './models/browsers.js';
+import { createBrowserMonitor } from './workers/monitor.js';
+import { browserCdpUrl, browserExists } from './fleet.js';
+import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './models/browsers.js';
 
-// Capacity counting and the status refresh are shared by several routes, so they live here.
+// Shared browser logic: capacity, status transitions, and the monitor registry.
 
 // Only 'terminated' frees a slot; starting/running/error still hold one.
 const countActiveBrowsers = (instances) => instances.filter((instance) => instance.status !== 'terminated').length;
@@ -20,15 +18,6 @@ const describeBrowserCapacity = ({ workspace, instances }) => {
   return { used, limit, atCapacity: used >= limit };
 };
 
-// Only these statuses get dialed again; 'terminated' is final.
-const CHECKABLE_STATUSES = new Set(['starting', 'running', 'error']);
-
-// Checks run this often per watched workspace...
-const DEFAULT_INTERVAL_MS = 13000;
-// ...and a workspace nobody has loaded a page for in this long stops being
-// watched - see createBrowserStatusScheduler below for why that matters.
-const DEFAULT_IDLE_TIMEOUT_MS = 60000;
-
 // Pure: pick the next status from a CDP check. null means no change, so callers
 // skip the write. Failed startups stay 'starting'; 'terminated' is never revisited.
 const nextBrowserStatus = ({ currentStatus, cdpConnected }) => {
@@ -39,100 +28,215 @@ const nextBrowserStatus = ({ currentStatus, cdpConnected }) => {
   return desired && desired !== currentStatus ? desired : null;
 };
 
-// One timer per actively viewed workspace, checking its browsers one at a time
-// so the server is not bombarded. Timers live in memory by design. Inputs are
-// injectable for tests.
-const createBrowserStatusScheduler = ({
-  intervalMs = DEFAULT_INTERVAL_MS,
-  idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
-  now = Date.now,
-  setIntervalFn = setInterval,
-  clearIntervalFn = clearInterval,
-  listBrowserInstancesByWorkspace = listInstances,
-  checkCdpConnection = dialCdp,
-  updateBrowserInstanceStatus = writeStatus
-} = {}) => {
-  // workspaceId -> { lastSeenAt, timer }
-  const watched = new Map();
+// Only this registry writes status rows; workers just report over postMessage.
 
-  // Runs from setInterval with nothing above it to catch errors: never throw, log every failure instead.
-  const tick = async (workspaceId) => {
-    const entry = watched.get(workspaceId);
-    if (!entry) {
-      return;
-    }
-    if (now() - entry.lastSeenAt > idleTimeoutMs) {
-      clearIntervalFn(entry.timer);
-      watched.delete(workspaceId);
-      return;
-    }
-    let listResult;
-    try {
-      // No repair here: a deleted workspace self-heals on the next real page visit
-      // (see src/routes/homepage.js); just skip this round.
-      listResult = await listBrowserInstancesByWorkspace({ workspaceId, personalWorkspaceRepair: null });
-    } catch (error) {
-      consola.error(`Unable to list browsers for workspace ${workspaceId}: ${String(error)}`);
-      return;
-    }
-    if (listResult.error) {
-      consola.error(`Unable to list browsers for workspace ${workspaceId}: ${listResult.error}`);
-      return;
-    }
-    const eligible = listResult.data.filter((instance) => CHECKABLE_STATUSES.has(instance.status));
-    // One dial at a time, never Promise.all: this scheduler exists to avoid
-    // bombarding the server.
-    for (const instance of eligible) {
-      try {
-        const checked = await checkCdpConnection({ browserId: instance.internalBrowserId });
-        const toStatus = nextBrowserStatus({ currentStatus: instance.status, cdpConnected: Boolean(checked.data) });
-        if (toStatus === null) {
-          continue;
-        }
-        const written = await updateBrowserInstanceStatus({
-          workspaceId,
-          browserInstanceId: instance.browserInstanceId,
-          toStatus
-        });
-        if (written.error) {
-          consola.error(`Unable to update the status of browser ${instance.browserInstanceId}: ${written.error}`);
-        }
-      } catch (error) {
-        consola.error(`Unable to refresh the status of browser ${instance.browserInstanceId}: ${String(error)}`);
-      }
-    }
-  };
+// A worker exit may be a CDP blip, so drop the monitor only once the fleet says
+// the browser is gone. The fleet can be down too, so give up after about 1 hour.
+const RESTART_BACKOFF = 2000;
+const MAX_RESTART_BACKOFF = 30000;
+const MAX_RESTARTS = 122;
 
-  // Called on every page load of GET / and GET /browsers, so a viewed workspace keeps one timer.
-  const scheduleBrowserStatusCheck = ({ workspaceId }) => {
-    const existing = watched.get(workspaceId);
-    if (existing) {
-      existing.lastSeenAt = now();
-      return;
-    }
-    const entry = { lastSeenAt: now(), timer: null };
-    entry.timer = setIntervalFn(() => tick(workspaceId), intervalMs);
-    // Never keep the process alive just because someone is watching.
-    entry.timer?.unref?.();
-    watched.set(workspaceId, entry);
-  };
+// 'ready' proves the CDP connection opened, which is exactly what 'running' means.
+const STATUS_FOR_STATE = { ready: 'running', disconnected: 'error', error: 'error' };
 
-  // Test seam: whether a workspace is currently watched.
-  const isScheduled = (workspaceId) => watched.has(workspaceId);
-
-  return { scheduleBrowserStatusCheck, isScheduled };
+// Navigations are surfaced on stdout for now; nothing consumes them yet.
+const logNavigation = ({ internalBrowserId, pageId, url }) => {
+  consola.log('Browser navigated', {
+    'event.domain': 'browser-monitor',
+    'rb.browser_id': internalBrowserId,
+    'browser.page_id': pageId,
+    'browser.url': url
+  });
 };
 
-// The production singleton every route imports; one registry per server
-// instance.
-const { scheduleBrowserStatusCheck, isScheduled } = createBrowserStatusScheduler();
+const writeStatus = ({ workspaceId, browserInstanceId, state }) => {
+  const toStatus = STATUS_FOR_STATE[state];
+  if (!toStatus) {
+    return;
+  }
+  void updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus }).then((written) => {
+    if (written?.error) {
+      consola.error(`Unable to update the status of browser ${browserInstanceId}: ${written.error}`, {
+        'event.domain': 'browser-monitor'
+      });
+    }
+  });
+};
+
+// A factory so tests can swap the worker, the fleet and the database.
+const createBrowserMonitors = ({
+  createMonitor = createBrowserMonitor,
+  cdpUrlFor = ({ browserId }) => browserCdpUrl({ browserId }),
+  exists = browserExists,
+  setStatus = writeStatus,
+  listBrowsers = listProvisionedBrowserInstances,
+  backoff = RESTART_BACKOFF,
+  maxBackoff = MAX_RESTART_BACKOFF,
+  maxRestarts = MAX_RESTARTS
+} = {}) => {
+  /** @type {Map<string, {workspaceId: number, browserInstanceId: number, internalBrowserId: string, cdpUrl: string | null, restarts: number, stopping: boolean, monitor: {stop: () => Promise<void>} | null}>} */
+  const monitors = new Map();
+
+  const drop = (record) => {
+    record.stopping = true;
+    if (monitors.get(record.internalBrowserId) === record) {
+      monitors.delete(record.internalBrowserId);
+    }
+  };
+
+  const restart = async (record) => {
+    // A stop we asked for is not a crash.
+    if (record.stopping) {
+      return;
+    }
+    record.restarts += 1;
+    const { data: present, error } = await exists({ browserId: record.internalBrowserId });
+    if (record.stopping) {
+      return;
+    }
+    // Only a definite "gone" ends the monitor; a failed check proves nothing.
+    if (present === false) {
+      consola.info('Browser is gone; removing its monitor', {
+        'event.domain': 'browser-monitor',
+        'rb.browser_id': record.internalBrowserId
+      });
+      drop(record);
+      return;
+    }
+    if (record.restarts > maxRestarts) {
+      consola.error('Browser monitor gave up after repeated failures', {
+        'event.domain': 'browser-monitor',
+        'rb.browser_id': record.internalBrowserId,
+        'browser.restarts': record.restarts
+      });
+      drop(record);
+      return;
+    }
+    consola.warn('Browser monitor exited; restarting', {
+      'event.domain': 'browser-monitor',
+      'rb.browser_id': record.internalBrowserId,
+      'browser.restarts': record.restarts,
+      'browser.check_error': error ?? null
+    });
+    const timer = setTimeout(
+      () => {
+        if (!record.stopping) {
+          spawn(record);
+        }
+      },
+      Math.min(backoff * 2 ** (record.restarts - 1), maxBackoff)
+    );
+    timer.unref?.();
+  };
+
+  const spawn = (record) => {
+    const { workspaceId, browserInstanceId, internalBrowserId, cdpUrl } = record;
+    record.monitor = createMonitor({
+      internalBrowserId,
+      cdpUrl,
+      onNavigation: ({ pageId, url }) => logNavigation({ internalBrowserId, pageId, url }),
+      onStatus: ({ state }) => {
+        // A message still in flight after a stop must not overwrite the status
+        // of a browser that is being terminated.
+        if (record.stopping) {
+          return;
+        }
+        // A healthy connection clears the backoff, so only a streak of failures slows retries.
+        if (state === 'ready') {
+          record.restarts = 0;
+        }
+        setStatus({ workspaceId, browserInstanceId, state });
+      },
+      onExit: () => void restart(record)
+    });
+  };
+
+  // Idempotent: the entry is added before the first await, so two calls cannot
+  // start two workers for the same browser.
+  const startBrowserMonitor = async ({ workspaceId, browserInstanceId, internalBrowserId, cdpUrl }) => {
+    if (typeof internalBrowserId !== 'string' || internalBrowserId === '') {
+      return { error: 'INVALID_BROWSER_ID' };
+    }
+    if (monitors.has(internalBrowserId)) {
+      return { data: true };
+    }
+    const record = {
+      workspaceId,
+      browserInstanceId,
+      internalBrowserId,
+      cdpUrl: cdpUrl ?? null,
+      restarts: 0,
+      stopping: false,
+      monitor: null
+    };
+    monitors.set(internalBrowserId, record);
+    if (!record.cdpUrl) {
+      try {
+        record.cdpUrl = await cdpUrlFor({ browserId: internalBrowserId });
+      } catch {
+        record.cdpUrl = null;
+      }
+    }
+    // A stop during the await already removed the slot; spawning now would leak a worker.
+    if (record.stopping) {
+      return { data: false };
+    }
+    if (!record.cdpUrl) {
+      drop(record);
+      return { error: 'CDP_URL_UNAVAILABLE' };
+    }
+    spawn(record);
+    return { data: true };
+  };
+
+  // Monitors live in memory, so a restart needs one for every existing browser.
+  const startAllBrowserMonitors = async () => {
+    const listed = await listBrowsers();
+    if (listed.error) {
+      return { error: listed.error };
+    }
+    const results = await Promise.all(listed.data.map((browser) => startBrowserMonitor(browser)));
+    return { data: { started: results.filter((result) => result.data).length, total: results.length } };
+  };
+
+  const stopBrowserMonitor = async ({ internalBrowserId }) => {
+    const record = monitors.get(internalBrowserId);
+    if (!record) {
+      return { data: false };
+    }
+    drop(record);
+    await record.monitor?.stop();
+    return { data: true };
+  };
+
+  const stopAllBrowserMonitors = async () => {
+    const running = [...monitors.values()];
+    for (const record of running) {
+      drop(record);
+    }
+    await Promise.allSettled(running.map((record) => record.monitor?.stop() ?? Promise.resolve()));
+  };
+
+  const isMonitored = (internalBrowserId) => monitors.has(internalBrowserId);
+  const monitoredCount = () => monitors.size;
+
+  return {
+    startBrowserMonitor,
+    startAllBrowserMonitors,
+    stopBrowserMonitor,
+    stopAllBrowserMonitors,
+    isMonitored,
+    monitoredCount
+  };
+};
+
+const browserMonitors = createBrowserMonitors();
 
 export {
   countActiveBrowsers,
   browserLimitFor,
   describeBrowserCapacity,
   nextBrowserStatus,
-  createBrowserStatusScheduler,
-  scheduleBrowserStatusCheck,
-  isScheduled
+  browserMonitors,
+  createBrowserMonitors
 };

@@ -12,6 +12,7 @@ import {
 } from '../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, deleteBrowserInstance } from '../../models/browsers.js';
 import { stopBrowser } from '../../fleet.js';
+import { browserMonitors } from '../../browser.js';
 import { formString } from '../../form.js';
 
 export const routes = new Hono();
@@ -82,6 +83,7 @@ routes.post(
     const user = c.get('user');
     const workspace = c.get('workspace');
 
+    // Keep watching until the fleet confirms the stop; if it fails, the browser is still running.
     const stopped = await stopBrowser({ browserId: browser.internalBrowserId });
     if (stopped.error) {
       consola.error('stopBrowser failed:', stopped.error);
@@ -90,6 +92,7 @@ routes.post(
         400
       );
     }
+    await browserMonitors.stopBrowserMonitor({ internalBrowserId: browser.internalBrowserId });
     const removedInstance = await deleteBrowserInstance({
       workspaceId: workspace.id,
       browserInstanceId: browser.browserInstanceId

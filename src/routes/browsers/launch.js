@@ -16,7 +16,7 @@ import {
   listBrowserInstancesByWorkspace,
   updateBrowserInstanceStatus
 } from '../../models/browsers.js';
-import { describeBrowserCapacity } from '../../browser.js';
+import { describeBrowserCapacity, browserMonitors } from '../../browser.js';
 import { startBrowser as startBrowserOnFleet } from '../../fleet.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
@@ -73,8 +73,14 @@ routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) =>
   c.html(renderBrowserLaunch(c, { capacity: await loadCapacity(c) }))
 );
 
-// Post-response only: may not throw, and navigate is injectable for tests.
-const startBrowser = async ({ workspaceId, browserInstanceId, userId, navigate = navigateBrowserToUrl }) => {
+// Post-response only: may not throw, and navigate/startMonitor are injectable for tests.
+const startBrowser = async ({
+  workspaceId,
+  browserInstanceId,
+  userId,
+  navigate = navigateBrowserToUrl,
+  startMonitor = browserMonitors.startBrowserMonitor
+}) => {
   const started = await startBrowserOnFleet();
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
@@ -107,6 +113,12 @@ const startBrowser = async ({ workspaceId, browserInstanceId, userId, navigate =
     consola.error(`Unable to mark browser ${browserInstanceId} as running: ${running.error}`);
     return;
   }
+  // Watch the browser's page navigations; best-effort, so nothing waits on it.
+  void startMonitor({ workspaceId, browserInstanceId, internalBrowserId: started.data.browserId }).then((monitored) => {
+    if (monitored.error) {
+      consola.error(`Unable to monitor browser ${browserInstanceId}: ${monitored.error}`);
+    }
+  });
   consola.log(`Started browser ${browserInstanceId} as ${started.data.browserId}`);
 };
 

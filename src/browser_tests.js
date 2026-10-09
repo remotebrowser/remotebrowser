@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { consola } from 'consola/basic';
 
-const { countActiveBrowsers, browserLimitFor, describeBrowserCapacity } = await import('./browser.js');
-const { nextBrowserStatus, createBrowserStatusScheduler } = await import('./browser.js');
+const { countActiveBrowsers, browserLimitFor, describeBrowserCapacity, nextBrowserStatus, createBrowserMonitors } =
+  await import('./browser.js');
 const { config } = await import('./config.js');
+const { consola } = await import('consola/basic');
+consola.level = -999;
 
 test('countActiveBrowsers counts every non-terminated status', () => {
   const instances = [{ status: 'starting' }, { status: 'running' }, { status: 'error' }, { status: 'terminated' }];
@@ -54,48 +55,6 @@ test('describeBrowserCapacity uses the team limit for a shared workspace', () =>
   assert.equal(capacity.limit, config.maxTeamBrowsers);
 });
 
-const instance = (over = {}) => ({
-  browserInstanceId: 'B1',
-  status: 'running',
-  internalBrowserId: 'foobar',
-  ...over
-});
-
-const captureErrors = () => {
-  const original = consola.error;
-  const messages = [];
-  consola.error = (...args) => messages.push(args.map(String).join(' '));
-  return {
-    messages,
-    restore: () => {
-      consola.error = original;
-    }
-  };
-};
-
-// Stands in for the real setInterval/clearInterval: records every timer a
-// scheduler starts (its callback and delay) instead of actually waiting, and
-// lets a test fire one on demand via calls[i].callback(). Ids are just the
-// call's own index, which is all clearIntervalFn needs to mark it cleared.
-const fakeTimers = () => {
-  const calls = [];
-  return {
-    calls,
-    setIntervalFn: (callback, ms) => {
-      calls.push({ callback, ms, cleared: false });
-      return calls.length - 1;
-    },
-    clearIntervalFn: (id) => {
-      calls[id].cleared = true;
-    }
-  };
-};
-
-const fakeClock = (start = 0) => {
-  let current = start;
-  return { now: () => current, advanceBy: (ms) => (current += ms) };
-};
-
 test('nextBrowserStatus moves starting to running once the CDP connection succeeds', () => {
   assert.equal(nextBrowserStatus({ currentStatus: 'starting', cdpConnected: true }), 'running');
 });
@@ -107,8 +66,8 @@ test('nextBrowserStatus leaves a not-yet-provisioned starting instance alone on 
 });
 
 // null, not 'running': the value would not actually change. Returning null
-// here is what tells refreshBrowserStatuses to skip the write entirely instead
-// of writing the same status on every healthy poll.
+// here is what tells the caller to skip the write entirely instead of writing
+// the same status on every healthy poll.
 test('nextBrowserStatus makes no write when a running instance is still healthy', () => {
   assert.equal(nextBrowserStatus({ currentStatus: 'running', cdpConnected: true }), null);
 });
@@ -130,233 +89,181 @@ test('nextBrowserStatus never revives a terminated instance', () => {
   assert.equal(nextBrowserStatus({ currentStatus: 'terminated', cdpConnected: false }), null);
 });
 
-// A fresh scheduler per test, fully injected - never a real timer, a real
-// clock, or a real network/database call.
-const buildScheduler = ({
-  instances = [],
-  checkCdpConnection = async () => ({ data: true }),
-  updateBrowserInstanceStatus = async () => ({ data: true }),
-  intervalMs,
-  idleTimeoutMs,
-  now
-} = {}) => {
-  const timers = fakeTimers();
-  const listCalls = [];
-  const scheduler = createBrowserStatusScheduler({
-    ...(intervalMs !== undefined ? { intervalMs } : {}),
-    ...(idleTimeoutMs !== undefined ? { idleTimeoutMs } : {}),
-    ...(now !== undefined ? { now } : {}),
-    setIntervalFn: timers.setIntervalFn,
-    clearIntervalFn: timers.clearIntervalFn,
-    listBrowserInstancesByWorkspace: async (params) => {
-      listCalls.push(params);
-      return { data: instances };
-    },
-    checkCdpConnection,
-    updateBrowserInstanceStatus
-  });
-  return { ...scheduler, timers: timers.calls, listCalls };
+const waitFor = async (predicate, { timeoutMs = 2000 } = {}) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return predicate();
 };
 
-test('scheduleBrowserStatusCheck starts exactly one repeating timer per workspace', () => {
-  const s = buildScheduler();
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  assert.equal(s.timers.length, 1, 'a workspace already being watched must not get a second timer');
-  assert.equal(s.timers[0].ms, 13000, 'checks run every 13 seconds');
+// A fake worker per spawn; tests drive its callbacks by hand.
+const setup = (overrides = {}) => {
+  const spawned = [];
+  const statuses = [];
+  const registry = createBrowserMonitors({
+    createMonitor: (options) => {
+      const fake = { ...options, stopped: false, stop: async () => void (fake.stopped = true) };
+      spawned.push(fake);
+      return fake;
+    },
+    cdpUrlFor: async () => 'ws://cdp',
+    exists: async () => ({ data: true }),
+    setStatus: ({ state }) => statuses.push(state),
+    backoff: 5,
+    maxBackoff: 10,
+    maxRestarts: 3,
+    ...overrides
+  });
+  return { registry, spawned, statuses };
+};
+
+const monitoredBrowser = { workspaceId: 1, browserInstanceId: 2, internalBrowserId: 'br-1' };
+
+test('start is idempotent and spawns one worker per browser', async () => {
+  const { registry, spawned } = setup();
+  assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { data: true });
+  assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { data: true });
+  assert.equal(spawned.length, 1);
+  assert.equal(registry.monitoredCount(), 1);
 });
 
-test('scheduleBrowserStatusCheck starts a separate timer per distinct workspace', () => {
-  const s = buildScheduler();
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Twxyz' });
-  assert.equal(s.timers.length, 2);
+test('start rejects a bad id and an unresolvable CDP URL, releasing the slot', async () => {
+  const { registry, spawned } = setup({ cdpUrlFor: async () => null });
+  assert.deepEqual(await registry.startBrowserMonitor({ ...monitoredBrowser, internalBrowserId: '' }), {
+    error: 'INVALID_BROWSER_ID'
+  });
+  assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { error: 'CDP_URL_UNAVAILABLE' });
+  assert.equal(registry.isMonitored('br-1'), false);
+  assert.equal(spawned.length, 0);
 });
 
-test('scheduling an already-watched workspace again refreshes its idle window instead of starting a new timer', () => {
-  const clock = fakeClock();
-  const s = buildScheduler({ now: clock.now, idleTimeoutMs: 60000 });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  clock.advanceBy(59000);
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  assert.equal(s.timers.length, 1, 'still just the one timer');
-});
-
-test('a tick lists the workspace it was scheduled for', async () => {
-  const s = buildScheduler();
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  await s.timers[0].callback();
-  assert.equal(s.listCalls[0].workspaceId, 'Tabcd');
-});
-
-test('a tick checks only starting, running, and error instances', async () => {
-  const checked = [];
-  const s = buildScheduler({
-    instances: [
-      instance({ browserInstanceId: 'B1', status: 'starting' }),
-      instance({ browserInstanceId: 'B2', status: 'running' }),
-      instance({ browserInstanceId: 'B3', status: 'error' }),
-      instance({ browserInstanceId: 'B4', status: 'terminated' })
-    ],
-    checkCdpConnection: async ({ browserId }) => {
-      checked.push(browserId);
-      return { data: true };
+test('start releases the slot when the CDP URL lookup throws', async () => {
+  const { registry } = setup({
+    cdpUrlFor: async () => {
+      throw new Error('boom');
     }
   });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  await s.timers[0].callback();
-  assert.deepEqual(checked, ['foobar', 'foobar', 'foobar'], 'the terminated instance must never be dialed');
+  assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { error: 'CDP_URL_UNAVAILABLE' });
+  assert.equal(registry.isMonitored('br-1'), false);
 });
 
-// The whole point of the change: bombarding the browserfleet server with N
-// simultaneous dials is exactly what moving off Promise.all was meant to stop.
-test('a tick checks its instances one at a time, never two dials in flight at once', async () => {
-  let inFlight = 0;
-  let maxInFlight = 0;
-  const order = [];
-  const s = buildScheduler({
-    instances: [
-      instance({ browserInstanceId: 'B1', status: 'running', internalBrowserId: 'br-1' }),
-      instance({ browserInstanceId: 'B2', status: 'running', internalBrowserId: 'br-2' }),
-      instance({ browserInstanceId: 'B3', status: 'running', internalBrowserId: 'br-3' })
-    ],
-    checkCdpConnection: async ({ browserId }) => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      order.push(`start:${browserId}`);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      order.push(`end:${browserId}`);
-      inFlight -= 1;
-      return { data: true };
-    }
-  });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  await s.timers[0].callback();
-  assert.equal(maxInFlight, 1, 'no two CDP dials may be in flight at the same time');
-  assert.deepEqual(order, ['start:br-1', 'end:br-1', 'start:br-2', 'end:br-2', 'start:br-3', 'end:br-3']);
+test('a stop during the CDP URL lookup does not spawn a worker', async () => {
+  let release;
+  const { registry, spawned } = setup({ cdpUrlFor: () => new Promise((resolve) => (release = resolve)) });
+  const starting = registry.startBrowserMonitor(monitoredBrowser);
+  await registry.stopBrowserMonitor({ internalBrowserId: 'br-1' });
+  release('ws://cdp');
+  assert.deepEqual(await starting, { data: false });
+  assert.equal(spawned.length, 0);
 });
 
-test('a tick writes the transition the CDP check implies', async () => {
-  const written = [];
-  const s = buildScheduler({
-    instances: [instance({ browserInstanceId: 'B1', status: 'running' })],
-    checkCdpConnection: async () => ({ data: false }),
-    updateBrowserInstanceStatus: async (params) => {
-      written.push(params);
-      return { data: true };
-    }
-  });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  await s.timers[0].callback();
-  assert.deepEqual(written, [{ workspaceId: 'Tabcd', browserInstanceId: 'B1', toStatus: 'error' }]);
+test('status messages are written, but not after the monitor is stopped', async () => {
+  const { registry, spawned, statuses } = setup();
+  await registry.startBrowserMonitor(monitoredBrowser);
+  spawned[0].onStatus({ state: 'ready' });
+  assert.deepEqual(statuses, ['ready']);
+  await registry.stopBrowserMonitor({ internalBrowserId: 'br-1' });
+  assert.equal(spawned[0].stopped, true);
+  spawned[0].onStatus({ state: 'disconnected' });
+  assert.deepEqual(statuses, ['ready']);
 });
 
-// Otherwise a healthy browser would get written on every tick for no reason.
-test('a tick writes nothing when no instance actually changed status', async () => {
-  const written = [];
-  const s = buildScheduler({
-    instances: [instance({ browserInstanceId: 'B1', status: 'running' })],
-    checkCdpConnection: async () => ({ data: true }),
-    updateBrowserInstanceStatus: async (params) => {
-      written.push(params);
-      return { data: true };
-    }
-  });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  await s.timers[0].callback();
-  assert.deepEqual(written, []);
+test('a crashed worker is restarted while the browser still exists', async () => {
+  const { registry, spawned } = setup();
+  await registry.startBrowserMonitor(monitoredBrowser);
+  spawned[0].onExit();
+  assert.ok(await waitFor(() => spawned.length === 2));
+  assert.equal(registry.isMonitored('br-1'), true);
 });
 
-test('a tick clears its own timer and forgets the workspace once nobody has viewed it recently', async () => {
-  const clock = fakeClock();
-  const s = buildScheduler({ now: clock.now, idleTimeoutMs: 60000 });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  clock.advanceBy(60001);
-  await s.timers[0].callback();
-  assert.equal(s.timers[0].cleared, true);
-  assert.equal(s.listCalls.length, 0, 'an idle workspace is never even listed, let alone checked');
-  // Scheduling it again after being forgotten starts a genuinely new timer,
-  // not a no-op against the one that just cleared itself.
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  assert.equal(s.timers.length, 2);
+test('a failed existence check keeps the worker restarting', async () => {
+  const { registry, spawned } = setup({ exists: async () => ({ error: 'NETWORK' }) });
+  await registry.startBrowserMonitor(monitoredBrowser);
+  spawned[0].onExit();
+  assert.ok(await waitFor(() => spawned.length === 2));
+  assert.equal(registry.isMonitored('br-1'), true);
 });
 
-test('a tick keeps running while the workspace is still within its idle window', async () => {
-  const clock = fakeClock();
-  const s = buildScheduler({
-    now: clock.now,
-    idleTimeoutMs: 60000,
-    instances: [instance({ browserInstanceId: 'B1', status: 'running' })]
-  });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  clock.advanceBy(59000);
-  await s.timers[0].callback();
-  assert.equal(s.timers[0].cleared, false);
-  assert.equal(s.listCalls.length, 1);
+test('a worker exit is final once the fleet confirms the browser is gone', async () => {
+  const { registry, spawned } = setup({ exists: async () => ({ data: false }) });
+  await registry.startBrowserMonitor(monitoredBrowser);
+  spawned[0].onExit();
+  assert.ok(await waitFor(() => !registry.isMonitored('br-1')));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(spawned.length, 1);
 });
 
-// Always invoked from a bare setInterval callback (see the real
-// setIntervalFn default), with nothing above it to catch a rejection.
-test('a tick reports rather than throws when listing instances itself fails', async () => {
-  const errors = captureErrors();
-  const timers = fakeTimers();
-  try {
-    const scheduler = createBrowserStatusScheduler({
-      setIntervalFn: timers.setIntervalFn,
-      clearIntervalFn: timers.clearIntervalFn,
-      listBrowserInstancesByWorkspace: async () => ({ error: 'boom' }),
-      checkCdpConnection: async () => ({ data: true }),
-      updateBrowserInstanceStatus: async () => ({ data: true })
-    });
-    scheduler.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-    await assert.doesNotReject(timers.calls[0].callback());
-    assert.match(errors.messages.join('\n'), /Tabcd/);
-    assert.match(errors.messages.join('\n'), /boom/);
-  } finally {
-    errors.restore();
+test('the monitor gives up after the restart limit', async () => {
+  const { registry, spawned } = setup();
+  await registry.startBrowserMonitor(monitoredBrowser);
+  // Each crash restarts until the 4th exceeds maxRestarts (3).
+  for (let crash = 1; crash <= 3; crash += 1) {
+    spawned.at(-1).onExit();
+    assert.ok(await waitFor(() => spawned.length === crash + 1));
   }
+  spawned.at(-1).onExit();
+  assert.ok(await waitFor(() => !registry.isMonitored('br-1')));
+  assert.equal(spawned.length, 4);
 });
 
-test('a tick reports a failed check but still checks the rest of the workspace', async () => {
-  const errors = captureErrors();
-  const checked = [];
-  const s = buildScheduler({
-    instances: [
-      instance({ browserInstanceId: 'B1', status: 'running', internalBrowserId: 'br-1' }),
-      instance({ browserInstanceId: 'B2', status: 'running', internalBrowserId: 'br-2' })
-    ],
-    checkCdpConnection: async ({ browserId }) => {
-      checked.push(browserId);
-      if (browserId === 'br-1') {
-        throw new Error('socket exploded');
-      }
-      return { data: true };
-    }
-  });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  try {
-    await assert.doesNotReject(s.timers[0].callback());
-    assert.deepEqual(checked, ['br-1', 'br-2'], 'one failed dial must not stop the ones after it');
-    assert.match(errors.messages.join('\n'), /B1/);
-  } finally {
-    errors.restore();
+test('a ready worker resets the restart count', async () => {
+  const { registry, spawned } = setup();
+  await registry.startBrowserMonitor(monitoredBrowser);
+  for (let crash = 1; crash <= 6; crash += 1) {
+    spawned.at(-1).onStatus({ state: 'ready' });
+    spawned.at(-1).onExit();
+    assert.ok(await waitFor(() => spawned.length === crash + 1));
   }
+  assert.equal(registry.isMonitored('br-1'), true);
 });
 
-test('a tick reports rather than throws when a status write is rejected', async () => {
-  const errors = captureErrors();
-  const s = buildScheduler({
-    instances: [instance({ browserInstanceId: 'B1', status: 'running' })],
-    checkCdpConnection: async () => ({ data: false }),
-    updateBrowserInstanceStatus: async () => ({ error: 'boom' })
+test('a stop cancels a pending restart', async () => {
+  const { registry, spawned } = setup({ backoff: 30, maxBackoff: 30 });
+  await registry.startBrowserMonitor(monitoredBrowser);
+  spawned[0].onExit();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await registry.stopBrowserMonitor({ internalBrowserId: 'br-1' });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(spawned.length, 1);
+});
+
+test('stopAllBrowserMonitors stops every worker', async () => {
+  const { registry, spawned } = setup();
+  await registry.startBrowserMonitor(monitoredBrowser);
+  await registry.startBrowserMonitor({ ...monitoredBrowser, internalBrowserId: 'br-2' });
+  await registry.stopAllBrowserMonitors();
+  assert.equal(registry.monitoredCount(), 0);
+  assert.ok(spawned.every((fake) => fake.stopped));
+});
+
+test('startAllBrowserMonitors starts one worker per provisioned browser and skips unresolvable ones', async () => {
+  const { registry, spawned } = setup({
+    listBrowsers: async () => ({
+      data: [
+        { workspaceId: 1, browserInstanceId: 1, internalBrowserId: 'br-1' },
+        { workspaceId: 1, browserInstanceId: 2, internalBrowserId: 'br-2' },
+        { workspaceId: 2, browserInstanceId: 3, internalBrowserId: 'br-3' }
+      ]
+    }),
+    cdpUrlFor: async ({ browserId }) => (browserId === 'br-2' ? null : 'ws://cdp')
   });
-  s.scheduleBrowserStatusCheck({ workspaceId: 'Tabcd' });
-  try {
-    await assert.doesNotReject(s.timers[0].callback());
-    assert.match(errors.messages.join('\n'), /B1/);
-    assert.match(errors.messages.join('\n'), /boom/);
-  } finally {
-    errors.restore();
-  }
+  assert.deepEqual(await registry.startAllBrowserMonitors(), { data: { started: 2, total: 3 } });
+  assert.deepEqual(spawned.map((fake) => fake.internalBrowserId).sort(), ['br-1', 'br-3']);
+  assert.equal(registry.isMonitored('br-2'), false);
+});
+
+test('startAllBrowserMonitors does not double-start a browser that is already monitored', async () => {
+  const { registry, spawned } = setup({
+    listBrowsers: async () => ({ data: [{ workspaceId: 1, browserInstanceId: 2, internalBrowserId: 'br-1' }] })
+  });
+  await registry.startBrowserMonitor(monitoredBrowser);
+  await registry.startAllBrowserMonitors();
+  assert.equal(spawned.length, 1);
+});
+
+test('startAllBrowserMonitors reports a failed listing', async () => {
+  const { registry } = setup({ listBrowsers: async () => ({ error: 'DB_DOWN' }) });
+  assert.deepEqual(await registry.startAllBrowserMonitors(), { error: 'DB_DOWN' });
 });

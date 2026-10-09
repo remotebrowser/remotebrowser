@@ -475,5 +475,6 @@ export {
   capturePageScreenshot,
   listBrowserPages,
   navigateBrowserToUrl,
-  checkCdpConnection
+  checkCdpConnection,
+  withCdpSession
 };

@@ -6,7 +6,6 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { config } = await import('../config.js');
 const { createSessionCookie } = await import('../auth/session.js');
-const { isScheduled } = await import('../browser.js');
 const { routes } = await import('./homepage.js');
 const { findOrCreateUser } = await import('../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../models/workspaces.js');
@@ -204,11 +203,4 @@ test('GET / still offers "Show all browsers" when every browser has been filtere
   const body = await res.text();
   assert.match(body, /No browsers yet\./);
   assert.match(body, /href="\/browsers">Show all browsers/);
-});
-
-test('GET / schedules a periodic status check for the workspace, rather than checking immediately', async () => {
-  const workspaceId = await makeUser();
-  const res = await setupApp().request('/', { headers: { cookie: sessionCookie() } });
-  assert.equal(res.status, 200);
-  assert.equal(isScheduled(workspaceId), true);
 });

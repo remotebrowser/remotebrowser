@@ -7,6 +7,7 @@ import { checkBrowserFleetHealth } from './fleet.js';
 import { containers } from './container.js';
 import { mountCdpRelay } from './cdp.js';
 import { stopScreenshots } from './screenshots.js';
+import { browserMonitors } from './browser.js';
 
 // Opens the database and runs migrations in every environment: Postgres when
 // DATABASE_URL is set, PGlite otherwise.
@@ -53,6 +54,28 @@ const server = serve({ fetch: app.fetch, hostname: config.host, port: config.por
   consola.info('SERVER listening on port', config.port, { 'event.domain': 'server' });
 });
 
+// Monitors are in memory, so browsers that outlived the previous run get theirs back.
+void browserMonitors
+  .startAllBrowserMonitors()
+  .then((restored) => {
+    if (restored.error) {
+      consola.error('Unable to restore browser monitors', {
+        'event.domain': 'browser-monitor',
+        'error.type': String(restored.error)
+      });
+    } else {
+      consola.info(`Restored ${restored.data.started} of ${restored.data.total} browser monitors`, {
+        'event.domain': 'browser-monitor'
+      });
+    }
+  })
+  .catch((error) => {
+    consola.error('Unable to restore browser monitors', {
+      'event.domain': 'browser-monitor',
+      'error.type': String(error)
+    });
+  });
+
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     consola.error(`SERVER port ${config.port} is in use. Stop the other process or set PORT.`, {
@@ -73,7 +96,13 @@ const shutdown = async (signal) => {
   server.close();
   await drainScheduler().catch(() => {});
   // Open CDP WebSocket sessions would outlive server.close().
-  await Promise.allSettled([cdpRelay.close(), stopScreenshots(), shutdownTelemetry(), closeDatabase()]);
+  await Promise.allSettled([
+    cdpRelay.close(),
+    stopScreenshots(),
+    browserMonitors.stopAllBrowserMonitors(),
+    shutdownTelemetry(),
+    closeDatabase()
+  ]);
   process.exit(0);
 };
 
