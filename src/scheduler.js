@@ -3,6 +3,7 @@ import { PgBoss, fromPglite } from 'pg-boss';
 import { config } from './config.js';
 import { getDatabase } from './db/database.js';
 import { cleanupScreenshots } from './screenshots.js';
+import { deleteExpiredSigninCodes } from './models/users.js';
 
 const CLEANUP_QUEUE = 'cleanup';
 const EVERY_MINUTE = '* * * * *';
@@ -26,6 +27,14 @@ const createScheduler = async () => {
   await boss.schedule(CLEANUP_QUEUE, EVERY_MINUTE);
   await boss.work(CLEANUP_QUEUE, async () => {
     cleanupScreenshots();
+    // A failed purge must not fail the job: the next run retries it.
+    const purged = await deleteExpiredSigninCodes();
+    if (purged.error) {
+      consola.error('SCHEDULER could not purge expired sign-in codes', {
+        'event.domain': 'scheduler',
+        'error.type': String(purged.error)
+      });
+    }
     consola.info('SCHEDULER cleanup task ran', { 'event.domain': 'scheduler' });
   });
   consola.info('SCHEDULER started', { 'event.domain': 'scheduler' });

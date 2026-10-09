@@ -125,6 +125,22 @@ const consumeSigninCode = async ({ token, email }) => {
   }
 };
 
+// Unclicked links are never consumed, so expired rows are purged here.
+// The cap keeps each run short; a backlog clears over several runs.
+const deleteExpiredSigninCodes = async ({ now = Date.now(), limit = 100 } = {}) => {
+  try {
+    const result = await (
+      await db()
+    ).query(
+      'DELETE FROM signin_codes WHERE id IN (SELECT id FROM signin_codes WHERE expires_timestamp < $1 ORDER BY expires_timestamp LIMIT $2)',
+      [now, limit]
+    );
+    return { data: result.rowCount };
+  } catch (e) {
+    return { error: e.message };
+  }
+};
+
 export {
   getUser,
   getUserByPublicId,
@@ -132,5 +148,6 @@ export {
   revokeSessions,
   setPersonalWorkspaceId,
   recordSigninCode,
-  consumeSigninCode
+  consumeSigninCode,
+  deleteExpiredSigninCodes
 };
