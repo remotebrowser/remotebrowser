@@ -83,33 +83,25 @@ describe('client address', () => {
 });
 
 describe('access log', () => {
-  test('logs the parameterised route rather than the concrete path', async () => {
+  test('writes no access log line for a success', async () => {
     const { calls } = await request('/team/abc123/members');
-    assert.equal(calls.length, 1);
-    const [message] = calls[0].args;
-    assert.equal(message, 'GET /team/:teamId/members 200');
-    assert.doesNotMatch(message, /abc123/);
+    assert.equal(calls.length, 0);
   });
 
   test('reports the user agent as an attribute, not in the message', async () => {
-    const { calls } = await request('/whoami', { headers: { 'User-Agent': 'curl/8.5.0' } });
+    const { calls } = await request('/missing', { headers: { 'User-Agent': 'curl/8.5.0' } });
     const [message, attributes] = calls[0].args;
     assert.doesNotMatch(message, /curl\/8\.5\.0/);
     assert.deepEqual(attributes, {
-      'http.response.status_code': 200,
+      'http.response.status_code': 404,
       'user_agent.original': 'curl/8.5.0'
     });
   });
 
   test('omits the client address and user agent when they are unavailable', async () => {
-    const { calls } = await request('/whoami');
+    const { calls } = await request('/missing');
     const [, attributes] = calls[0].args;
-    assert.deepEqual(attributes, { 'http.response.status_code': 200 });
-  });
-
-  test('emits at INFO for a success', async () => {
-    const { calls } = await request('/whoami');
-    assert.equal(calls[0].type, 'log');
+    assert.deepEqual(attributes, { 'http.response.status_code': 404 });
   });
 
   test('emits at WARN for a client error', async () => {
@@ -135,7 +127,7 @@ describe('access log', () => {
   // This is the mechanism behind log/span correlation: the OTel logs SDK
   // stamps trace and span ids onto records emitted while a span is active.
   test('runs inside the request span so the record inherits its trace context', async () => {
-    const { calls, spans } = await request('/whoami');
+    const { calls, spans } = await request('/missing');
     assert.equal(spans.length, 1);
     assert.equal(calls[0].activeSpanId, spans[0].spanContext().spanId);
   });
@@ -152,11 +144,10 @@ describe('request span', () => {
   // A regex-constrained parameter would otherwise put the whole character
   // class into the span name, which is unreadable in a waterfall.
   test('names the span after the bare parameter when the route constrains it with a regex', async () => {
-    const { spans, calls } = await request('/account/Babc23');
+    const { spans } = await request('/account/Babc23');
     assert.equal(spans[0].name, 'GET /account/:browserId');
     assert.equal(spans[0].attributes['http.route'], '/account/:browserId');
     assert.equal(spans[0].attributes['url.path'], '/account/Babc23');
-    assert.equal(calls[0].args[0], 'GET /account/:browserId 200');
   });
 
   test('carries the concrete path in url.path and the pattern in http.route', async () => {

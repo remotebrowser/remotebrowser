@@ -62,17 +62,19 @@ const client = async (c, next) => {
         if (status >= 500) {
           span.setStatus({ code: SpanStatusCode.ERROR });
         }
-        const logAttributes = { 'http.response.status_code': status };
-        if (ipAddress) {
-          logAttributes['client.address'] = ipAddress;
+        if (status >= 400) {
+          const logAttributes = { 'http.response.status_code': status };
+          if (ipAddress) {
+            logAttributes['client.address'] = ipAddress;
+          }
+          if (userAgent) {
+            logAttributes['user_agent.original'] = userAgent;
+          }
+          consola[consolaTypeForStatus(status)](
+            `${method} ${isRouteMatched(route) ? route : '/*'} ${status}`,
+            logAttributes
+          );
         }
-        if (userAgent) {
-          logAttributes['user_agent.original'] = userAgent;
-        }
-        consola[consolaTypeForStatus(status)](
-          `${method} ${isRouteMatched(route) ? route : '/*'} ${status}`,
-          logAttributes
-        );
       } catch (error) {
         span.recordException(error);
         span.setStatus({ code: SpanStatusCode.ERROR });
