@@ -83,9 +83,6 @@ describe('client address', () => {
 });
 
 describe('access log', () => {
-  // The request span already carries method/route/status/client/user-agent for
-  // every request, success included, so logging the same thing again on a 200
-  // would just double the row count for no extra signal.
   test('writes no access log line for a success', async () => {
     const { calls } = await request('/team/abc123/members');
     assert.equal(calls.length, 0);
