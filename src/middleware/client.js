@@ -62,9 +62,7 @@ const client = async (c, next) => {
         if (status >= 500) {
           span.setStatus({ code: SpanStatusCode.ERROR });
         }
-        // The span above already carries method/route/status/client/user-agent for every
-        // request. Logging the same thing again on success just doubles row count; only
-        // log non-2xx, where a plain log line is easier to alert on than querying spans.
+        // Span already has this; only log non-2xx, which is easier to alert on.
         if (status >= 400) {
           const logAttributes = { 'http.response.status_code': status };
           if (ipAddress) {
