@@ -62,7 +62,6 @@ const client = async (c, next) => {
         if (status >= 500) {
           span.setStatus({ code: SpanStatusCode.ERROR });
         }
-        // Span already has this; only log non-2xx, which is easier to alert on.
         if (status >= 400) {
           const logAttributes = { 'http.response.status_code': status };
           if (ipAddress) {
