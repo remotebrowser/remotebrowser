@@ -36,7 +36,7 @@ include('/partials/breadcrumbs', it) %>
   const terminateButton = document.getElementById('terminate-button');
   const expected = nameInput.dataset.confirmName;
   const syncTerminateButton = () => {
-    terminateButton.disabled = nameInput.value !== expected;
+    terminateButton.disabled = nameInput.value.trim() !== expected;
   };
   syncTerminateButton();
   nameInput.addEventListener('input', syncTerminateButton);
