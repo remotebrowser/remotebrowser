@@ -14,6 +14,7 @@ nav = [
     { "Overview" = "self-hosting.md" },
     { "Controls" = "controls.md" },
     { "Sign-in" = "sign-in.md" },
+    { "Container" = "container.md" },
     { "Database" = "database.md" },
     { "Instrumentation" = "instrumentation.md" },
   ] },

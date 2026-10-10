@@ -32,4 +32,4 @@ The table below lists the environment variables that the app uses in production:
 | `SMTP_USER`                   | Yes      | SMTP username                                      |
 | `TRUSTED_PROXY_HOPS`          | No       | Reverse proxies in front of the app (default: `0`) |
 
-See [Controls](controls.md), [Sign-in](sign-in.md), [Database](database.md), and [Instrumentation](instrumentation.md) for details.
+See [Controls](controls.md), [Sign-in](sign-in.md), [Container](container.md), [Database](database.md), and [Instrumentation](instrumentation.md) for details.
