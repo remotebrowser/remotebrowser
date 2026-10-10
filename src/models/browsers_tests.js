@@ -10,6 +10,8 @@ const {
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
   listProvisionedBrowserInstances,
+  listActiveBrowserInstances,
+  markBrowserInstanceTerminated,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
   browserIdForHandle
@@ -290,4 +292,55 @@ test('listProvisionedBrowserInstances returns only browsers that have a fleet id
   assert.deepEqual(listed.data, [
     { workspaceId, browserInstanceId: provisioned.data.browserInstanceId, internalBrowserId: 'br-1' }
   ]);
+});
+
+test('launchBrowserInstance stores the launch time', async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const launched = await launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'calm-otter', now: 1234 });
+  const fetched = await getBrowserInstance({ workspaceId, browserInstanceId: launched.data.browserInstanceId });
+  assert.equal(fetched.data.createdTimestamp, 1234);
+});
+
+test('listActiveBrowserInstances lists every row that is not terminated', async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const launch = async (browserName) =>
+    (await launchBrowserInstance({ workspaceId, userId: ownerId, browserName, now: 1234 })).data.browserInstanceId;
+  const starting = await launch('starting-otter');
+  const provisioned = await launch('running-otter');
+  const terminated = await launch('gone-otter');
+  await recordProvisionedBrowser({
+    workspaceId,
+    browserInstanceId: provisioned,
+    internalBrowserId: 'br-1',
+    userId: ownerId
+  });
+  await updateBrowserInstanceStatus({ workspaceId, browserInstanceId: terminated, toStatus: 'terminated' });
+
+  assert.deepEqual(await listActiveBrowserInstances(), {
+    data: [
+      { workspaceId, browserInstanceId: starting, internalBrowserId: '', createdTimestamp: 1234 },
+      { workspaceId, browserInstanceId: provisioned, internalBrowserId: 'br-1', createdTimestamp: 1234 }
+    ]
+  });
+});
+
+test('markBrowserInstanceTerminated only writes a row that still has the fleet id the caller saw', async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const launched = await launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'calm-otter' });
+  const browserInstanceId = launched.data.browserInstanceId;
+  // Provisioned since the caller read it as unprovisioned: the stale decision must not apply.
+  await recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId: 'br-1', userId: ownerId });
+  assert.deepEqual(await markBrowserInstanceTerminated({ workspaceId, browserInstanceId, internalBrowserId: '' }), {
+    data: false
+  });
+  assert.equal((await getBrowserInstance({ workspaceId, browserInstanceId })).data.status, 'starting');
+
+  assert.deepEqual(await markBrowserInstanceTerminated({ workspaceId, browserInstanceId, internalBrowserId: 'br-1' }), {
+    data: true
+  });
+  assert.equal((await getBrowserInstance({ workspaceId, browserInstanceId })).data.status, 'terminated');
+  // Already terminated: nothing more to write.
+  assert.deepEqual(await markBrowserInstanceTerminated({ workspaceId, browserInstanceId, internalBrowserId: 'br-1' }), {
+    data: false
+  });
 });

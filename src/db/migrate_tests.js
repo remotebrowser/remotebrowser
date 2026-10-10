@@ -38,7 +38,8 @@ test('migrate creates the application tables once', async () => {
         '006_users_public_id.sql',
         '007_workspaces_public_id.sql',
         '008_browser_instances_public_id.sql',
-        '009_signin_codes_expiry_index.sql'
+        '009_signin_codes_expiry_index.sql',
+        '010_browser_instances_created_timestamp.sql'
       ]
     );
   });

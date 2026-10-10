@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { countActiveBrowsers, browserLimitFor, describeBrowserCapacity, nextBrowserStatus, createBrowserMonitors } =
-  await import('./browser.js');
+const {
+  countActiveBrowsers,
+  browserLimitFor,
+  describeBrowserCapacity,
+  nextBrowserStatus,
+  createBrowserMonitors,
+  reconcileBrowsers
+} = await import('./browser.js');
 const { config } = await import('./config.js');
 const { consola } = await import('consola/basic');
 consola.level = -999;
@@ -187,10 +193,12 @@ test('a failed existence check keeps the worker restarting', async () => {
 });
 
 test('a worker exit is final once the fleet confirms the browser is gone', async () => {
-  const { registry, spawned } = setup({ exists: async () => ({ data: false }) });
+  const { registry, spawned, statuses } = setup({ exists: async () => ({ data: false }) });
   await registry.startBrowserMonitor(monitoredBrowser);
   spawned[0].onExit();
   assert.ok(await waitFor(() => !registry.isMonitored('br-1')));
+  // 'gone' frees the slot; without it the row would hold capacity forever.
+  assert.deepEqual(statuses, ['gone']);
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(spawned.length, 1);
 });
@@ -266,4 +274,86 @@ test('startAllBrowserMonitors does not double-start a browser that is already mo
 test('startAllBrowserMonitors reports a failed listing', async () => {
   const { registry } = setup({ listBrowsers: async () => ({ error: 'DB_DOWN' }) });
   assert.deepEqual(await registry.startAllBrowserMonitors(), { error: 'DB_DOWN' });
+});
+
+const STARTING_TIMEOUT = 1000;
+
+// Fakes for the database and the fleet; `present` maps a fleet id to what the check answers.
+const reconcile = async ({ rows, present = {}, now = 10_000, terminate } = {}) => {
+  const checked = [];
+  const terminated = [];
+  const result = await reconcileBrowsers({
+    now,
+    startingTimeout: STARTING_TIMEOUT,
+    listBrowsers: async () => ({ data: rows }),
+    exists: async ({ browserId }) => {
+      checked.push(browserId);
+      return present[browserId] ?? { data: true };
+    },
+    terminate:
+      terminate ??
+      (async (params) => {
+        terminated.push(params);
+        return { data: true };
+      })
+  });
+  return { result, checked, terminated };
+};
+
+const row = (over = {}) => ({
+  workspaceId: 1,
+  browserInstanceId: 2,
+  internalBrowserId: 'br-1',
+  createdTimestamp: 10_000,
+  ...over
+});
+
+test('reconcileBrowsers terminates a browser the fleet says is gone', async () => {
+  const { result, terminated } = await reconcile({ rows: [row()], present: { 'br-1': { data: false } } });
+  assert.deepEqual(result, { data: { checked: 1, terminated: 1 } });
+  assert.deepEqual(terminated, [{ workspaceId: 1, browserInstanceId: 2, internalBrowserId: 'br-1' }]);
+});
+
+test('reconcileBrowsers keeps a browser that still exists', async () => {
+  const { result, terminated } = await reconcile({ rows: [row()] });
+  assert.deepEqual(result, { data: { checked: 1, terminated: 0 } });
+  assert.deepEqual(terminated, []);
+});
+
+test('reconcileBrowsers keeps a browser whose existence check failed', async () => {
+  const { terminated } = await reconcile({ rows: [row()], present: { 'br-1': { error: 'NETWORK' } } });
+  assert.deepEqual(terminated, []);
+});
+
+test('reconcileBrowsers terminates an unprovisioned row only after the starting timeout', async () => {
+  const fresh = row({ browserInstanceId: 3, internalBrowserId: '', createdTimestamp: 10_000 - STARTING_TIMEOUT + 1 });
+  const stale = row({ browserInstanceId: 4, internalBrowserId: '', createdTimestamp: 10_000 - STARTING_TIMEOUT });
+  const { checked, terminated } = await reconcile({ rows: [fresh, stale] });
+  // An unprovisioned row has nothing to ask the fleet about.
+  assert.deepEqual(checked, []);
+  assert.deepEqual(terminated, [{ workspaceId: 1, browserInstanceId: 4, internalBrowserId: '' }]);
+});
+
+test('reconcileBrowsers does not count a row that changed since it was read', async () => {
+  const { result } = await reconcile({
+    rows: [row()],
+    present: { 'br-1': { data: false } },
+    terminate: async () => ({ data: false })
+  });
+  assert.deepEqual(result, { data: { checked: 1, terminated: 0 } });
+});
+
+test('reconcileBrowsers keeps going after a failed write', async () => {
+  let calls = 0;
+  const { result } = await reconcile({
+    rows: [row(), row({ browserInstanceId: 3, internalBrowserId: 'br-2' })],
+    present: { 'br-1': { data: false }, 'br-2': { data: false } },
+    terminate: async () => (++calls === 1 ? { error: 'DB_DOWN' } : { data: true })
+  });
+  assert.deepEqual(result, { data: { checked: 2, terminated: 1 } });
+});
+
+test('reconcileBrowsers reports a failed listing', async () => {
+  const result = await reconcileBrowsers({ listBrowsers: async () => ({ error: 'DB_DOWN' }) });
+  assert.deepEqual(result, { error: 'DB_DOWN' });
 });

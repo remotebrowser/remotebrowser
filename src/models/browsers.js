@@ -16,7 +16,8 @@ const map = (r) => ({
   status: r.status,
   browserHandle: r.browser_handle,
   internalBrowserId: r.internal_browser_id,
-  creatorUserId: r.user_id
+  creatorUserId: r.user_id,
+  createdTimestamp: Number(r.created_timestamp)
 });
 
 // Repairs a deleted personal workspace before the query runs; a browser count
@@ -39,7 +40,8 @@ const launchBrowserInstance = async ({
   browserName,
   browserDescription,
   personalWorkspaceRepair,
-  generateId = generatePublicId
+  generateId = generatePublicId,
+  now = Date.now()
 }) => {
   await ensureWorkspaceForRepair(workspaceId, personalWorkspaceRepair);
   for (let attempt = 0; attempt < MAX_PUBLIC_ID_ATTEMPTS; attempt += 1) {
@@ -49,8 +51,8 @@ const launchBrowserInstance = async ({
       const r = await (
         await db()
       ).query(
-        `INSERT INTO browser_instances(workspace_id,browser_name,browser_description,status,user_id,internal_browser_id,browser_handle,config,public_id) VALUES($1,$2,$3,'starting',$4,'',$5,NULL,$6) RETURNING id, public_id`,
-        [workspaceId, browserName, browserDescription || '', userId, browserHandle, generateId()]
+        `INSERT INTO browser_instances(workspace_id,browser_name,browser_description,status,user_id,internal_browser_id,browser_handle,config,public_id,created_timestamp) VALUES($1,$2,$3,'starting',$4,'',$5,NULL,$6,$7) RETURNING id, public_id`,
+        [workspaceId, browserName, browserDescription || '', userId, browserHandle, generateId(), now]
       );
       return { data: { browserInstanceId: r.rows[0].id, publicId: r.rows[0].public_id } };
     } catch (e) {
@@ -122,6 +124,44 @@ const listProvisionedBrowserInstances = async () => {
   };
 };
 
+// Every row that still holds a capacity slot: what the reconciler checks
+// against the fleet.
+const listActiveBrowserInstances = async () => {
+  try {
+    const r = await (
+      await db()
+    ).query(
+      "SELECT id, workspace_id, internal_browser_id, created_timestamp FROM browser_instances WHERE status <> 'terminated' ORDER BY id"
+    );
+    return {
+      data: r.rows.map((row) => ({
+        workspaceId: row.workspace_id,
+        browserInstanceId: row.id,
+        internalBrowserId: row.internal_browser_id,
+        createdTimestamp: Number(row.created_timestamp)
+      }))
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+};
+
+// Matching on the fleet id the caller saw means a row provisioned since the
+// read is not terminated by a stale decision.
+const markBrowserInstanceTerminated = async ({ workspaceId, browserInstanceId, internalBrowserId }) => {
+  try {
+    const r = await (
+      await db()
+    ).query(
+      "UPDATE browser_instances SET status='terminated' WHERE workspace_id=$1 AND id=$2 AND internal_browser_id=$3 AND status <> 'terminated'",
+      [workspaceId, browserInstanceId, internalBrowserId]
+    );
+    return { data: r.rowCount > 0 };
+  } catch (e) {
+    return { error: e.message };
+  }
+};
+
 const listBrowserInstancesByWorkspace = async ({ workspaceId, personalWorkspaceRepair }) => {
   await ensureWorkspaceForRepair(workspaceId, personalWorkspaceRepair);
   const r = await (
@@ -163,6 +203,8 @@ export {
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
   listProvisionedBrowserInstances,
+  listActiveBrowserInstances,
+  markBrowserInstanceTerminated,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
   browserIdForHandle

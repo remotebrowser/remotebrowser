@@ -17,7 +17,7 @@ import {
   updateBrowserInstanceStatus
 } from '../../models/browsers.js';
 import { describeBrowserCapacity, browserMonitors } from '../../browser.js';
-import { startBrowser as startBrowserOnFleet } from '../../fleet.js';
+import { startBrowser as startBrowserOnFleet, stopBrowser as stopBrowserOnFleet } from '../../fleet.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
@@ -73,17 +73,23 @@ routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) =>
   c.html(renderBrowserLaunch(c, { capacity: await loadCapacity(c) }))
 );
 
-// Post-response only: may not throw, and navigate/startMonitor are injectable for tests.
+// Post-response only: may not throw, and navigate/startMonitor/stop are injectable for tests.
 const startBrowser = async ({
   workspaceId,
   browserInstanceId,
   userId,
   navigate = navigateBrowserToUrl,
-  startMonitor = browserMonitors.startBrowserMonitor
+  startMonitor = browserMonitors.startBrowserMonitor,
+  stop = stopBrowserOnFleet
 }) => {
   const started = await startBrowserOnFleet();
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
+    // Show the failure now; the scheduler frees the slot later.
+    const failed = await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: 'error' });
+    if (failed.error) {
+      consola.error(`Unable to mark browser ${browserInstanceId} as failed: ${failed.error}`);
+    }
     return;
   }
   // Fired once CDP exists, in parallel; best-effort, so nothing waits on it.
@@ -101,6 +107,11 @@ const startBrowser = async ({
   });
   if (recorded.error) {
     consola.error(`Unable to record the remote browser id for ${browserInstanceId}: ${recorded.error}`);
+    // No row points at this browser, so nothing else would ever stop it.
+    const stopped = await stop({ browserId: started.data.browserId });
+    if (stopped.error) {
+      consola.error(`Unable to stop unrecorded browser ${started.data.browserId}: ${stopped.error}`);
+    }
     return;
   }
   // Fleet assigned a real browser; mark running now, don't wait for scheduler.

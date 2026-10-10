@@ -243,10 +243,17 @@ test('startBrowser reports a failure to record the browser when the caller does 
   const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const errors = captureErrors();
   try {
+    const stopped = [];
     // 0 never matches a real serial id, so this can only be a mismatch.
-    await startBrowser({ workspaceId, browserInstanceId, userId: 0 });
+    await startBrowser({
+      workspaceId,
+      browserInstanceId,
+      userId: 0,
+      stop: async (params) => (stopped.push(params), { data: true })
+    });
     assert.match(errors.messages.join('\n'), new RegExp(browserInstanceId));
     assert.match(errors.messages.join('\n'), /NOT_AUTHORIZED/);
+    assert.deepEqual(stopped, [{ browserId: 'foobar' }], 'the unrecorded browser must not keep running');
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data.internalBrowserId, '', 'an unauthorized caller must not provision the browser');
   } finally {
@@ -255,7 +262,7 @@ test('startBrowser reports a failure to record the browser when the caller does 
   }
 });
 
-test('startBrowser leaves the instance untouched and reports it when no browser could be started', async () => {
+test('startBrowser marks the instance as failed and reports it when no browser could be started', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
   const { restore } = stubFetchByRoute([
@@ -269,6 +276,7 @@ test('startBrowser leaves the instance untouched and reports it when no browser 
     await startBrowser({ workspaceId, browserInstanceId, userId });
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data.internalBrowserId, '');
+    assert.equal(fetched.data.status, 'error');
     assert.match(errors.messages.join('\n'), new RegExp(browserInstanceId));
     assert.match(errors.messages.join('\n'), /HTTP 503/);
   } finally {
@@ -291,9 +299,17 @@ test('startBrowser reports it when the instance was already provisioned', async 
   const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const errors = captureErrors();
   try {
-    await startBrowser({ workspaceId, browserInstanceId, userId });
+    const stopped = [];
+    await startBrowser({
+      workspaceId,
+      browserInstanceId,
+      userId,
+      stop: async (params) => (stopped.push(params), { data: true })
+    });
     assert.match(errors.messages.join('\n'), new RegExp(browserInstanceId));
     assert.match(errors.messages.join('\n'), /ALREADY_PROVISIONED/);
+    // Only the second browser is stopped; the recorded one keeps running.
+    assert.deepEqual(stopped, [{ browserId: 'foobar' }]);
   } finally {
     errors.restore();
     restore();

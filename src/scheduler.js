@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { getDatabase } from './db/database.js';
 import { cleanupScreenshots } from './screenshots.js';
 import { deleteExpiredSigninCodes } from './models/users.js';
+import { reconcileBrowsers } from './browser.js';
 
 const CLEANUP_QUEUE = 'cleanup';
 const EVERY_MINUTE = '* * * * *';
@@ -33,6 +34,14 @@ const createScheduler = async () => {
       consola.error('SCHEDULER could not purge expired sign-in codes', {
         'event.domain': 'scheduler',
         'error.type': String(purged.error)
+      });
+    }
+    // Same rule: a failed reconcile is retried on the next run.
+    const reconciled = await reconcileBrowsers();
+    if (reconciled.error) {
+      consola.error('SCHEDULER could not reconcile browsers', {
+        'event.domain': 'scheduler',
+        'error.type': String(reconciled.error)
       });
     }
     consola.info('SCHEDULER cleanup task ran', { 'event.domain': 'scheduler' });

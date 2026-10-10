@@ -2,7 +2,12 @@ import { consola } from 'consola/basic';
 import { config } from './config.js';
 import { createBrowserMonitor } from './workers/monitor.js';
 import { browserCdpUrl, browserExists } from './fleet.js';
-import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './models/browsers.js';
+import {
+  updateBrowserInstanceStatus,
+  listProvisionedBrowserInstances,
+  listActiveBrowserInstances,
+  markBrowserInstanceTerminated
+} from './models/browsers.js';
 
 // Shared browser logic: capacity, status transitions, and the monitor registry.
 
@@ -37,7 +42,8 @@ const MAX_RESTART_BACKOFF = 30000;
 const MAX_RESTARTS = 122;
 
 // 'ready' proves the CDP connection opened, which is exactly what 'running' means.
-const STATUS_FOR_STATE = { ready: 'running', disconnected: 'error', error: 'error' };
+// 'gone' is the fleet confirming the browser no longer exists.
+const STATUS_FOR_STATE = { ready: 'running', disconnected: 'error', error: 'error', gone: 'terminated' };
 
 // Navigations are surfaced on stdout for now; nothing consumes them yet.
 const logNavigation = ({ internalBrowserId, pageId, url }) => {
@@ -100,6 +106,7 @@ const createBrowserMonitors = ({
         'event.domain': 'browser-monitor',
         'rb.browser_id': record.internalBrowserId
       });
+      setStatus({ workspaceId: record.workspaceId, browserInstanceId: record.browserInstanceId, state: 'gone' });
       drop(record);
       return;
     }
@@ -232,11 +239,61 @@ const createBrowserMonitors = ({
 
 const browserMonitors = createBrowserMonitors();
 
+// A row with no fleet id this long after launch belongs to a launch that died.
+// A cold image pull is the slowest honest start, so the bound is generous.
+const STARTING_TIMEOUT = 15 * 60 * 1000;
+
+/**
+ * Frees the capacity slots of browsers that no longer exist: a launch that never
+ * got a fleet id, or a browser the fleet says is gone. A failed existence check
+ * proves nothing, so that row is left for the next run.
+ * @returns {Promise<{data?: {checked: number, terminated: number}, error?: string}>}
+ */
+const reconcileBrowsers = async ({
+  now = Date.now(),
+  listBrowsers = listActiveBrowserInstances,
+  exists = browserExists,
+  terminate = markBrowserInstanceTerminated,
+  startingTimeout = STARTING_TIMEOUT
+} = {}) => {
+  const listed = await listBrowsers();
+  if (listed.error) {
+    return { error: listed.error };
+  }
+  let terminated = 0;
+  // One at a time: a local check shells out to the container runtime.
+  for (const browser of listed.data) {
+    const { workspaceId, browserInstanceId, internalBrowserId, createdTimestamp } = browser;
+    const gone =
+      internalBrowserId === ''
+        ? now - createdTimestamp >= startingTimeout
+        : (await exists({ browserId: internalBrowserId })).data === false;
+    if (!gone) {
+      continue;
+    }
+    const written = await terminate({ workspaceId, browserInstanceId, internalBrowserId });
+    if (written.error) {
+      consola.error(`Unable to mark browser ${browserInstanceId} as terminated: ${written.error}`, {
+        'event.domain': 'browser-reconcile'
+      });
+    } else if (written.data) {
+      terminated += 1;
+      consola.info('Browser no longer exists; marked as terminated', {
+        'event.domain': 'browser-reconcile',
+        'rb.browser_instance_id': browserInstanceId,
+        'rb.browser_id': internalBrowserId || null
+      });
+    }
+  }
+  return { data: { checked: listed.data.length, terminated } };
+};
+
 export {
   countActiveBrowsers,
   browserLimitFor,
   describeBrowserCapacity,
   nextBrowserStatus,
   browserMonitors,
-  createBrowserMonitors
+  createBrowserMonitors,
+  reconcileBrowsers
 };
