@@ -187,7 +187,19 @@ test('GET /browsers polls itself every few seconds to pick up a status change', 
   const res = await app.request('/browsers', { headers: { cookie: `session=${cookie}` } });
   const body = await res.text();
   assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
-  assert.match(body, /<main hx-get="\/browsers" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">/);
+  assert.match(
+    body,
+    /<div id="browser-view" hx-get="\/browsers" hx-trigger="every 3s" hx-select="#browser-view" hx-swap="outerHTML">/
+  );
+});
+
+test('GET /browsers offers list and grid toggles with the list pressed', async () => {
+  await makeUser();
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request('/browsers', { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  assert.match(body, /hx-get="\/browsers"[^>]*aria-pressed="true"/);
+  assert.match(body, /hx-get="\/browsers\/grid"[^>]*aria-pressed="false"/);
 });
 
 test('GET /browsers renders the active shared workspace with unprefixed links', async () => {

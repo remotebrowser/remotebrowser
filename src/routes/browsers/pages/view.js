@@ -73,3 +73,25 @@ routes.get('/:browserId/pages/:pageId/view', requireUser, requireWorkspaceRole('
   // body() needs plain-ArrayBuffer-backed Uint8Array; copy the Buffer.
   return c.body(new Uint8Array(frame ? frame.data : TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
 });
+
+// The first page's frame, for thumbnails that only know the browser.
+routes.get('/:browserId/view', requireUser, requireWorkspaceRole('User'), async (c) => {
+  const user = c.get('user');
+  const workspace = c.get('workspace');
+  const instance = await getBrowserInstanceByPublicId({
+    workspaceId: workspace.id,
+    publicId: c.req.param('browserId'),
+    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+  });
+  if (instance.error || !instance.data) {
+    return c.text('Not found', 404);
+  }
+  if (!instance.data.internalBrowserId) {
+    return c.text('The browser is still starting.', 503);
+  }
+  const frame = getScreenshot(instance.data.internalBrowserId);
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
+  return c.body(new Uint8Array(frame ? frame.data : TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
+});

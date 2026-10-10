@@ -1,5 +1,6 @@
 import { consola } from 'consola/basic';
 import { browserCdpUrl } from './fleet.js';
+import { listBrowserPages } from './cdp.js';
 import { createScreenshotPool } from './workers/screenshot.js';
 
 // A cached frame older than this is served once and refreshed in the background.
@@ -12,10 +13,14 @@ const SCREENSHOT_INACTIVE = 10 * 60 * 1000;
 const screenshotKey = ({ browserId, pageId }) => `${browserId}:${pageId}`;
 
 // The state these functions share: the frame cache, the in-flight captures, and the worker pool.
-/** @type {{screenshots: Map<string, {browserId: string, pageId: string, data: Buffer, timestamp: number}>, inFlight: Map<string, Promise<{ok?: true, error?: string}>>, pool: {capture: Function, close: Function} | null}} */
+/** @type {{screenshots: Map<string, {browserId: string, pageId: string, data: Buffer, timestamp: number}>, inFlight: Map<string, Promise<{ok?: true, error?: string}>>, firstPages: Map<string, string>, resolving: Set<string>, listPages: Function, pool: {capture: Function, close: Function} | null}} */
 const cache = {
   screenshots: new Map(),
   inFlight: new Map(),
+  // The last known first page per browser, so a read without a page id never waits on CDP.
+  firstPages: new Map(),
+  resolving: new Set(),
+  listPages: listBrowserPages,
   pool: null
 };
 
@@ -65,8 +70,37 @@ const requestScreenshot = (browserId, pageId) => {
   return capture;
 };
 
+// Look up the browser's first page in the background and remember it for the next read.
+const resolveFirstPage = (browserId) => {
+  if (cache.resolving.has(browserId)) {
+    return;
+  }
+  cache.resolving.add(browserId);
+  void cache
+    .listPages({ browserId })
+    .then((listed) => {
+      const first = listed.data?.[0]?.targetId;
+      if (first) {
+        cache.firstPages.set(browserId, first);
+      } else {
+        cache.firstPages.delete(browserId);
+      }
+    })
+    .catch((error) => consola.debug(`first page lookup failed for ${browserId}: ${String(error)}`))
+    .finally(() => cache.resolving.delete(browserId));
+};
+
 // Serve the cached frame; a missing or stale one also queues a fresh capture.
-const getScreenshot = (browserId, pageId) => {
+// No pageId means the first page, which stays unknown until the background lookup finds it.
+const getScreenshot = (browserId, pageId = '') => {
+  if (!pageId) {
+    // Re-check each read so the thumbnail follows the first tab when it changes.
+    resolveFirstPage(browserId);
+    pageId = cache.firstPages.get(browserId) ?? '';
+    if (!pageId) {
+      return null;
+    }
+  }
   const cached = cache.screenshots.get(screenshotKey({ browserId, pageId }));
   if (!cached) {
     void requestScreenshot(browserId, pageId);
@@ -95,6 +129,7 @@ const stopScreenshots = async () => {
   }
   cache.screenshots.clear();
   cache.inFlight.clear();
+  cache.firstPages.clear();
 };
 
 export { getScreenshot, requestScreenshot, stopScreenshots, cleanupScreenshots, cache };

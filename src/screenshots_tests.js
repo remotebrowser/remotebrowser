@@ -220,3 +220,16 @@ test('getScreenshot returns null for a page that was never captured', async () =
   assert.equal(getScreenshot('nope', 'nope'), null);
   await flush();
 });
+
+test('getScreenshot without a page id serves the first page once it is looked up', async () => {
+  const s = resetCache();
+  cache.firstPages = new Map();
+  cache.resolving = new Set();
+  cache.listPages = async () => ({ data: [{ targetId: 'p1' }, { targetId: 'p2' }] });
+  assert.equal(getScreenshot('br-1'), null, 'the first page is unknown until looked up');
+  await flush();
+  assert.equal(getScreenshot('br-1'), null, 'the first read after lookup queues the capture');
+  await flush();
+  assert.deepEqual(s.captureCalls, [{ browserId: 'br-1', pageId: 'p1', url: CDP_URL }]);
+  assert.equal(getScreenshot('br-1').data.toString(), 'br-1:p1');
+});

@@ -1,9 +1,14 @@
 <% layout('/layout', { title: 'Remote Browser - Browsers' }) %> <%~ include('/partials/topnav', it) %> <%~
 include('/partials/breadcrumbs', it) %>
 <script src="/htmx.min.js"></script>
-<main hx-get="/browsers" hx-trigger="every 3s" hx-select="main" hx-swap="outerHTML">
+<%~ include('/partials/screenshot-refresh', it) %>
+<main>
   <article>
-    <%~ include('/partials/browser-instances-table', it) %>
+    <%~ include('/partials/browsers-view-toggle', it) %> <% /* Polls itself, so the view stays right after a toggle
+    swaps it. */ %>
+    <div id="browser-view" hx-get="/browsers" hx-trigger="every 3s" hx-select="#browser-view" hx-swap="outerHTML">
+      <%~ include('/partials/browser-instances-table', it) %>
+    </div>
     <div class="browser-table-actions">
       <% if (it.capacity.atCapacity) { %>
       <span class="btn-primary" aria-disabled="true">Launch a browser</span>

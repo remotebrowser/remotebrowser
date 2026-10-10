@@ -1,0 +1,39 @@
+<% /* hx-select-oob refreshes this toolbar too, so the pressed button follows the view. */ %>
+<div id="view-toggle" class="view-toggle" role="group" aria-label="Browser view">
+  <button
+    type="button"
+    hx-get="/browsers"
+    hx-target="#browser-view"
+    hx-select="#browser-view"
+    hx-select-oob="#view-toggle"
+    hx-swap="outerHTML"
+    hx-push-url="true"
+    aria-pressed="<%= it.view === 'list' %>"
+  >
+    <svg class="view-toggle-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M2 3.5h12M2 8h12M2 12.5h12"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      />
+    </svg>
+    List
+  </button>
+  <button
+    type="button"
+    hx-get="/browsers/grid"
+    hx-target="#browser-view"
+    hx-select="#browser-view"
+    hx-select-oob="#view-toggle"
+    hx-swap="outerHTML"
+    hx-push-url="true"
+    aria-pressed="<%= it.view === 'grid' %>"
+  >
+    <svg class="view-toggle-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9H7v4.5H2.5zM9 9h4.5v4.5H9z" fill="currentColor" />
+    </svg>
+    Grid
+  </button>
+</div>

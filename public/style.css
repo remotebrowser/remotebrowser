@@ -856,6 +856,83 @@ a.btn-secondary {
   overflow-wrap: anywhere;
 }
 
+/* Segmented control: buttons share one outline, only the outer corners round. */
+.view-toggle {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 0.5rem auto;
+}
+
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+}
+
+.view-toggle button + button {
+  margin-left: -1px;
+}
+
+.view-toggle button:first-child {
+  border-radius: 0.375rem 0 0 0.375rem;
+}
+
+.view-toggle button:last-child {
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.view-toggle button[aria-pressed='true'] {
+  background-color: var(--fill);
+  font-weight: bold;
+  /* Above its neighbor's overlapped border so the pressed outline stays whole. */
+  position: relative;
+}
+
+.view-toggle button:hover:not([aria-pressed='true']) {
+  background-color: var(--fill-soft);
+}
+
+.browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.browser-grid-card {
+  display: block;
+  /* min-width: 0 lets the name truncate instead of stretching the grid cell. */
+  min-width: 0;
+  text-decoration: none;
+}
+
+/* 16:9 like a 1920x1080 screen, so cards line up whatever the screenshot's own
+   size; cover crops rather than stretches. */
+.browser-grid-card .browser-screenshot,
+.browser-grid-card .browser-preview-placeholder {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.browser-grid-name {
+  display: block;
+  margin-bottom: 0.375rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.browser-grid-status {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 pre {
   padding: 0.75rem 1rem;
   overflow-x: auto;
