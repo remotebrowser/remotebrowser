@@ -1,0 +1,67 @@
+/* Material turns the primary sidebar into a drawer below 76.25em, which hides
+   it on tablets in landscape. Keep it docked from 60em and reuse the desktop
+   rules for the section nav. */
+@media screen and (min-width: 60em) and (max-width: 76.234375em) {
+  .md-header__button[for='__drawer'],
+  .md-overlay,
+  .md-nav .md-nav__title[for='__drawer'] {
+    display: none;
+  }
+
+  .md-sidebar--primary {
+    position: sticky;
+    top: 2.4rem;
+    left: auto;
+    z-index: auto;
+    width: 12.1rem;
+    height: 0;
+    padding: 1.1rem 0;
+    background: none;
+    backdrop-filter: none;
+    border-radius: 0;
+    transform: none;
+    transition: none;
+  }
+
+  [data-md-toggle='drawer']:checked ~ .md-container .md-sidebar--primary {
+    box-shadow: none;
+    transform: none;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    position: static;
+    margin: 0 0.2rem;
+  }
+
+  .md-sidebar--primary:not([hidden]) ~ .md-content > .md-content__inner {
+    margin-left: 1.2rem;
+  }
+
+  .md-nav__source {
+    display: none;
+  }
+
+  .md-nav__item--section {
+    margin-top: 0.4rem;
+  }
+
+  .md-nav__item--section:first-child {
+    margin-top: 0;
+  }
+
+  .md-nav__item--section > .md-nav__link {
+    font-weight: 700;
+    pointer-events: none;
+  }
+
+  .md-nav__item--section > .md-nav__link .md-nav__icon,
+  .md-nav__item--section > .md-nav__container > :nth-child(2) {
+    display: none;
+  }
+
+  .md-nav__item--section > .md-nav {
+    display: block;
+    visibility: visible;
+    opacity: 1;
+  }
+}
