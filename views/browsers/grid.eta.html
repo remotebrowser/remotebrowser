@@ -1,0 +1,43 @@
+<% layout('/layout', { title: 'Remote Browser - Browsers' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<%~ include('/partials/screenshot-refresh', it) %>
+<main>
+  <article>
+    <%~ include('/partials/browsers-view-toggle', it) %> <% /* Polls itself, so the view stays right after a toggle
+    swaps it. */ %>
+    <div id="browser-view" hx-get="/browsers/grid" hx-trigger="every 3s" hx-select="#browser-view" hx-swap="outerHTML">
+      <% if (it.browsers.length === 0) { %>
+      <p>No browsers yet.</p>
+      <% } else { %>
+      <div class="browser-grid">
+        <% it.browsers.forEach(function(browser) { %>
+        <a class="browser-grid-card" href="/browsers/<%= browser.publicId %>">
+          <span class="browser-grid-name" title="<%= browser.browserName %>"><%= browser.browserName %></span>
+          <% if (browser.hasThumbnail) { %>
+          <img
+            class="browser-screenshot"
+            id="screenshot-<%= browser.publicId %>"
+            src="/browsers/<%= browser.publicId %>/view?t=<%= it.screenshotCacheBust %>"
+            alt=""
+            decoding="async"
+          />
+          <% } else { %>
+          <div class="browser-preview-placeholder"></div>
+          <% } %> <% if (browser.status !== 'running') { %>
+          <span class="browser-grid-status"><%= browser.status %></span>
+          <% } %>
+        </a>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+    <div class="browser-table-actions">
+      <% if (it.capacity.atCapacity) { %>
+      <span class="btn-primary" aria-disabled="true">Launch a browser</span>
+      <% } else { %>
+      <a href="/browsers/launch" class="btn-primary">Launch a browser</a>
+      <% } %>
+    </div>
+  </article>
+</main>
