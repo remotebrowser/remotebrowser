@@ -26,6 +26,7 @@ routes.get('/fonts/figtree-variable.woff2', serveFile('fonts/figtree-variable.wo
 routes.get('/robots.txt', serveFile('robots.txt'));
 routes.get('/favicon.ico', serveFile('favicon.ico', 'image/x-icon'));
 routes.get('/tagline.js', serveFile('tagline.js', 'text/javascript'));
+routes.get('/theme.js', serveFile('theme.js', 'text/javascript'));
 routes.get('/htmx.min.js', serveFile('htmx.min.js', 'text/javascript'));
 routes.get('/terms', serveFile('terms.html', 'text/html'));
 routes.get('/privacy-policy', serveFile('privacy-policy.html', 'text/html'));

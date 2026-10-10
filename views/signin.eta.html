@@ -1,7 +1,10 @@
 <% layout('layout', { title: 'Sign in', bodyClass: 'auth' }) %> <%~ include('partials/auth-aside') %>
 <script src="/htmx.min.js"></script>
 <main class="signin-main">
-  <h1 class="auth-brand">Remote Browser</h1>
+  <div class="auth-head">
+    <h1 class="auth-brand">Remote Browser</h1>
+    <%~ include('partials/theme-toggle') %>
+  </div>
   <div class="signin-panel">
     <h2>Welcome</h2>
     <% if (it.error) { %>

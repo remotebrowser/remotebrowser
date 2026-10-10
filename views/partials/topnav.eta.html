@@ -1,6 +1,7 @@
 <nav class="topnav">
   <div class="topnav-brand">Remote Browser</div>
   <div class="topnav-account">
+    <%~ include('theme-toggle') %>
     <span><%= it.email %></span>
     <form method="post" action="/signout" class="inline-form">
       <%~ include('csrf', it) %>

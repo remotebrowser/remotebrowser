@@ -33,7 +33,133 @@ html {
   tab-size: 4;
 }
 
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#fafafa, #141414);
+  --surface: light-dark(#fff, #1e1e1e);
+  --surface-2: light-dark(#fcfcfc, #232323);
+  --text: light-dark(#333, #e4e4e4);
+  --text-muted: light-dark(#555, #b0b0b0);
+  --text-faint: light-dark(#999, #777);
+  --border: light-dark(#e0e0e0, #3a3a3a);
+  --border-strong: light-dark(#c0c0c0, #555);
+  --fill: light-dark(#d9d9d9, #3a3a3a);
+  --fill-hover: light-dark(#c4c4c4, #4a4a4a);
+  --fill-disabled: light-dark(#b0b0b0, #444);
+  --fill-soft: light-dark(#ededed, #2c2c2c);
+  --warn-bg: light-dark(#fff3cd, #4a3f1a);
+  --danger-bg: light-dark(#fdecea, #4a2220);
+  --danger-border: light-dark(#f5c2c0, #7a3733);
+}
+
+/* No-JS fallback: the checkbox flips whatever the system theme is. */
+@media (prefers-color-scheme: dark) {
+  :root:has(.theme-input:checked) {
+    color-scheme: light;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:has(.theme-input:checked) {
+    color-scheme: dark;
+  }
+}
+
+/* Set by theme.js; doubled :root matches the fallback's specificity and comes later. */
+:root:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+.theme-toggle {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 2.75rem;
+  height: 1.5rem;
+  background: light-dark(#c8c8c8, #4a4a4a);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+/* --knob is 1 when the resolved theme is light. light-dark() can't drive a
+   length, so mirror the theme rules above; this lets the knob slide. */
+:root {
+  --knob: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --knob: 0;
+  }
+
+  :root:not([data-theme]):has(.theme-input:checked) {
+    --knob: 1;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]):has(.theme-input:checked) {
+    --knob: 0;
+  }
+}
+
+:root[data-theme='dark'] {
+  --knob: 0;
+}
+
+.theme-toggle::before {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform: translateX(calc(var(--knob) * 1.25rem));
+  transition: transform 0.2s ease;
+}
+
+/* Moon and sun share one sprite; --knob picks the half. */
+.theme-toggle::after {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: #555;
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 24'><path d='M15 5.4A7.25 7.25 0 1 0 15 18.6A8 8 0 0 1 15 5.4Z' fill='black'/><g stroke='black' stroke-width='1.6' stroke-linecap='round'><circle cx='36' cy='12' r='3.6' stroke='none' fill='black'/><path d='M41.6 12.0L43.6 12.0'/><path d='M40.0 16.0L41.4 17.4'/><path d='M36.0 17.6L36.0 19.6'/><path d='M32.0 16.0L30.6 17.4'/><path d='M30.4 12.0L28.4 12.0'/><path d='M32.0 8.0L30.6 6.6'/><path d='M36.0 6.4L36.0 4.4'/><path d='M40.0 8.0L41.4 6.6'/></g></svg>")
+    calc(var(--knob) * 100%) 0 / 200% 100% no-repeat;
+  transform: translateX(calc(var(--knob) * 1.25rem));
+  transition:
+    transform 0.2s ease,
+    mask-position 0.2s ease;
+  pointer-events: none;
+}
+
+.theme-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.theme-toggle:has(.theme-input:focus-visible) {
+  outline: 2px solid light-dark(#0088f6, #fff);
+  outline-offset: 2px;
+}
+
 body {
+  background-color: var(--bg);
+  color: var(--text);
   max-width: 60rem;
   margin: 0 auto;
   padding: 1.5rem 1rem;
@@ -82,7 +208,7 @@ footer {
   padding-top: 0.75rem;
   border-top: 1px solid lightgray;
   font-size: 0.95rem;
-  color: #555;
+  color: var(--text-muted);
 }
 .signin-main {
   display: flex;
@@ -99,8 +225,15 @@ footer {
   margin: auto;
 }
 
+.auth-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-self: stretch;
+}
+
 .auth-brand {
-  align-self: flex-start;
   margin: 0;
   font-size: 1.125rem;
   font-weight: bold;
@@ -117,7 +250,7 @@ footer {
 .signin-intro {
   margin: 0 auto 1.5rem;
   text-align: center;
-  color: #555;
+  color: var(--text-muted);
 }
 
 #signin-content {
@@ -143,9 +276,9 @@ footer {
 .signin-form input {
   padding: 0.9rem 1rem;
   font-size: 1.05rem;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--border-strong);
   border-radius: 0;
-  background-color: #fff;
+  background-color: var(--surface);
 }
 
 .signin-form button {
@@ -180,7 +313,7 @@ footer {
 }
 
 button.signin-submit[disabled] {
-  background-color: #b0b0b0;
+  background-color: var(--fill-disabled);
   cursor: default;
 }
 
@@ -189,7 +322,7 @@ button.signin-submit[disabled] {
   margin: 2rem auto 0;
   text-align: center;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .signin-terms a {
@@ -202,15 +335,15 @@ button.signin-submit[disabled] {
   max-width: 21rem;
   margin: 0 auto;
   padding: 0.9rem 1rem;
-  background-color: #d9d9d9;
-  color: #333;
+  background-color: var(--fill);
+  color: var(--text);
   font-size: 1.05rem;
   text-align: center;
   text-decoration: none;
 }
 
 .signin-retry:hover {
-  background-color: #c4c4c4;
+  background-color: var(--fill-hover);
 }
 
 .signin-panel .danger {
@@ -228,7 +361,7 @@ button.signin-submit[disabled] {
 .sent-lead {
   margin: 0 0 1rem;
   font-size: 1.05rem;
-  color: #3a3a3a;
+  color: var(--text);
 }
 
 .sent-email {
@@ -236,24 +369,24 @@ button.signin-submit[disabled] {
   max-width: 100%;
   margin: 0;
   padding: 0.75rem 1.25rem;
-  background-color: #d9d9d9;
+  background-color: var(--fill);
   border-radius: 0.25rem;
-  color: #33332f;
+  color: var(--text);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .sent-hint {
   margin: 1rem 0 0;
-  color: #5a5a5a;
+  color: var(--text-muted);
 }
 
 .sent-dev-note {
   margin: 1.5rem 0 0;
   padding: 0.75rem;
-  background-color: #fff3cd;
+  background-color: var(--warn-bg);
   font-size: 0.85rem;
-  color: #555;
+  color: var(--text-muted);
 }
 /* align-items: flex-start rather than center, so a checkbox next to a
    multi-line label sits at the top of the text instead of centered against
@@ -298,7 +431,7 @@ a.btn-primary {
    anchor can't be given a real disabled state, and one still stripped of its
    href would sit there inert with no visual cue why. */
 .btn-primary[aria-disabled='true'] {
-  background-color: #b0b0b0;
+  background-color: var(--fill-disabled);
   cursor: not-allowed;
 }
 
@@ -321,9 +454,9 @@ a.btn-danger {
 }
 
 .danger {
-  background-color: #fdecea;
+  background-color: var(--danger-bg);
   color: #b1271b;
-  border: 1px solid #f5c2c0;
+  border: 1px solid var(--danger-border);
   padding: 0.75rem 1rem;
   margin: 1rem 0;
 }
@@ -331,9 +464,9 @@ a.btn-danger {
 /* The border is subtracted from the padding so a secondary button lines up
    with a borderless primary one sitting next to it. */
 .btn-secondary {
-  background-color: #fcfcfc;
-  color: #333;
-  border: 1px solid #c0c0c0;
+  background-color: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   padding: calc(0.375rem - 1px) calc(0.75rem - 1px);
   font-size: 1rem;
   cursor: pointer;
@@ -345,7 +478,7 @@ a.btn-secondary {
 }
 
 .btn-secondary:hover {
-  background-color: #ededed;
+  background-color: var(--fill-soft);
 }
 
 /* Keeps a row of buttons together in the form grid's second column,
@@ -359,7 +492,7 @@ a.btn-secondary {
 
 .form-note {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .icon-caret-right {
@@ -375,7 +508,7 @@ a.btn-secondary {
   flex-wrap: wrap;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
 }
 
 .topnav-brand {
@@ -388,7 +521,7 @@ a.btn-secondary {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .link-button {
@@ -425,7 +558,7 @@ a.btn-secondary {
 .roster-table td {
   text-align: left;
   padding: 0.375rem 0.75rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
 }
 
 .browser-table-actions {
@@ -444,7 +577,7 @@ a.btn-secondary {
 
 .key-preview {
   font-size: 0.9rem;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .inline-form {
@@ -459,17 +592,17 @@ a.btn-secondary {
   gap: 0.375rem;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .breadcrumb-separator {
-  color: #999;
+  color: var(--text-faint);
 }
 
 .breadcrumbs [aria-current='page'] {
-  color: #555;
+  color: var(--text-muted);
   font-weight: bold;
 }
 
@@ -498,8 +631,8 @@ a.btn-secondary {
   top: 100%;
   left: 0;
   min-width: 20rem;
-  background: #fff;
-  border: 1px solid #c0c0c0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   padding: 0.25rem 0;
   font-size: 1rem;
   z-index: 10;
@@ -567,13 +700,13 @@ a.btn-secondary {
   display: block;
   width: 100%;
   padding: 0.4rem 0.75rem;
-  color: #555;
+  color: var(--text-muted);
   text-align: left;
 }
 
 .breadcrumb-switcher-divider {
   border: none;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border);
   margin: 0.25rem 0;
 }
 
@@ -631,7 +764,7 @@ a.btn-secondary {
   max-width: 100%;
   height: auto;
   aspect-ratio: auto 16 / 9;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--border-strong);
   border-radius: 0.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
@@ -642,8 +775,8 @@ a.btn-secondary {
    as a blank space. */
 .browser-preview-placeholder {
   aspect-ratio: 16 / 9;
-  background-color: #e0e0e0;
-  border: 1px solid #a0a0a0;
+  background-color: var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 0.25rem;
 }
 
@@ -680,7 +813,7 @@ a.btn-secondary {
   /* Same auto/16:9 fallback as .browser-screenshot: reserves a 16:9 box
      before the image has loaded, then defers to its real intrinsic ratio. */
   aspect-ratio: auto 16 / 9;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 0.25rem;
 }
 
@@ -711,7 +844,7 @@ a.btn-secondary {
 
 .page-card-url {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--text-muted);
   /* The title above already links to the page; this is just the address it
      is at, so it stays plain text rather than a second link to the same
      place. */
@@ -721,8 +854,8 @@ a.btn-secondary {
 pre {
   padding: 0.75rem 1rem;
   overflow-x: auto;
-  background-color: #fcfcfc;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 0.25rem;
 }
 
@@ -737,8 +870,8 @@ pre {
 }
 
 .instruction-box {
-  background-color: #fcfcfc;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 0.25rem;
 }
 
@@ -789,7 +922,7 @@ pre {
     min-height: 100dvh;
     margin: 0;
     padding: 0;
-    background-color: #fafafa;
+    background-color: var(--bg);
   }
 
   body.auth .auth-aside {
@@ -1458,6 +1591,12 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .theme-toggle,
+  .theme-toggle::before,
+  .theme-toggle::after {
+    transition: none;
+  }
+
   .auth-stars {
     animation: none;
   }
