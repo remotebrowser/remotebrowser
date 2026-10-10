@@ -5,6 +5,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { getUser, findOrCreateUser, revokeSessions, setPersonalWorkspaceId, recordSigninCode, consumeSigninCode } =
   await import('./users.js');
+const { deleteExpiredSigninCodes } = await import('./users.js');
 const { generateShortId } = await import('../id.js');
 const { createNonce } = await import('../auth/nonce.js');
 const { createWorkspace } = await import('./workspaces.js');
@@ -131,4 +132,30 @@ test('a code is single-use: the second consume fails', async () => {
     data: { email: 'user@example.com' }
   });
   assert.equal((await consumeSigninCode({ token, email: 'user@example.com' })).error, 'INVALID_CODE');
+});
+
+test('deleteExpiredSigninCodes removes only expired codes', async () => {
+  const live = await seedCode('live@example.com');
+  const stale = createNonce('stale@example.com');
+  await recordSigninCode({ token: stale.token, email: 'stale@example.com', expires: Date.now() - 1000 });
+
+  assert.deepEqual(await deleteExpiredSigninCodes(), { data: 1 });
+  assert.deepEqual(await consumeSigninCode({ token: live, email: 'live@example.com' }), {
+    data: { email: 'live@example.com' }
+  });
+  assert.equal((await consumeSigninCode({ token: stale.token, email: 'stale@example.com' })).error, 'INVALID_CODE');
+});
+
+test('deleteExpiredSigninCodes deletes at most the limit per call, oldest first', async () => {
+  const now = Date.now();
+  const tokens = [];
+  for (const [index, age] of [3000, 2000, 1000].entries()) {
+    const { token } = createNonce(`u${index}@example.com`);
+    tokens.push(token);
+    await recordSigninCode({ token, email: `u${index}@example.com`, expires: now - age });
+  }
+
+  assert.deepEqual(await deleteExpiredSigninCodes({ now, limit: 2 }), { data: 2 });
+  assert.deepEqual(await deleteExpiredSigninCodes({ now, limit: 2 }), { data: 1 });
+  assert.deepEqual(await deleteExpiredSigninCodes({ now, limit: 2 }), { data: 0 });
 });
