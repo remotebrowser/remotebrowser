@@ -320,6 +320,11 @@ a.btn-danger {
   background-color: #b1271b;
 }
 
+.btn-danger:disabled {
+  background-color: #e0a5a0;
+  cursor: not-allowed;
+}
+
 .danger {
   background-color: #fdecea;
   color: #b1271b;
