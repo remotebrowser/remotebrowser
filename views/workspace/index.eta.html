@@ -6,11 +6,8 @@ include('/partials/breadcrumbs', it) %>
     <h2>Browser</h2>
     <%~ include('/partials/browser-instances-table', it) %>
     <div class="browser-table-actions">
-      <% if (it.capacity.atCapacity) { %>
-      <span class="btn-primary" aria-disabled="true">Launch a browser</span>
-      <% } else { %>
       <a href="/browsers/launch" class="btn-primary">Launch a browser</a>
-      <% } %> <% if (it.hasAnyBrowsers) { %>
+      <% if (it.hasAnyBrowsers) { %>
       <a href="/browsers">Show all browsers</a>
       <% } %>
     </div>

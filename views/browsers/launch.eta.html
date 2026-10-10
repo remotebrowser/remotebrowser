@@ -3,12 +3,7 @@ include('/partials/breadcrumbs', it) %>
 <main>
   <article>
     <h1>Launch a browser</h1>
-    <% if (it.capacity && it.capacity.atCapacity) { %>
-    <div role="alert" class="danger">
-      This workspace has reached its limit of <%= it.capacity.limit %> browsers. Wait for an existing one to finish
-      before launching another.
-    </div>
-    <% } else { %> <% if (it.error) { %>
+    <% if (it.error) { %>
     <div role="alert" class="danger"><%= it.error %></div>
     <% } %>
     <form method="post" action="/browsers/launch" class="page-form">
@@ -33,6 +28,5 @@ include('/partials/breadcrumbs', it) %>
       </label>
       <button type="submit" class="btn-primary">Launch</button>
     </form>
-    <% } %>
   </article>
 </main>

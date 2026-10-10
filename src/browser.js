@@ -1,22 +1,9 @@
 import { consola } from 'consola/basic';
-import { config } from './config.js';
 import { createBrowserMonitor } from './workers/monitor.js';
 import { browserCdpUrl, browserExists } from './fleet.js';
 import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './models/browsers.js';
 
-// Shared browser logic: capacity, status transitions, and the monitor registry.
-
-// Only 'terminated' frees a slot; starting/running/error still hold one.
-const countActiveBrowsers = (instances) => instances.filter((instance) => instance.status !== 'terminated').length;
-
-const browserLimitFor = (workspace) => (workspace.isPersonal ? config.maxPersonalBrowsers : config.maxTeamBrowsers);
-
-/** @param {{workspace: {isPersonal: boolean}, instances: Array<{status: string}>}} params `instances` must be the full unfiltered list, even if the caller filters it for display. @returns {{used: number, limit: number, atCapacity: boolean}} */
-const describeBrowserCapacity = ({ workspace, instances }) => {
-  const limit = browserLimitFor(workspace);
-  const used = countActiveBrowsers(instances);
-  return { used, limit, atCapacity: used >= limit };
-};
+// Shared browser logic: status transitions and the monitor registry.
 
 // Pure: pick the next status from a CDP check. null means no change, so callers
 // skip the write. Failed startups stay 'starting'; 'terminated' is never revisited.
@@ -232,11 +219,4 @@ const createBrowserMonitors = ({
 
 const browserMonitors = createBrowserMonitors();
 
-export {
-  countActiveBrowsers,
-  browserLimitFor,
-  describeBrowserCapacity,
-  nextBrowserStatus,
-  browserMonitors,
-  createBrowserMonitors
-};
+export { nextBrowserStatus, browserMonitors, createBrowserMonitors };

@@ -101,10 +101,6 @@ const buildConfig = (env) => {
     errors.push(`CONTAINER_RUNTIME must be one of ${SUPPORTED_CONTAINER_RUNTIMES.join(', ')}, or unset to auto-detect`);
   }
 
-  // Max browsers per workspace; personal for one user, shared pools across team.
-  const MAX_PERSONAL_BROWSERS = Number(env.MAX_PERSONAL_BROWSERS) || 3;
-  const MAX_TEAM_BROWSERS = Number(env.MAX_TEAM_BROWSERS) || 10;
-
   // Reverse proxies in front of the app, e.g. nginx, a load balancer, or a CDN.
   // X-Forwarded-For is client-controlled, so only this many entries from the
   // right are trusted.
@@ -162,8 +158,6 @@ const buildConfig = (env) => {
     smtpUser,
     smtpPassword,
     mailConfigured,
-    maxPersonalBrowsers: MAX_PERSONAL_BROWSERS,
-    maxTeamBrowsers: MAX_TEAM_BROWSERS,
     trustedProxyHops
   });
 

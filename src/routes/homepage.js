@@ -4,7 +4,6 @@ import { createCsrfToken } from '../auth/csrf.js';
 import { requireUser } from '../middleware/auth.js';
 import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } from '../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../models/browsers.js';
-import { describeBrowserCapacity } from '../browser.js';
 
 export const routes = new Hono();
 
@@ -35,9 +34,7 @@ const renderDashboard = async (c) => {
     breadcrumbs: buildBreadcrumbs(workspace),
     browsers,
     // Counts stopped browsers too, so 'Show all browsers' has a target.
-    hasAnyBrowsers: instances.length > 0,
-    // Capacity comes from the full list, since 'error' browsers occupy slots.
-    capacity: describeBrowserCapacity({ workspace, instances })
+    hasAnyBrowsers: instances.length > 0
   });
 };
 

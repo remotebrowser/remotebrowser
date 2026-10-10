@@ -10,13 +10,8 @@ import {
   loadWorkspaceSwitcherItems
 } from '../../middleware/workspace.js';
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
-import {
-  launchBrowserInstance,
-  recordProvisionedBrowser,
-  listBrowserInstancesByWorkspace,
-  updateBrowserInstanceStatus
-} from '../../models/browsers.js';
-import { describeBrowserCapacity, browserMonitors } from '../../browser.js';
+import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
+import { browserMonitors } from '../../browser.js';
 import { startBrowser as startBrowserOnFleet } from '../../fleet.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
@@ -27,18 +22,6 @@ const INITIAL_URLS = ['https://duck.com', 'https://startpage.com', 'https://sear
 export const routes = new Hono();
 
 const generateBrowserName = () => `${randomItem(ADJECTIVES)}-${randomItem(SOLITARY_ANIMALS)}`;
-
-// Read by both GET and POST; a failed read counts as not at capacity.
-const loadCapacity = async (c) => {
-  const user = c.get('user');
-  const workspace = c.get('workspace');
-  const listResult = await listBrowserInstancesByWorkspace({
-    workspaceId: workspace.id,
-    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
-  });
-  const instances = listResult.error ? [] : listResult.data;
-  return describeBrowserCapacity({ workspace, instances });
-};
 
 // Toggles default checked; error re-renders instead keep submitted values.
 const renderBrowserLaunch = async (c, data = {}) => {
@@ -55,7 +38,6 @@ const renderBrowserLaunch = async (c, data = {}) => {
     description: '',
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
-    capacity: null,
     ...data
   });
 };
@@ -69,9 +51,7 @@ const renderBrowserLaunchError = (c, body, error) =>
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers)
   });
 
-routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) =>
-  c.html(renderBrowserLaunch(c, { capacity: await loadCapacity(c) }))
-);
+routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) => c.html(await renderBrowserLaunch(c)));
 
 // Post-response only: may not throw, and navigate/startMonitor are injectable for tests.
 const startBrowser = async ({
@@ -134,12 +114,6 @@ const handleLaunch = async (c) => {
   const description = formString(body.description).trim();
   if (description.length > 140) {
     return c.html(renderBrowserLaunchError(c, body, 'The description must be 140 characters or fewer.'), 400);
-  }
-
-  // Re-checked here; the disabled button is a courtesy, not a boundary.
-  const capacity = await loadCapacity(c);
-  if (capacity.atCapacity) {
-    return c.html(renderBrowserLaunch(c, { capacity }), 409);
   }
 
   const user = c.get('user');

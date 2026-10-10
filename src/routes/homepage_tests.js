@@ -4,7 +4,6 @@ import { Hono } from 'hono';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
 
-const { config } = await import('../config.js');
 const { createSessionCookie } = await import('../auth/session.js');
 const { routes } = await import('./homepage.js');
 const { findOrCreateUser } = await import('../models/users.js');
@@ -160,27 +159,6 @@ test('GET / shows only starting or running browsers in its table', async () => {
   assert.doesNotMatch(body, /quiet-owl/, 'error does not belong on the dashboard');
   assert.doesNotMatch(body, /gone-lynx/, 'terminated does not belong on the dashboard');
   assert.match(body, /href="\/browsers">Show all browsers/, 'the full list still has all four');
-  // Capacity counts error instances too, from the full list, not the table.
-  assert.match(body, new RegExp(`Using 3 of ${config.maxPersonalBrowsers} browsers`));
-});
-
-test('GET / shows a capacity notice and disables the launch link once at the limit', async () => {
-  const workspaceId = await makeUser();
-  for (let i = 0; i < config.maxPersonalBrowsers; i += 1) {
-    await launchBrowserInstance({
-      workspaceId,
-      userId,
-      browserName: `browser-${i}`,
-      browserDescription: ''
-    });
-  }
-
-  const res = await setupApp().request('/', { headers: { cookie: sessionCookie() } });
-  assert.equal(res.status, 200);
-  const body = await res.text();
-  assert.match(body, new RegExp(`Using ${config.maxPersonalBrowsers} of ${config.maxPersonalBrowsers} browsers`));
-  assert.match(body, /span class="btn-primary" aria-disabled="true">Launch a browser</);
-  assert.doesNotMatch(body, /href="\/browsers\/launch"/);
 });
 
 // Zero active browsers differs from zero total; still show the "all" link.
