@@ -4,7 +4,7 @@ import { createCsrfToken } from '../../auth/csrf.js';
 import { requireUser } from '../../middleware/auth.js';
 import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } from '../../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
-import { scheduleBrowserStatusCheck, describeBrowserCapacity } from '../../browser.js';
+import { describeBrowserCapacity } from '../../browser.js';
 
 export const routes = new Hono();
 
@@ -23,8 +23,6 @@ const renderBrowsers = async (c) => {
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const instances = listResult.error ? [] : listResult.data;
-  // Keep the workspace's 13s status check scheduled.
-  scheduleBrowserStatusCheck({ workspaceId: workspace.id });
   const browsers = instances.map(summarizeBrowserInstance);
   return eta.render('browsers/index', {
     email: user.email,

@@ -107,6 +107,21 @@ const deleteBrowserInstance = async ({ workspaceId, browserInstanceId }) => {
   return { data: r.rowCount > 0 };
 };
 
+// Every browser that has a fleet id, across all workspaces: the monitors to
+// restore at startup. Unprovisioned rows have nothing to attach to.
+const listProvisionedBrowserInstances = async () => {
+  const r = await (
+    await db()
+  ).query("SELECT id, workspace_id, internal_browser_id FROM browser_instances WHERE internal_browser_id <> ''");
+  return {
+    data: r.rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      browserInstanceId: row.id,
+      internalBrowserId: row.internal_browser_id
+    }))
+  };
+};
+
 const listBrowserInstancesByWorkspace = async ({ workspaceId, personalWorkspaceRepair }) => {
   await ensureWorkspaceForRepair(workspaceId, personalWorkspaceRepair);
   const r = await (
@@ -147,6 +162,7 @@ export {
   updateBrowserInstanceStatus,
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
+  listProvisionedBrowserInstances,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
   browserIdForHandle

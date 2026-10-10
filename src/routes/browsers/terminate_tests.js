@@ -13,6 +13,7 @@ const { findOrCreateUser } = await import('../../models/users.js');
 const { ensurePersonalWorkspace, createWorkspace, createCollaborator } = await import('../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, getBrowserInstance, browserIdForHandle } =
   await import('../../models/browsers.js');
+const { browserMonitors } = await import('../../browser.js');
 const { closeDatabase } = await import('../../db/database.js');
 
 test.afterEach(async () => closeDatabase());
@@ -246,6 +247,63 @@ test('POST /browsers/:browserId/terminate stops the fleet browser, revokes the h
     assert.equal(resolved.data, null, 'the public handle must be revoked');
   } finally {
     restore();
+  }
+});
+
+// Spies on the registry for one test; the real one would spawn workers.
+const spyOnMonitorStop = (events) => {
+  const original = browserMonitors.stopBrowserMonitor;
+  browserMonitors.stopBrowserMonitor = async ({ internalBrowserId }) => {
+    events.push(`monitor-stop:${internalBrowserId}`);
+    return { data: true };
+  };
+  return () => {
+    browserMonitors.stopBrowserMonitor = original;
+  };
+};
+
+test('POST /browsers/:browserId/terminate stops the monitor only after the fleet stopped the browser', async () => {
+  const workspaceId = await makeUser();
+  const { publicId, internalBrowserId } = await makeRunningBrowser(workspaceId);
+  const events = [];
+  const restoreMonitor = spyOnMonitorStop(events);
+  const { restore } = stubFetchByRoute([
+    {
+      match: /\/api\/v1\/browsers\//,
+      responses: [
+        () => {
+          events.push('fleet-stop');
+          return new Response(null, { status: 204 });
+        }
+      ]
+    }
+  ]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter' });
+    assert.equal(res.status, 303);
+    assert.deepEqual(events, ['fleet-stop', `monitor-stop:${internalBrowserId}`]);
+  } finally {
+    restore();
+    restoreMonitor();
+  }
+});
+
+test('POST /browsers/:browserId/terminate keeps the monitor when the fleet fails to stop the browser', async () => {
+  const workspaceId = await makeUser();
+  const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
+  const events = [];
+  const restoreMonitor = spyOnMonitorStop(events);
+  const { restore } = stubFetchByRoute([
+    { match: /\/api\/v1\/browsers\//, responses: [() => new Response(null, { status: 500 })] }
+  ]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter' });
+    assert.equal(res.status, 400);
+    assert.deepEqual(events, [], 'a still-running browser keeps its monitor');
+    assert.ok((await getBrowserInstance({ workspaceId, browserInstanceId })).data, 'the instance is kept');
+  } finally {
+    restore();
+    restoreMonitor();
   }
 });
 

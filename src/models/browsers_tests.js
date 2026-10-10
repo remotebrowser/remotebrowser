@@ -9,6 +9,7 @@ const {
   updateBrowserInstanceStatus,
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
+  listProvisionedBrowserInstances,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
   browserIdForHandle
@@ -267,4 +268,26 @@ test('browserIdForHandle rejects malformed input and stops resolving a deleted b
   // Deleting the instance removes the handle with it.
   assert.deepEqual(await deleteBrowserInstance({ workspaceId, browserInstanceId }), { data: true });
   assert.deepEqual(await browserIdForHandle({ handle: browserHandle }), { data: null });
+});
+
+test('listProvisionedBrowserInstances returns only browsers that have a fleet id', async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const provisioned = await launchBrowserInstance({
+    workspaceId,
+    userId: ownerId,
+    browserName: 'calm-otter',
+    browserDescription: ''
+  });
+  await launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'still-starting', browserDescription: '' });
+  await recordProvisionedBrowser({
+    workspaceId,
+    browserInstanceId: provisioned.data.browserInstanceId,
+    internalBrowserId: 'br-1',
+    userId: ownerId
+  });
+
+  const listed = await listProvisionedBrowserInstances();
+  assert.deepEqual(listed.data, [
+    { workspaceId, browserInstanceId: provisioned.data.browserInstanceId, internalBrowserId: 'br-1' }
+  ]);
 });
