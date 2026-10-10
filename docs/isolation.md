@@ -1,13 +1,15 @@
 # Isolation
 
-Remote Browser runs each Google Chrome browser in a container by calling a container CLI. This isolates each browser from the others and from the host.
+Remote Browser runs each Google Chrome browser in its own container. This keeps every browser isolated from the others and from the host.
 
-It uses either [Podman](https://podman.io) or [Docker](https://www.docker.com). Set `CONTAINER_RUNTIME` to `podman` or `docker`, or leave it unset to let the app auto-detect ([Podman](https://podman.io) first, then [Docker](https://www.docker.com)). The chosen CLI must be installed, and on `PATH` for the user who runs the app.
+Each container starts empty and holds only the session of the browser it runs. Users reach their own browsers through the app, and one user cannot reach another user's browsers.
 
-At startup, the app checks the runtime with its `info` command. If the runtime is not reachable, the app logs the failure and the server still starts, but browsers cannot be provisioned until the runtime is reachable.
+![Isolation](isolation.jpg)
 
-Browser containers are named `chrome-<browser-id>` and started with `--rm`, so the runtime removes them when the browser is terminated.
+The diagram shows three users on a single Remote Browser system. Alice is a software engineer who needs to read documentation for an internal company service, research different technical trade-offs, and test the apps she is working on. She starts three browsers and uses them at the same time.
 
-## Remote runtime
+Meanwhile, Bob works in accounting and is happy automating his workflow with only a single browser.
 
-By default, the app talks to the local runtime. For a remote [Podman](https://podman.io) socket, set `CONTAINER_HOST` (for example `unix:///run/podman.sock`); the app then runs every command as `podman --remote`. For [Docker](https://www.docker.com), set `DOCKER_HOST` instead. In a containerized deployment, mount the runtime socket into the app container and point the matching variable at its path inside the container.
+For product research, Charlie needs to remote-control two different browsers while on the go. He accesses them using his LLM-powered assistants through Telegram.
+
+Each browser is a separate container, so what one user does inside their browser cannot affect any other browser running on the same host.
