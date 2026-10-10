@@ -40,6 +40,13 @@ test('GET /tagline.js serves the script as JavaScript', async () => {
   assert.match(res.headers.get('content-type'), /^text\/javascript/);
 });
 
+test('GET /theme.js serves the script as JavaScript', async () => {
+  const app = setupApp();
+  const res = await app.request('/theme.js');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/javascript/);
+});
+
 test('GET /terms serves the terms page as HTML', async () => {
   const app = setupApp();
   const res = await app.request('/terms');

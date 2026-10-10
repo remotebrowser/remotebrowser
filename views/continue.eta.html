@@ -1,6 +1,9 @@
 <% layout('layout', { title: 'Complete Sign In', bodyClass: 'auth' }) %> <%~ include('partials/auth-aside') %>
 <main class="signin-main">
-  <h1 class="auth-brand">Remote Browser</h1>
+  <div class="auth-head">
+    <h1 class="auth-brand">Remote Browser</h1>
+    <%~ include('partials/theme-toggle') %>
+  </div>
   <div class="signin-panel">
     <h2>Almost there</h2>
     <% if (it.linkInvalid) { %>
