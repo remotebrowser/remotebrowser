@@ -7,6 +7,7 @@ import { checkBrowserFleetHealth } from './fleet.js';
 import { containers } from './container.js';
 import { mountCdpRelay } from './cdp.js';
 import { stopScreenshots } from './screenshots.js';
+import { stopScreencasts } from './screencast.js';
 import { browserMonitors } from './browser.js';
 
 // Opens the database and runs migrations in every environment: Postgres when
@@ -99,6 +100,7 @@ const shutdown = async (signal) => {
   await Promise.allSettled([
     cdpRelay.close(),
     stopScreenshots(),
+    stopScreencasts(),
     browserMonitors.stopAllBrowserMonitors(),
     shutdownTelemetry(),
     closeDatabase()

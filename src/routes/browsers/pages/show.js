@@ -11,7 +11,8 @@ import { getBrowserInstanceByPublicId } from '../../../models/browsers.js';
 
 export const routes = new Hono();
 
-const renderPage = async (c) => {
+// Shared with live.js, which needs the same data for a different template.
+export const renderPage = async (c, template = 'browsers/pages/show') => {
   const user = c.get('user');
   const workspace = c.get('workspace');
   const publicId = c.req.param('browserId');
@@ -24,7 +25,7 @@ const renderPage = async (c) => {
   if (result.error || !result.data) {
     return null;
   }
-  return eta.render('browsers/pages/show', {
+  return eta.render(template, {
     email: user.email,
     csrfToken: createCsrfToken(c),
     workspace,
@@ -33,7 +34,9 @@ const renderPage = async (c) => {
     browser: result.data,
     pageId,
     // Mirrors cdpUrl gating: a stale pageId simply renders a broken image.
-    pageViewUrl: result.data.internalBrowserId ? `/browsers/${result.data.publicId}/pages/${pageId}/view` : null
+    pageViewUrl: result.data.internalBrowserId ? `/browsers/${result.data.publicId}/pages/${pageId}/view` : null,
+    pageLiveUrl: result.data.internalBrowserId ? `/browsers/${result.data.publicId}/pages/${pageId}/live` : null,
+    pageFrameUrl: result.data.internalBrowserId ? `/browsers/${result.data.publicId}/pages/${pageId}/frame` : null
   });
 };
 

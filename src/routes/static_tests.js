@@ -33,6 +33,13 @@ test('GET /htmx.min.js serves the script as JavaScript', async () => {
   assert.match(res.headers.get('content-type'), /^text\/javascript/);
 });
 
+test('GET /screencast.js serves the script as JavaScript', async () => {
+  const app = setupApp();
+  const res = await app.request('/screencast.js');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/javascript/);
+});
+
 test('GET /tagline.js serves the script as JavaScript', async () => {
   const app = setupApp();
   const res = await app.request('/tagline.js');
