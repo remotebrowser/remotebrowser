@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 
-// Tokens verify only because requireUser skips RS256; config is dummy.
+// requireUser skips RS256 checks here, so a dummy config is enough.
 process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { createSessionCookie } = await import('../../../auth/session.js');
-const { routes } = await import('./show.js');
+const { routes } = await import('./live.js');
 const { findOrCreateUser } = await import('../../../models/users.js');
 const { ensurePersonalWorkspace } = await import('../../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser } = await import('../../../models/browsers.js');
@@ -39,22 +39,22 @@ const makeUser = async () => {
   return workspace.data.workspaceId;
 };
 
-test('GET /browsers/:browserId/pages/:pageId redirects an unauthenticated visitor to /signin', async () => {
+test('GET /browsers/:browserId/pages/:pageId/live redirects an unauthenticated visitor to /signin', async () => {
   const app = setupApp();
-  const res = await app.request('/browsers/999999/pages/page1');
+  const res = await app.request('/browsers/999999/pages/page1/live');
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/signin');
 });
 
-test('GET /browsers/:browserId/pages/:pageId returns 404 when the browser does not exist', async () => {
+test('GET /browsers/:browserId/pages/:pageId/live returns 404 when the browser does not exist', async () => {
   await makeUser();
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request('/browsers/999998/pages/page1', { headers: { cookie: `session=${cookie}` } });
+  const res = await app.request('/browsers/999998/pages/page1/live', { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 404);
 });
 
-test('GET /browsers/:browserId/pages/:pageId renders the live view for a ready browser', async () => {
+test('GET /browsers/:browserId/pages/:pageId/live renders the screencast canvas for a ready browser', async () => {
   const workspaceId = await makeUser();
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -72,23 +72,22 @@ test('GET /browsers/:browserId/pages/:pageId renders the live view for a ready b
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${launched.data.publicId}/pages/page1`, {
+  const res = await app.request(`/browsers/${launched.data.publicId}/pages/page1/live`, {
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /aria-current="page">page1/);
-  assert.match(body, new RegExp(`<a href="/browsers/${launched.data.publicId}/pages">Pages</a>`));
   assert.match(
     body,
     new RegExp(
-      `<img\\s+class="page-screenshot"\\s+src="/browsers/${launched.data.publicId}/pages/page1/view"\\s+alt="Live view of this page"\\s+hx-get="/browsers/${launched.data.publicId}/pages/page1/live"\\s+hx-trigger="load"\\s+hx-select="#page-live-view"\\s+hx-swap="outerHTML"`
+      `<div id="page-live-view">\\s*<canvas\\s+class="page-screenshot"[^>]*data-frame-url="/browsers/${launched.data.publicId}/pages/page1/frame"`
     )
   );
-  assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
+  assert.match(body, /<script src="\/screencast\.js"><\/script>\s*<\/div>/);
 });
 
-test('GET /browsers/:browserId/pages/:pageId shows a not-ready message while the browser is still starting', async () => {
+test('GET /browsers/:browserId/pages/:pageId/live shows a not-ready message while the browser is still starting', async () => {
   const workspaceId = await makeUser();
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -96,27 +95,27 @@ test('GET /browsers/:browserId/pages/:pageId shows a not-ready message while the
     browserName: 'calm-otter',
     browserDescription: ''
   });
-  // Left 'starting': recordProvisionedBrowser never ran, so internalBrowserId is empty.
+  // Stays 'starting', so internalBrowserId is empty.
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${launched.data.publicId}/pages/page1`, {
+  const res = await app.request(`/browsers/${launched.data.publicId}/pages/page1/live`, {
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.doesNotMatch(body, /page-screenshot/);
+  assert.doesNotMatch(body, /page-live-view/);
   assert.match(
     body,
     /id="browser-page-starting-notice">This page's live view will appear here once the browser is ready\./
   );
 });
 
-test('GET /browsers/:browserId/pages/:pageId redirects to / and clears a stale active workspace', async () => {
+test('GET /browsers/:browserId/pages/:pageId/live redirects to / and clears a stale active workspace', async () => {
   await makeUser();
   const app = setupApp();
   const cookie = makeSessionCookie({ activeWorkspaceId: 3333 });
-  const res = await app.request('/browsers/999999/pages/page1', { headers: { cookie: `session=${cookie}` } });
+  const res = await app.request('/browsers/999999/pages/page1/live', { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/');
 });
