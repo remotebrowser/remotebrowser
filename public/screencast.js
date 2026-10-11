@@ -9,10 +9,12 @@
   // Lets the server skip frames we already drew.
   let seq = 0;
 
+  const MAX_PIXEL_RATIO = 2;
+
   // Caps the rate at 4 fps even if the browser repaints faster than 60 Hz.
   const MIN_FRAME_GAP = 250;
 
-  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const pause =(ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const draw = async (blob) => {
     const bitmap = await createImageBitmap(blob);
@@ -33,8 +35,7 @@
       }
       const startedAt = performance.now();
       try {
-        // The server resizes to the laid-out width in device pixels, so drawing needs no scaling.
-        const width = Math.round(canvas.clientWidth * window.devicePixelRatio);
+        const width = Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
         const response = await fetch(`${frameUrl}?after=${seq}&w=${width}`, { cache: 'no-store' });
         if (response.status === 200 && response.headers.get('Content-Type') === 'image/jpeg') {
           await draw(await response.blob());
