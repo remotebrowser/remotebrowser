@@ -16,7 +16,7 @@ const browserExampleBody = `  const [context] = browser.contexts();
 // copied source joins them back into one block, so what the visitor reads and
 // what they paste differ only in the masked CDP URL.
 const INSTRUCTION_PREAMBLE = `Use the reference code below to write and run a Playwright script
-that connects to this browser over CDP.  Navigate to Kagi News and
+that connects to this browser over CDP.  Navigate to SciURLs and
 extract 7 random headlines.
 
 Choose Node.js or Python, whichever is available. Work step by step:
