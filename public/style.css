@@ -822,6 +822,12 @@ a.btn-secondary {
   border-radius: 0.25rem;
 }
 
+/* The live view fills the layout width, so the width the page asks the server
+   for does not depend on the size of the last frame. */
+#page-live-view .page-screenshot {
+  width: 100%;
+}
+
 /* auto-fill/minmax rather than a fixed column count: as many 200px-or-wider
    cards fit the viewport, wrapping to fewer on a narrow screen, with no
    breakpoint needed. */

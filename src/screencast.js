@@ -1,4 +1,5 @@
 import { consola } from 'consola/basic';
+import { Jimp, JimpMime } from 'jimp';
 import { WebSocket } from 'ws';
 import { browserCdpUrl } from './fleet.js';
 import { withCdpSession } from './cdp.js';
@@ -75,6 +76,26 @@ const ackFrame = (entry) => {
   }
   entry.unacked = null;
   entry.send('Page.screencastFrameAck', { sessionId: frameId }, entry.sessionId).catch(() => {});
+};
+
+// Viewers share one frame, so each width is resized once per frame.
+const resizeFrame = async (frame, width) => {
+  if (!frame.resized) {
+    frame.resized = new Map();
+  }
+  let pending = frame.resized.get(width);
+  if (!pending) {
+    pending = (async () => {
+      const image = await Jimp.read(frame.data);
+      // Enlarging would only blur the frame.
+      if (width < image.width) {
+        image.resize({ w: width });
+      }
+      return image.getBuffer(JimpMime.jpeg, { quality: SCREENCAST_OPTIONS.quality });
+    })();
+    frame.resized.set(width, pending);
+  }
+  return pending;
 };
 
 const publishFrame = (entry, data) => {
@@ -242,4 +263,4 @@ const stopScreencasts = async () => {
   );
 };
 
-export { nextFrame, stopScreencasts, cache, SCREENCAST_OPTIONS };
+export { nextFrame, resizeFrame, stopScreencasts, cache, SCREENCAST_OPTIONS };

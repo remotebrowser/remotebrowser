@@ -33,7 +33,9 @@
       }
       const startedAt = performance.now();
       try {
-        const response = await fetch(`${frameUrl}?after=${seq}`, { cache: 'no-store' });
+        // The server resizes to the laid-out width in device pixels, so drawing needs no scaling.
+        const width = Math.round(canvas.clientWidth * window.devicePixelRatio);
+        const response = await fetch(`${frameUrl}?after=${seq}&w=${width}`, { cache: 'no-store' });
         if (response.status === 200 && response.headers.get('Content-Type') === 'image/jpeg') {
           await draw(await response.blob());
           seq = Number(response.headers.get('X-Frame-Seq')) || seq;
