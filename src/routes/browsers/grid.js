@@ -8,7 +8,6 @@ import {
   loadWorkspaceSwitcherItems
 } from '../../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
-import { describeBrowserCapacity } from '../../browser.js';
 
 export const routes = new Hono();
 
@@ -36,7 +35,6 @@ const renderGrid = async (c) => {
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, 'Grid'),
     view: 'grid',
     browsers: instances.map(summarizeBrowserInstance),
-    capacity: describeBrowserCapacity({ workspace, instances }),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // A new value every poll so the browser reloads the thumbnail.

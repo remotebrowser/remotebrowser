@@ -1,9 +1,4 @@
-<% if (it.capacity) { %>
-<p class="form-note">
-  Using <%= it.capacity.used %> of <%= it.capacity.limit %> browsers in this workspace<% if (it.capacity.atCapacity) {
-  %> &mdash; at capacity<% } %>.
-</p>
-<% } %> <% if (it.browsers.length === 0) { %>
+<% if (it.browsers.length === 0) { %>
 <p>No browsers yet.</p>
 <% } else { %>
 <table class="roster-table">

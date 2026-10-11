@@ -419,29 +419,6 @@ describe('smtp', () => {
   });
 });
 
-describe('browser capacity limits', () => {
-  const readLimits = (env) => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        '-e',
-        "const c = require('./config').config; process.stdout.write(JSON.stringify([c.maxPersonalBrowsers, c.maxTeamBrowsers]))"
-      ],
-      { cwd: __dirname, env: { ...process.env, ...BASE_ENV, ...env } }
-    );
-    assert.equal(result.status, 0);
-    return JSON.parse(result.stdout.toString());
-  };
-
-  test('defaults to 3 personal and 10 team browsers when unset', () => {
-    assert.deepEqual(readLimits({ MAX_PERSONAL_BROWSERS: '', MAX_TEAM_BROWSERS: '' }), [3, 10]);
-  });
-
-  test('honors MAX_PERSONAL_BROWSERS and MAX_TEAM_BROWSERS when set', () => {
-    assert.deepEqual(readLimits({ MAX_PERSONAL_BROWSERS: '5', MAX_TEAM_BROWSERS: '25' }), [5, 25]);
-  });
-});
-
 describe('trustedProxyHops', () => {
   const readHops = (env) => {
     const result = spawnSync(

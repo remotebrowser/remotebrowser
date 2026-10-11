@@ -12,8 +12,6 @@ The table below lists the environment variables that the app uses in production:
 | `DATABASE_SSL_MODE`           | No       | `disable` turns off TLS to Postgres                |
 | `DATABASE_URL`                | Yes      | Postgres connection string                         |
 | `ENV`                         | No       | Telemetry environment name (default: `NODE_ENV`)   |
-| `MAX_PERSONAL_BROWSERS`       | No       | Max browsers per personal workspace (default: `3`) |
-| `MAX_TEAM_BROWSERS`           | No       | Max browsers per team workspace (default: `10`)    |
 | `NODE_ENV`                    | No       | `production` enables production mode               |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No       | OTLP endpoint for logs and traces                  |
 | `OTEL_EXPORTER_OTLP_HEADERS`  | No       | `name=value` pairs for OTLP authentication         |

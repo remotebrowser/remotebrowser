@@ -19,7 +19,6 @@ test('generateBrowserName produces varied names across calls', () => {
   assert.ok(names.size > 1);
 });
 
-const { config } = await import('../../config.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { sign } = await import('../../auth/signing.js');
 const { routes } = await import('./launch.js');
@@ -350,25 +349,6 @@ test('GET /browsers/launch renders the active shared workspace', async () => {
   assert.match(body, /name="workspace" value="3333"/);
 });
 
-test('GET /browsers/launch shows the workspace is at capacity and hides the form', async () => {
-  const workspaceId = await makeUser();
-  for (let i = 0; i < config.maxPersonalBrowsers; i += 1) {
-    await launchBrowserInstance({
-      workspaceId,
-      userId,
-      browserName: `browser-${i}`,
-      browserDescription: ''
-    });
-  }
-  const app = setupApp();
-  const cookie = makeSessionCookie();
-  const res = await app.request('/browsers/launch', { headers: { cookie: `session=${cookie}` } });
-  assert.equal(res.status, 200);
-  const body = await res.text();
-  assert.match(body, new RegExp(`reached its limit of ${config.maxPersonalBrowsers} browsers`));
-  assert.doesNotMatch(body, /<form method="post" action="\/browsers\/launch"/);
-});
-
 test('POST /browsers/launch redirects an unauthenticated visitor to /signin', async () => {
   const app = setupApp();
   const res = await app.request('/browsers/launch', { method: 'POST' });
@@ -527,36 +507,4 @@ test('POST /browsers/launch writes a browser instance scoped to the active works
   } finally {
     restore();
   }
-});
-
-// Disabled button is courtesy; server-side check stops over-limit submissions.
-test('POST /browsers/launch refuses a submission once the workspace is at capacity', async () => {
-  const workspaceId = await makeUser();
-  for (let i = 0; i < config.maxPersonalBrowsers; i += 1) {
-    await launchBrowserInstance({
-      workspaceId,
-      userId,
-      browserName: `browser-${i}`,
-      browserDescription: ''
-    });
-  }
-  const app = setupApp();
-  const csrfId = 'a'.repeat(32);
-  const cookie = makeSessionCookie();
-  const res = await app.request('/browsers/launch', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${cookie}; csrf_id=${csrfId}`
-    },
-    body: new URLSearchParams({
-      name: 'calm-otter',
-      workspace: workspaceId,
-      csrf: makeCsrfToken(csrfId)
-    }).toString()
-  });
-  assert.equal(res.status, 409);
-  assert.match(await res.text(), new RegExp(`reached its limit of ${config.maxPersonalBrowsers} browsers`));
-  const instances = await listBrowserInstancesByWorkspace({ workspaceId });
-  assert.equal(instances.data.length, config.maxPersonalBrowsers, 'a rejected submission must write nothing more');
 });

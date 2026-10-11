@@ -4,7 +4,6 @@ import { Hono } from 'hono';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
 
-const { config } = await import('../../config.js');
 const { createSessionCookie, readSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./index.js');
 const { findOrCreateUser } = await import('../../models/users.js');
@@ -119,27 +118,6 @@ test("GET /browsers renders a table of the active workspace's browser instances,
   const otterIndex = body.indexOf('calm-otter');
   assert.ok(foxIndex > -1 && otterIndex > -1, 'both browser names render');
   assert.ok(foxIndex < otterIndex, 'the newer instance (brave-fox) renders before the older one');
-});
-
-test('GET /browsers shows a capacity notice and disables the launch link once at the limit', async () => {
-  const workspaceId = await makeUser();
-  for (let i = 0; i < config.maxPersonalBrowsers; i += 1) {
-    await launchBrowserInstance({
-      workspaceId,
-      userId,
-      browserName: `browser-${i}`,
-      browserDescription: ''
-    });
-  }
-
-  const app = setupApp();
-  const cookie = makeSessionCookie();
-  const res = await app.request('/browsers', { headers: { cookie: `session=${cookie}` } });
-  assert.equal(res.status, 200);
-  const body = await res.text();
-  assert.match(body, new RegExp(`Using ${config.maxPersonalBrowsers} of ${config.maxPersonalBrowsers} browsers`));
-  assert.match(body, /span class="btn-primary" aria-disabled="true">Launch a browser</);
-  assert.doesNotMatch(body, /<a href="\/browsers\/launch"/);
 });
 
 // A page load only reads; nothing about a browser's status is written synchronously.

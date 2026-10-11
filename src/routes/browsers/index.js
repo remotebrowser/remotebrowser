@@ -4,7 +4,6 @@ import { createCsrfToken } from '../../auth/csrf.js';
 import { requireUser } from '../../middleware/auth.js';
 import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } from '../../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
-import { describeBrowserCapacity } from '../../browser.js';
 
 export const routes = new Hono();
 
@@ -33,8 +32,7 @@ const renderBrowsers = async (c) => {
     browsers,
     view: 'list',
     // Set by secureHeaders first; the inline script reads it back for CSP.
-    scriptNonce: c.get('secureHeadersNonce'),
-    capacity: describeBrowserCapacity({ workspace, instances })
+    scriptNonce: c.get('secureHeadersNonce')
   });
 };
 

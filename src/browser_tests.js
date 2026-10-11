@@ -1,59 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { countActiveBrowsers, browserLimitFor, describeBrowserCapacity, nextBrowserStatus, createBrowserMonitors } =
-  await import('./browser.js');
-const { config } = await import('./config.js');
+const { nextBrowserStatus, createBrowserMonitors } = await import('./browser.js');
 const { consola } = await import('consola/basic');
 consola.level = -999;
-
-test('countActiveBrowsers counts every non-terminated status', () => {
-  const instances = [{ status: 'starting' }, { status: 'running' }, { status: 'error' }, { status: 'terminated' }];
-  assert.equal(countActiveBrowsers(instances), 3);
-});
-
-test('countActiveBrowsers is 0 for an empty or all-terminated list', () => {
-  assert.equal(countActiveBrowsers([]), 0);
-  assert.equal(countActiveBrowsers([{ status: 'terminated' }, { status: 'terminated' }]), 0);
-});
-
-test('browserLimitFor picks the personal limit for a personal workspace', () => {
-  assert.equal(browserLimitFor({ isPersonal: true }), config.maxPersonalBrowsers);
-});
-
-test('browserLimitFor picks the team limit for a shared workspace', () => {
-  assert.equal(browserLimitFor({ isPersonal: false }), config.maxTeamBrowsers);
-});
-
-test('describeBrowserCapacity reports not at capacity while under the limit', () => {
-  const workspace = { isPersonal: true };
-  const instances = Array.from({ length: config.maxPersonalBrowsers - 1 }, () => ({ status: 'running' }));
-  const capacity = describeBrowserCapacity({ workspace, instances });
-  assert.equal(capacity.used, config.maxPersonalBrowsers - 1);
-  assert.equal(capacity.limit, config.maxPersonalBrowsers);
-  assert.equal(capacity.atCapacity, false);
-});
-
-test('describeBrowserCapacity reports at capacity once used reaches the limit', () => {
-  const workspace = { isPersonal: true };
-  const instances = Array.from({ length: config.maxPersonalBrowsers }, () => ({ status: 'running' }));
-  const capacity = describeBrowserCapacity({ workspace, instances });
-  assert.equal(capacity.atCapacity, true);
-});
-
-test('describeBrowserCapacity ignores terminated instances when checking capacity', () => {
-  const workspace = { isPersonal: true };
-  const instances = Array.from({ length: config.maxPersonalBrowsers }, () => ({ status: 'terminated' }));
-  const capacity = describeBrowserCapacity({ workspace, instances });
-  assert.equal(capacity.used, 0);
-  assert.equal(capacity.atCapacity, false);
-});
-
-test('describeBrowserCapacity uses the team limit for a shared workspace', () => {
-  const workspace = { isPersonal: false };
-  const capacity = describeBrowserCapacity({ workspace, instances: [] });
-  assert.equal(capacity.limit, config.maxTeamBrowsers);
-});
 
 test('nextBrowserStatus moves starting to running once the CDP connection succeeds', () => {
   assert.equal(nextBrowserStatus({ currentStatus: 'starting', cdpConnected: true }), 'running');
