@@ -85,7 +85,7 @@ routes.post('/', async (c) => {
   clearSigninEmailCookie(c);
   // CSRF token was for anonymous visitor; rotate before auth session.
   rotateCsrfId(c);
-  setSessionCookie(c, { publicId, email: claimEmail, issuedAt: Date.now() });
+  setSessionCookie(c, { publicId, email: claimEmail, issuedAt: Date.now(), lastActiveAt: Date.now() });
   consola.info('SIGNIN', { 'event.domain': 'user', 'user.id': id, 'user.email': claimEmail });
   return c.redirect('/', 303);
 });

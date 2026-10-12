@@ -156,6 +156,20 @@ test('currentUser rejects a session cookie older than the session TTL', async ()
   assert.deepEqual(await res.json(), { user: null });
 });
 
+test('currentUser slides the idle window by reissuing the cookie once it is stale enough', async () => {
+  const { publicId } = await makeUser();
+  const app = new Hono();
+  app.get('/who', async (c) => c.json({ user: await currentUser(c) }));
+  const lastActiveAt = Date.now() - 60 * 60 * 1000;
+  const cookie = makeSessionCookie({ publicId, lastActiveAt });
+  const res = await app.request('/who', { headers: { cookie: `session=${cookie}` } });
+  assert.match(res.headers.get('set-cookie'), /session=/);
+  const fresh = await app.request('/who', {
+    headers: { cookie: `session=${makeSessionCookie({ publicId, lastActiveAt: Date.now() })}` }
+  });
+  assert.equal(fresh.headers.get('set-cookie'), null, 'a recently active session is not reissued');
+});
+
 // A DB read failure can't be reproduced against a real, healthy embedded
 // PGlite instance - the fail-closed branch (src/middleware/auth.js:
 // "profile.error") is exercised only by this comment now, not a live test.

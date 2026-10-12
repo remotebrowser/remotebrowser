@@ -1,5 +1,5 @@
 import { consola } from 'consola/basic';
-import { readSessionCookieFrom, clearSessionCookie } from '../auth/session.js';
+import { readSessionCookieFrom, clearSessionCookie, sessionNeedsTouch, setSessionCookie } from '../auth/session.js';
 import { getUserByPublicId } from '../models/users.js';
 import { ensurePersonalWorkspace } from '../models/workspaces.js';
 
@@ -28,6 +28,11 @@ const currentUser = async (c) => {
     consola.debug('currentUser: session predates the revocation marker, clearing session');
     clearSessionCookie(c);
     return null;
+  }
+
+  // Slide the idle window only for sessions that passed every check above.
+  if (sessionNeedsTouch(session)) {
+    setSessionCookie(c, { ...session, lastActiveAt: Date.now() });
   }
 
   return {

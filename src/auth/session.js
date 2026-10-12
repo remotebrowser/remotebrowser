@@ -58,8 +58,22 @@ const createSessionCookie = (session) => encryptValue(JSON.stringify(session), s
 
 const sessionAgeMs = (session) => Date.now() - session.issuedAt;
 
+// Cookies from before the idle timeout have no lastActiveAt, so they count as last active at sign-in.
+const sessionIdleMs = (session) => Date.now() - (session.lastActiveAt ?? session.issuedAt);
+
+// Skip reissuing the cookie on every request; this is the sliding window's resolution.
+const TOUCH_INTERVAL = 10 * 60 * 1000;
+
+const sessionAbsoluteRemainingMs = (session) => config.sessionTtlSeconds * 1000 - sessionAgeMs(session);
+
+const sessionIdleRemainingMs = (session) => config.sessionIdleTtlSeconds * 1000 - sessionIdleMs(session);
+
+const toRemainingSeconds = (ms) => Math.max(0, Math.ceil(ms / 1000));
+
 const sessionRemainingSeconds = (session) =>
-  Math.max(0, Math.ceil((config.sessionTtlSeconds * 1000 - sessionAgeMs(session)) / 1000));
+  toRemainingSeconds(Math.min(sessionAbsoluteRemainingMs(session), sessionIdleRemainingMs(session)));
+
+const sessionNeedsTouch = (session) => sessionIdleMs(session) > TOUCH_INTERVAL;
 
 const readSessionCookie = (token) => {
   const plaintext = decryptValue(token, sessionCipherKeys);
@@ -85,6 +99,10 @@ const readSessionCookie = (token) => {
   if (sessionAgeMs(session) > config.sessionTtlSeconds * 1000) {
     return null;
   }
+  // Idle sessions end even when the absolute cap is far away.
+  if (sessionIdleMs(session) > config.sessionIdleTtlSeconds * 1000) {
+    return null;
+  }
   // The active workspace rides along with the credential but is not part of it:
   // an older cookie without it is still a good session, and a malformed value
   // must not cost anyone their sign-in.
@@ -102,7 +120,7 @@ const setSessionCookie = (c, session) => {
     secure: config.secureCookies,
     sameSite: 'Lax',
     path: '/',
-    // Derived from issuedAt so token refreshes don't slide the cookie expiry forward.
+    // Never past the absolute cap, which counts from issuedAt and does not slide.
     maxAge: sessionRemainingSeconds(session)
   });
 };
@@ -168,6 +186,7 @@ export {
   readSessionCookie,
   readSessionCookieFrom,
   sessionRemainingSeconds,
+  sessionNeedsTouch,
   setSessionCookie,
   setActiveWorkspace,
   clearSessionCookie,

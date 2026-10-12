@@ -123,7 +123,9 @@ const buildConfig = (env) => {
   const sessionSecret = Buffer.from(sessionSecrets[0] || 'dummy-session-secret');
   const previousSessionSecret = sessionSecrets[1] ? Buffer.from(sessionSecrets[1]) : null;
   const resourceHmacSecret = Buffer.from(env.RESOURCE_HMAC_SECRET || 'dummy-resource-hmac-secret');
-  const sessionTtlSeconds = 7 * 60 * 60;
+  // Idle expiry slides with activity; the absolute cap never does, so a busy leaked cookie still dies.
+  const sessionTtlSeconds = 14 * 24 * 60 * 60;
+  const sessionIdleTtlSeconds = 24 * 60 * 60;
   const browserFleetUrl = BROWSERFLEET_URL || null;
   // Local dev/test only, when DATABASE_URL is unset; PGlite is not installed in production.
   const pgliteDataDir = env.PGLITE_DATA_DIR || path.join(__dirname, '..', '.data', 'pglite');
@@ -145,6 +147,7 @@ const buildConfig = (env) => {
     resourceHmacSecret,
     sessionNotBefore,
     sessionTtlSeconds,
+    sessionIdleTtlSeconds,
     browserFleetUrl,
     containerImage: CONTAINER_IMAGE,
     containerHost: CONTAINER_HOST,

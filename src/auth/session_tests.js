@@ -138,7 +138,12 @@ test('readSessionCookie rejects a cookie older than the session TTL', () => {
 });
 
 test('readSessionCookie accepts a cookie still inside the session TTL', () => {
-  const fresh = { publicId: 'abcdefghi', email: 'r', issuedAt: Date.now() - (config.sessionTtlSeconds * 1000 - 5000) };
+  const fresh = {
+    publicId: 'abcdefghi',
+    email: 'r',
+    issuedAt: Date.now() - (config.sessionTtlSeconds * 1000 - 5000),
+    lastActiveAt: Date.now()
+  };
   assert.deepEqual(readSessionCookie(createSessionCookie(fresh)), fresh);
 });
 
@@ -148,14 +153,40 @@ test('readSessionCookie rejects a cookie issued in the future beyond the TTL win
   assert.deepEqual(readSessionCookie(createSessionCookie(skewed)), skewed);
 });
 
-test('sessionRemainingSeconds counts down from issuedAt rather than restarting the clock', () => {
-  const halfway = { publicId: 'abcdefghi', email: 'r', issuedAt: Date.now() - (config.sessionTtlSeconds * 1000) / 2 };
-  const remaining = sessionRemainingSeconds(halfway);
-  assert.ok(
-    Math.abs(remaining - config.sessionTtlSeconds / 2) < 5,
-    `expected about half the TTL to remain, got ${remaining}`
-  );
+test('sessionRemainingSeconds is capped by the absolute TTL even when recently active', () => {
+  const nearCap = {
+    publicId: 'abcdefghi',
+    email: 'r',
+    issuedAt: Date.now() - (config.sessionTtlSeconds - 600) * 1000,
+    lastActiveAt: Date.now()
+  };
+  const remaining = sessionRemainingSeconds(nearCap);
+  assert.ok(Math.abs(remaining - 600) < 5, `expected about 600s to remain, got ${remaining}`);
   assert.equal(sessionRemainingSeconds({ issuedAt: Date.now() - config.sessionTtlSeconds * 2000 }), 0);
+});
+
+test('sessionRemainingSeconds follows the idle window when the absolute cap is far away', () => {
+  const session = { publicId: 'abcdefghi', email: 'r', issuedAt: Date.now() - 1000, lastActiveAt: Date.now() };
+  assert.ok(Math.abs(sessionRemainingSeconds(session) - config.sessionIdleTtlSeconds) < 5);
+});
+
+test('readSessionCookie rejects an idle session that is still inside the absolute TTL', () => {
+  const idle = {
+    publicId: 'abcdefghi',
+    email: 'r',
+    issuedAt: Date.now() - 1000,
+    lastActiveAt: Date.now() - (config.sessionIdleTtlSeconds * 1000 + 1000)
+  };
+  assert.equal(readSessionCookie(createSessionCookie(idle)), null);
+});
+
+test('a cookie without lastActiveAt is idle-checked from issuedAt', () => {
+  const legacy = {
+    publicId: 'abcdefghi',
+    email: 'r',
+    issuedAt: Date.now() - (config.sessionIdleTtlSeconds * 1000 + 1000)
+  };
+  assert.equal(readSessionCookie(createSessionCookie(legacy)), null);
 });
 
 test('a session round-trips the active workspace', () => {
