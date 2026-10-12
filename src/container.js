@@ -11,7 +11,6 @@ import { generateShortId } from './id.js';
 
 const BROWSER_CONTAINER_PREFIX = 'chrome-';
 const CDP_PORT = 9222;
-const VNC_PORT = 5900;
 const DOCKER_INTERNAL_HOST = '172.17.0.1';
 
 // Unreserved URL chars only: a browser id is a path segment and must never escape it.
@@ -131,7 +130,6 @@ const createContainerClient = ({
 
   const evictPorts = (name) => {
     portCache.delete(`${name}:${CDP_PORT}`);
-    portCache.delete(`${name}:${VNC_PORT}`);
   };
 
   const launchBrowser = async () => {
@@ -139,7 +137,7 @@ const createContainerClient = ({
     const browserId = generateShortId(prefix, 8);
     const name = containerName(browserId);
     const args = ['run', '-d', '--rm', '--name', name];
-    args.push('-p', String(CDP_PORT), '-p', String(VNC_PORT), containerImage);
+    args.push('-p', `${cdpBaseHost()}::${CDP_PORT}`, containerImage);
     // Starting a container shells out and can take a while (image pull, cold
     // start), so log the attempt before it blocks to make a hang visible.
     consola.info(`Starting Google Chrome container ${name}`, {
@@ -164,7 +162,6 @@ const createContainerClient = ({
     });
     // Warm the port cache so the first CDP lookup does not race the mapping.
     await getHostPort(name, CDP_PORT);
-    await getHostPort(name, VNC_PORT);
     return { browserId };
   };
 

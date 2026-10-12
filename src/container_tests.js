@@ -35,10 +35,10 @@ const client = (overrides = {}) =>
     ...overrides
   });
 
-test('launchBrowser runs a container with the configured image and ephemeral CDP/VNC ports', async () => {
+test('launchBrowser runs a container with the configured image and an ephemeral CDP port', async () => {
   const { calls, run } = runStub({
     run: { code: 0, stdout: 'deadbeefcafe\n', stderr: '' },
-    port: (args) => ({ code: 0, stdout: args[2] === '9222' ? '0.0.0.0:32768' : '0.0.0.0:32769', stderr: '' })
+    port: { code: 0, stdout: '127.0.0.1:32768', stderr: '' }
   });
   const container = client({ run, containerImage: 'example/chrome:1' });
 
@@ -48,9 +48,24 @@ test('launchBrowser runs a container with the configured image and ephemeral CDP
   const runCall = calls.find((args) => args[0] === 'run');
   assert.equal(runCall[runCall.indexOf('--name') + 1], `chrome-${browserId}`);
   assert.equal(runCall.at(-1), 'example/chrome:1');
-  assert.deepEqual(runCall.slice(runCall.indexOf('-p')), ['-p', '9222', '-p', '5900', 'example/chrome:1']);
-  // Both port mappings are resolved up front, so the first CDP lookup cannot race them.
-  assert.equal(calls.filter((args) => args[0] === 'port').length, 2);
+  assert.deepEqual(runCall.slice(runCall.indexOf('-p')), ['-p', '127.0.0.1::9222', 'example/chrome:1']);
+  // The port mapping is resolved up front, so the first CDP lookup cannot race it.
+  assert.deepEqual(
+    calls.filter((args) => args[0] === 'port'),
+    [['port', `chrome-${browserId}`, '9222']]
+  );
+});
+
+test('launchBrowser publishes CDP only on the address the app dials', async () => {
+  const { calls, run } = runStub({
+    run: { code: 0, stdout: 'cid\n', stderr: '' },
+    port: { code: 0, stdout: '172.17.0.1:32768', stderr: '' }
+  });
+  await client({ run, cdpBaseHost: () => '172.17.0.1' }).launchBrowser();
+  const runCall = calls.find((args) => args[0] === 'run');
+  const published = runCall.filter((_arg, index) => runCall[index - 1] === '-p');
+  // Never all interfaces, and never the unused VNC port.
+  assert.deepEqual(published, ['172.17.0.1::9222']);
 });
 
 test('launchBrowser prefixes the browser id with the runtime letter', async () => {
