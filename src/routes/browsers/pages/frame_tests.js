@@ -175,8 +175,12 @@ test('GET /browsers/:browserId/pages/:pageId/frame answers 502 when the screenca
 });
 
 test('GET frame resizes the JPEG to the w query parameter', async () => {
-  const { Jimp, JimpMime } = await import('jimp');
-  const source = await new Jimp({ width: 800, height: 400, color: 0x888888ff }).getBuffer(JimpMime.jpeg);
+  const { default: sharp } = await import('sharp');
+  const source = await sharp({
+    create: { width: 800, height: 400, channels: 3, background: { r: 0x88, g: 0x88, b: 0x88 } }
+  })
+    .jpeg()
+    .toBuffer();
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID });
   seedScreencast({ frame: { seq: 5, data: source, timestamp: Date.now() } });
@@ -184,10 +188,10 @@ test('GET frame resizes the JPEG to the w query parameter', async () => {
   const cookie = `session=${makeSessionCookie()}`;
   const smaller = await app.request(`/browsers/${browserPublicId}/pages/page1/frame?w=200`, { headers: { cookie } });
   assert.equal(smaller.status, 200);
-  const meta = await Jimp.read(Buffer.from(await smaller.arrayBuffer()));
+  const meta = await sharp(Buffer.from(await smaller.arrayBuffer())).metadata();
   assert.equal(meta.width, 200);
   assert.equal(meta.height, 100);
   // A frame is never enlarged.
   const larger = await app.request(`/browsers/${browserPublicId}/pages/page1/frame?w=1600`, { headers: { cookie } });
-  assert.equal((await Jimp.read(Buffer.from(await larger.arrayBuffer()))).width, 800);
+  assert.equal((await sharp(Buffer.from(await larger.arrayBuffer())).metadata()).width, 800);
 });
