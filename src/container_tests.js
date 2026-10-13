@@ -30,7 +30,7 @@ const jsonResponse = (body, status = 200) =>
 const client = (overrides = {}) =>
   createContainerClient({
     runtime: 'podman',
-    cdpBaseHost: () => '127.0.0.1',
+    inContainer: false,
     cdpRetry: { attempts: 2, delayMs: 0, timeoutMs: 1000 },
     ...overrides
   });
@@ -56,16 +56,48 @@ test('launchBrowser runs a container with the configured image and an ephemeral 
   );
 });
 
-test('launchBrowser publishes CDP only on the address the app dials', async () => {
+test('launchBrowser publishes CDP only on loopback, never all interfaces', async () => {
   const { calls, run } = runStub({
     run: { code: 0, stdout: 'cid\n', stderr: '' },
-    port: { code: 0, stdout: '172.17.0.1:32768', stderr: '' }
+    port: { code: 0, stdout: '127.0.0.1:32768', stderr: '' }
   });
-  await client({ run, cdpBaseHost: () => '172.17.0.1' }).launchBrowser();
+  await client({ run }).launchBrowser();
   const runCall = calls.find((args) => args[0] === 'run');
   const published = runCall.filter((_arg, index) => runCall[index - 1] === '-p');
-  // Never all interfaces, and never the unused VNC port.
-  assert.deepEqual(published, ['172.17.0.1::9222']);
+  assert.deepEqual(published, ['127.0.0.1::9222']);
+});
+
+test('inside a container, CDP is dialed at the container IP first', async () => {
+  const { run } = runStub({
+    run: { code: 0, stdout: 'cid\n', stderr: '' },
+    port: { code: 0, stdout: '127.0.0.1:32768', stderr: '' },
+    inspect: { code: 0, stdout: '172.17.0.4 \n', stderr: '' }
+  });
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    return jsonResponse({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/abc-123' });
+  };
+  const container = client({ run, fetchImpl, inContainer: true });
+  const { browserId } = await container.launchBrowser();
+
+  assert.equal(await container.resolveCdpUrl(browserId), 'ws://172.17.0.4:9222/devtools/browser/abc-123');
+  assert.deepEqual(urls, ['http://172.17.0.4:9222/json/version']);
+});
+
+test('inside a container, CDP falls back to the published port when the IP is unreachable', async () => {
+  const { run } = runStub({
+    port: { code: 0, stdout: '127.0.0.1:32768', stderr: '' },
+    inspect: { code: 0, stdout: '10.88.0.5\n', stderr: '' }
+  });
+  const fetchImpl = async (url) => {
+    if (url.startsWith('http://10.88.0.5')) {
+      throw new Error('connect EHOSTUNREACH');
+    }
+    return jsonResponse({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/abc-123' });
+  };
+  const container = client({ run, fetchImpl, inContainer: true });
+  assert.equal(await container.resolveCdpUrl('Pabc12345'), 'ws://127.0.0.1:32768/devtools/browser/abc-123');
 });
 
 test('launchBrowser prefixes the browser id with the runtime letter', async () => {
