@@ -11,7 +11,6 @@ import { generateShortId } from './id.js';
 
 const BROWSER_CONTAINER_PREFIX = 'chrome-';
 const CDP_PORT = 9222;
-const DOCKER_INTERNAL_HOST = '172.17.0.1';
 
 // Unreserved URL chars only: a browser id is a path segment and must never escape it.
 const BROWSER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -98,7 +97,10 @@ const createContainerClient = ({
   run,
   fetchImpl = globalThis.fetch,
   containerImage = config.containerImage,
-  cdpBaseHost = () => (existsSync('/.dockerenv') ? DOCKER_INTERNAL_HOST : '127.0.0.1'),
+  // Inside a container the published loopback port is only reachable with host
+  // networking, and the container IP only without it (rootless Podman cannot
+  // reach it from the host namespace), so try both.
+  inContainer = existsSync('/.dockerenv') || existsSync('/run/.containerenv'),
   cdpRetry = { attempts: 10, delayMs: 1000, timeoutMs: 5000 }
 } = {}) => {
   const dialect = RUNTIMES[runtime];
@@ -128,8 +130,28 @@ const createContainerClient = ({
     return hostPort;
   };
 
+  const getContainerIp = async (name) => {
+    const key = `${name}:ip`;
+    if (portCache.has(key)) {
+      return portCache.get(key);
+    }
+    const { code, stdout } = await exec([
+      'inspect',
+      '--format',
+      '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}',
+      name
+    ]);
+    const ip = code === 0 ? stdout.trim().split(/\s+/)[0] : '';
+    if (!ip) {
+      return null;
+    }
+    portCache.set(key, ip);
+    return ip;
+  };
+
   const evictPorts = (name) => {
     portCache.delete(`${name}:${CDP_PORT}`);
+    portCache.delete(`${name}:ip`);
   };
 
   const launchBrowser = async () => {
@@ -137,7 +159,7 @@ const createContainerClient = ({
     const browserId = generateShortId(prefix, 8);
     const name = containerName(browserId);
     const args = ['run', '-d', '--rm', '--name', name];
-    args.push('-p', `${cdpBaseHost()}::${CDP_PORT}`, containerImage);
+    args.push('-p', `127.0.0.1::${CDP_PORT}`, containerImage);
     // Starting a container shells out and can take a while (image pull, cold
     // start), so log the attempt before it blocks to make a hang visible.
     consola.info(`Starting Google Chrome container ${name}`, {
@@ -160,7 +182,7 @@ const createContainerClient = ({
       'rb.runtime': runtime,
       'rb.container_id': stdout.trim()
     });
-    // Warm the port cache so the first CDP lookup does not race the mapping.
+    // Warm the cache so the first CDP lookup does not race the mapping.
     await getHostPort(name, CDP_PORT);
     return { browserId };
   };
@@ -193,12 +215,24 @@ const createContainerClient = ({
     }
   };
 
-  const getCdpBaseUrl = async (browserId) => {
-    const hostPort = await getHostPort(containerName(browserId), CDP_PORT);
-    if (!hostPort) {
-      throw new Error(`CDP port not found for ${containerName(browserId)}`);
+  // Candidate base URLs in dial order; the first that answers wins.
+  const getCdpBaseUrls = async (browserId) => {
+    const name = containerName(browserId);
+    const urls = [];
+    if (inContainer) {
+      const ip = await getContainerIp(name);
+      if (ip) {
+        urls.push(`http://${ip}:${CDP_PORT}`);
+      }
     }
-    return `http://${cdpBaseHost()}:${hostPort}`;
+    const hostPort = await getHostPort(name, CDP_PORT);
+    if (hostPort) {
+      urls.push(`http://127.0.0.1:${hostPort}`);
+    }
+    if (urls.length === 0) {
+      throw new Error(`CDP address not found for ${name}`);
+    }
+    return urls;
   };
 
   const fetchWebSocketDebuggerUrl = async (baseUrl) => {
@@ -224,9 +258,16 @@ const createContainerClient = ({
     let lastError;
     for (let attempt = 0; attempt < cdpRetry.attempts; attempt += 1) {
       try {
-        const baseUrl = await getCdpBaseUrl(browserId);
-        const wsUrl = await fetchWebSocketDebuggerUrl(baseUrl);
-        return rewriteWsUrl(wsUrl, baseUrl);
+        const baseUrls = await getCdpBaseUrls(browserId);
+        let candidateError;
+        for (const baseUrl of baseUrls) {
+          try {
+            return rewriteWsUrl(await fetchWebSocketDebuggerUrl(baseUrl), baseUrl);
+          } catch (error) {
+            candidateError = error;
+          }
+        }
+        throw candidateError;
       } catch (error) {
         lastError = error;
         if (attempt < cdpRetry.attempts - 1) {
