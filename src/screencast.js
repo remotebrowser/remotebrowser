@@ -78,22 +78,27 @@ const ackFrame = (entry) => {
   entry.send('Page.screencastFrameAck', { sessionId: frameId }, entry.sessionId).catch(() => {});
 };
 
-// Viewers share one frame, so each width is resized once per frame.
-const resizeFrame = async (frame, width) => {
-  if (!frame.resized) {
-    frame.resized = new Map();
+// WebP is about a third smaller than JPEG, but Chrome only streams JPEG or PNG.
+const WEBP_QUALITY = 60;
+
+// Viewers share one frame, so each width is encoded once per frame. No width keeps the size.
+const encodeFrame = async (frame, width = 0) => {
+  if (!frame.encoded) {
+    frame.encoded = new Map();
   }
-  let pending = frame.resized.get(width);
+  let pending = frame.encoded.get(width);
   if (!pending) {
-    pending = (async () => {
-      // Enlarging would only blur the frame, so never scale past the source width.
-      // Nearest neighbour is the cheapest kernel; fastShrinkOnLoad must be off for it to apply to JPEG.
-      return sharp(frame.data)
-        .resize({ width, kernel: sharp.kernel.nearest, fastShrinkOnLoad: false, withoutEnlargement: true })
-        .jpeg({ quality: SCREENCAST_OPTIONS.quality })
-        .toBuffer();
-    })();
-    frame.resized.set(width, pending);
+    const image = sharp(frame.data);
+    // Enlarging would only blur the frame, so never scale past the source width.
+    // Nearest neighbour is the cheapest kernel; fastShrinkOnLoad must be off for it to apply to JPEG.
+    pending = (
+      width > 0
+        ? image.resize({ width, kernel: sharp.kernel.nearest, fastShrinkOnLoad: false, withoutEnlargement: true })
+        : image
+    )
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+    frame.encoded.set(width, pending);
   }
   return pending;
 };
@@ -263,4 +268,4 @@ const stopScreencasts = async () => {
   );
 };
 
-export { nextFrame, resizeFrame, stopScreencasts, cache, SCREENCAST_OPTIONS };
+export { nextFrame, encodeFrame, stopScreencasts, cache, SCREENCAST_OPTIONS };
