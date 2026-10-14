@@ -5,8 +5,14 @@ import { Hono } from 'hono';
 process.env.PGLITE_DATA_DIR = 'memory://';
 process.env.BROWSERFLEET_URL = 'http://fleet.test';
 
-const FAKE_JPEG = Buffer.from('not a real jpeg, just something to round-trip', 'utf8');
 const BROWSER_ID = 'br-1';
+
+const { default: sharp } = await import('sharp');
+
+// The route re-encodes every frame, so the test frame must be a real image.
+const FAKE_JPEG = await sharp({ create: { width: 800, height: 400, channels: 3, background: '#888' } })
+  .jpeg()
+  .toBuffer();
 
 const { createSessionCookie } = await import('../../../auth/session.js');
 const { routes } = await import('./frame.js');
@@ -107,7 +113,7 @@ test('GET /browsers/:browserId/pages/:pageId/frame answers 503 while the browser
   assert.equal(res.status, 503);
 });
 
-test('GET /browsers/:browserId/pages/:pageId/frame returns the latest JPEG frame with its sequence number', async () => {
+test('GET /browsers/:browserId/pages/:pageId/frame returns the latest frame as WebP with its sequence number', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID });
   seedScreencast();
@@ -118,10 +124,12 @@ test('GET /browsers/:browserId/pages/:pageId/frame returns the latest JPEG frame
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('content-type'), 'image/jpeg');
+  assert.equal(res.headers.get('content-type'), 'image/webp');
   assert.equal(res.headers.get('x-frame-seq'), '5');
   assert.equal(res.headers.get('cache-control'), 'no-store');
-  assert.deepEqual(Buffer.from(await res.arrayBuffer()), FAKE_JPEG);
+  const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.equal(meta.format, 'webp');
+  assert.equal(meta.width, 800);
 });
 
 test('GET /browsers/:browserId/pages/:pageId/frame holds the request until a newer frame arrives', async () => {
@@ -174,16 +182,10 @@ test('GET /browsers/:browserId/pages/:pageId/frame answers 502 when the screenca
   assert.equal(res.status, 502);
 });
 
-test('GET frame resizes the JPEG to the w query parameter', async () => {
-  const { default: sharp } = await import('sharp');
-  const source = await sharp({
-    create: { width: 800, height: 400, channels: 3, background: { r: 0x88, g: 0x88, b: 0x88 } }
-  })
-    .jpeg()
-    .toBuffer();
+test('GET frame resizes the frame to the w query parameter', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID });
-  seedScreencast({ frame: { seq: 5, data: source, timestamp: Date.now() } });
+  seedScreencast();
   const app = setupApp();
   const cookie = `session=${makeSessionCookie()}`;
   const smaller = await app.request(`/browsers/${browserPublicId}/pages/page1/frame?w=200`, { headers: { cookie } });

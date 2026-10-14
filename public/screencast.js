@@ -37,7 +37,7 @@
       try {
         const width = Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
         const response = await fetch(`${frameUrl}?after=${seq}&w=${width}`, { cache: 'no-store' });
-        if (response.status === 200 && response.headers.get('Content-Type') === 'image/jpeg') {
+        if (response.status === 200 && response.headers.get('Content-Type')?.startsWith('image/')) {
           await draw(await response.blob());
           seq = Number(response.headers.get('X-Frame-Seq')) || seq;
           await pause(MIN_FRAME_GAP - (performance.now() - startedAt));

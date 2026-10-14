@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { requireUser } from '../../../middleware/auth.js';
 import { requireWorkspaceRole } from '../../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId } from '../../../models/browsers.js';
-import { nextFrame, resizeFrame, SCREENCAST_OPTIONS } from '../../../screencast.js';
+import { nextFrame, encodeFrame, SCREENCAST_OPTIONS } from '../../../screencast.js';
 
 export const routes = new Hono();
 
@@ -40,15 +40,16 @@ routes.get('/:browserId/pages/:pageId/frame', requireUser, requireWorkspaceRole(
   }
   // The client paints the image as is, so it must arrive at the width the page shows it.
   const width = Number.parseInt(c.req.query('w') ?? '', 10);
-  let body = result.data.data;
-  if (Number.isSafeInteger(width) && width > 0) {
-    try {
-      body = await resizeFrame(result.data, Math.min(width, SCREENCAST_OPTIONS.maxWidth));
-    } catch {
-      return c.text('The live view is unavailable.', 502);
-    }
+  let body;
+  try {
+    body = await encodeFrame(
+      result.data,
+      Number.isSafeInteger(width) && width > 0 ? Math.min(width, SCREENCAST_OPTIONS.maxWidth) : 0
+    );
+  } catch {
+    return c.text('The live view is unavailable.', 502);
   }
   c.header('X-Frame-Seq', String(result.data.seq));
   // The response body needs a Uint8Array with its own ArrayBuffer, so copy the Buffer.
-  return c.body(new Uint8Array(body), 200, { 'Content-Type': 'image/jpeg' });
+  return c.body(new Uint8Array(body), 200, { 'Content-Type': 'image/webp' });
 });
