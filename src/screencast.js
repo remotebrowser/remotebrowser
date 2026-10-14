@@ -1,5 +1,5 @@
 import { consola } from 'consola/basic';
-import { Jimp, JimpMime } from 'jimp';
+import sharp from 'sharp';
 import { WebSocket } from 'ws';
 import { browserCdpUrl } from './fleet.js';
 import { withCdpSession } from './cdp.js';
@@ -86,12 +86,12 @@ const resizeFrame = async (frame, width) => {
   let pending = frame.resized.get(width);
   if (!pending) {
     pending = (async () => {
-      const image = await Jimp.read(frame.data);
-      // Enlarging would only blur the frame.
-      if (width < image.width) {
-        image.resize({ w: width });
-      }
-      return image.getBuffer(JimpMime.jpeg, { quality: SCREENCAST_OPTIONS.quality });
+      // Enlarging would only blur the frame, so never scale past the source width.
+      // Nearest neighbour is the cheapest kernel; fastShrinkOnLoad must be off for it to apply to JPEG.
+      return sharp(frame.data)
+        .resize({ width, kernel: sharp.kernel.nearest, fastShrinkOnLoad: false, withoutEnlargement: true })
+        .jpeg({ quality: SCREENCAST_OPTIONS.quality })
+        .toBuffer();
     })();
     frame.resized.set(width, pending);
   }
