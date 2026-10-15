@@ -88,3 +88,20 @@ test('GET /fonts/figtree-variable.woff2 serves the font as woff2 without a chars
   assert.equal(res.headers.get('content-type'), 'font/woff2');
   assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
 });
+
+test('GET /playground-worker.js may eval, but only reach the CDP relay', async () => {
+  const app = new Hono();
+  app.use(async (c, next) => {
+    await next();
+    // Stands in for the routePolicy middleware in src/middleware/security.js.
+    c.res.headers.set('Content-Security-Policy', c.get('contentSecurityPolicy'));
+  });
+  app.route('/', routes);
+  const res = await app.request('http://localhost:3000/playground-worker.js');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/javascript/);
+  assert.equal(
+    res.headers.get('content-security-policy'),
+    "default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src ws://localhost:3000/cdp/"
+  );
+});
