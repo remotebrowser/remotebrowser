@@ -89,6 +89,14 @@ test('GET /fonts/figtree-variable.woff2 serves the font as woff2 without a chars
   assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
 });
 
+test('GET /playground.js serves the script with the default policy', async () => {
+  const app = setupApp();
+  const res = await app.request('/playground.js');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/javascript/);
+  assert.equal(res.headers.get('content-security-policy'), null);
+});
+
 test('GET /playground-worker.js may eval, but only reach the CDP relay', async () => {
   const app = new Hono();
   app.use(async (c, next) => {

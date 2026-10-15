@@ -1,0 +1,62 @@
+<% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName + ' - Playground', bodyClass: it.bodyClass })
+%> <%~ include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <% if (it.isRunning) { %>
+  <article id="playground" class="playground" data-cdp-url="<%= it.cdpUrl %>" data-pages-url="<%= it.pagesUrl %>">
+    <section class="playground-code" aria-label="Script">
+      <div class="playground-toolbar">
+        <label for="playground-template" class="visually-hidden">Template</label>
+        <select id="playground-template">
+          <% it.templates.forEach(function(template) { %>
+          <option value="<%= template.key %>" data-code="<%= template.code %>"><%= template.label %></option>
+          <% }) %>
+        </select>
+        <button type="button" id="playground-run" class="btn-primary" disabled>Run</button>
+        <button type="button" id="playground-stop" class="btn-secondary" disabled>Stop</button>
+      </div>
+      <label for="playground-editor" class="visually-hidden">Code</label>
+      <textarea
+        id="playground-editor"
+        class="playground-editor"
+        spellcheck="false"
+        autocomplete="off"
+        autocapitalize="off"
+        rows="16"
+      ></textarea>
+      <p class="form-note">
+        Write the body of an async function. <code>page</code>, <code>context</code>, <code>browser</code>, and
+        <code>console</code> are ready to use. Press Ctrl+Enter (⌘+Enter on a Mac) to run. The code runs in this tab and
+        drives the browser over CDP.
+      </p>
+      <div class="playground-output-header">
+        <h2>Output</h2>
+        <span id="playground-status" class="playground-status" role="status">Loading...</span>
+        <button type="button" id="playground-clear" class="btn-secondary">Clear</button>
+      </div>
+      <div id="playground-output" class="playground-output" aria-live="polite"></div>
+    </section>
+    <section class="playground-live" aria-label="Live view">
+      <div id="page-live-view">
+        <canvas
+          class="page-screenshot"
+          width="1280"
+          height="720"
+          role="img"
+          aria-label="Live view of the page the script drives"
+          data-frame-url="<%= it.frameUrl || '' %>"
+        ></canvas>
+      </div>
+      <p><a href="/browsers/<%= it.browser.publicId %>">Back to <%= it.browser.browserName %></a></p>
+    </section>
+  </article>
+  <script src="/screencast.js"></script>
+  <script src="/playground.js"></script>
+  <% } else { %>
+  <article>
+    <p id="playground-not-ready">
+      The playground opens once the browser is running. Its status is <strong><%= it.browser.status %></strong>.
+    </p>
+    <p><a href="/browsers/<%= it.browser.publicId %>">Back to <%= it.browser.browserName %></a></p>
+  </article>
+  <% } %>
+</main>

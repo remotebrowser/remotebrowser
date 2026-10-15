@@ -17,7 +17,7 @@ import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDispla
 export const routes = new Hono();
 
 // Same origin over websocket; http:/https: becomes ws:/wss:.
-const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
+export const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
 
 const renderBrowser = async (c) => {
   const user = c.get('user');

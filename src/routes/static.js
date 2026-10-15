@@ -34,6 +34,7 @@ routes.get('/favicon.ico', serveFile('favicon.ico', 'image/x-icon'));
 routes.get('/tagline.js', serveFile('tagline.js', 'text/javascript'));
 routes.get('/theme.js', serveFile('theme.js', 'text/javascript'));
 routes.get('/screencast.js', serveFile('screencast.js', 'text/javascript'));
+routes.get('/playground.js', serveFile('playground.js', 'text/javascript'));
 routes.get('/playground-worker.js', (c) => {
   c.set('contentSecurityPolicy', playgroundWorkerPolicy(c));
   return serveFile('playground-worker.js', 'text/javascript')(c);
