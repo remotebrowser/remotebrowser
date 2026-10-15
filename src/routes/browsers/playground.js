@@ -28,7 +28,7 @@ console.log('URL:', page.url());`
     key: 'headlines',
     label: 'Extract headlines',
     code: `await page.goto('https://news.ycombinator.com');
-const headlines = await page.locator('.titleline > a').allTextContents();
+const headlines = await page.$$eval('.titleline > a', (links) => links.map((link) => link.textContent));
 console.log(headlines.slice(0, 7));`
   },
   {
@@ -48,14 +48,6 @@ console.log(results);`
     label: 'Take a screenshot',
     code: `await page.goto('https://remotebrowser.ai');
 await page.screenshot();`
-  },
-  {
-    key: 'tabs',
-    label: 'Open a new tab',
-    code: `const tab = await browser.newPage();
-await tab.goto('https://example.org');
-console.log('Open pages:', context.pages().map((p) => p.url()));
-await tab.close();`
   },
   {
     key: 'cdp',

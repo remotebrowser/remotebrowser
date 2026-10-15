@@ -9,21 +9,17 @@ On the left, you write a script and press **Run** (or Ctrl+Enter, ⌘+Enter on a
 A script is the body of an async function, so you can use `await` at the top level. These names are ready to use:
 
 - `page`: the browser's first open tab
-- `context`: `context.pages()` lists the open tabs, and `context.newPage()` opens another
-- `browser`: `browser.newPage()` opens a tab, and `browser.close()` disconnects (the browser keeps running)
 - `console`: `log`, `info`, `warn`, and `error` print to **Output**
 
-The API follows [Playwright](https://playwright.dev), but it covers only the common calls:
+The page object is a small helper API inspired by [Playwright](https://playwright.dev):
 
-- Navigation: `page.goto`, `page.reload`, `page.goBack`, `page.url`, `page.title`, `page.content`, `page.waitForURL`
-- Actions: `page.click`, `page.fill`, `page.type`, `page.press`
+- Navigation: `page.goto`, `page.url`, `page.title`, `page.content`
+- Actions: `page.click`, `page.fill`, `page.press`
 - Reading: `page.evaluate`, `page.$eval`, `page.$$eval`, `page.textContent`, `page.innerText`
 - Waiting: `page.waitForSelector`, `page.waitForTimeout`
-- Locators: `page.locator(selector)`, with `first`, `last`, `nth`, `count`, `click`, `fill`, `press`, `textContent`, `innerText`, `allTextContents`, `getAttribute`, `isVisible`, and `waitFor`
-- Tabs: `page.bringToFront`, `page.close`
 - Screenshots: `page.screenshot()` shows the image under **Output**
 
-Selectors are CSS selectors. For anything else, `page.cdp(method, params)` sends a raw [CDP](https://chromedevtools.github.io/devtools-protocol) command to the tab, and `browser.cdp(method, params)` sends one to the browser.
+Selectors are CSS selectors. For anything else, `page.cdp(method, params)` sends a raw [CDP](https://chromedevtools.github.io/devtools-protocol) command to the tab.
 
 When the script works, move it to real Playwright with the instructions on the browser's page.
 
