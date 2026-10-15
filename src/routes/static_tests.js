@@ -110,6 +110,6 @@ test('GET /playground-worker.js may eval, but only reach the CDP relay', async (
   assert.match(res.headers.get('content-type'), /^text\/javascript/);
   assert.equal(
     res.headers.get('content-security-policy'),
-    "default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src ws://localhost:3000/cdp/"
+    "default-src 'none'; script-src 'unsafe-eval'; connect-src ws://localhost:3000/cdp/"
   );
 });

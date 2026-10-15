@@ -23,7 +23,7 @@ const serveFile =
 // The worker runs code that the user typed, so it needs eval. Everything else
 // is denied: it may only open a websocket to the CDP relay.
 const playgroundWorkerPolicy = (c) =>
-  `default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src ${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/`;
+  `default-src 'none'; script-src 'unsafe-eval'; connect-src ${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/`;
 
 export const routes = new Hono();
 
