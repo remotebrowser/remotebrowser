@@ -5,7 +5,8 @@
     return;
   }
   const context = canvas.getContext('2d');
-  const frameUrl = canvas.dataset.frameUrl;
+  // Read on each poll: the playground points it at whichever page its script drives.
+  let frameUrl = canvas.dataset.frameUrl;
   // Lets the server skip frames we already drew.
   let seq = 0;
 
@@ -14,7 +15,7 @@
   // Caps the rate at 4 fps even if the browser repaints faster than 60 Hz.
   const MIN_FRAME_GAP = 250;
 
-  const pause =(ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const draw = async (blob) => {
     const bitmap = await createImageBitmap(blob);
@@ -32,6 +33,15 @@
       // Lets the server stop the screencast when nobody sees it.
       while (document.hidden) {
         await new Promise((resolve) => document.addEventListener('visibilitychange', resolve, { once: true }));
+      }
+      if (canvas.dataset.frameUrl !== frameUrl) {
+        frameUrl = canvas.dataset.frameUrl;
+        // Sequence numbers belong to one page.
+        seq = 0;
+      }
+      if (!frameUrl) {
+        await pause(500);
+        continue;
       }
       const startedAt = performance.now();
       try {
