@@ -9,8 +9,20 @@ const cacheControl = async (c, next) => {
   }
 };
 
+// A route may need a different policy (the playground worker needs eval). It sets
+// one with c.set('contentSecurityPolicy', ...). Mounted before secureHeaders, so
+// it runs after it on the way out and has the last word.
+const routePolicy = async (c, next) => {
+  await next();
+  const policy = c.get('contentSecurityPolicy');
+  if (policy) {
+    c.res.headers.set('Content-Security-Policy', policy);
+  }
+};
+
 const mountSecurity = (app) => {
   app.use(cacheControl);
+  app.use(routePolicy);
   app.use(
     secureHeaders({
       crossOriginOpenerPolicy: 'same-origin',
