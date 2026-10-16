@@ -1689,3 +1689,120 @@ pre {
     animation: none;
   }
 }
+
+/* The playground puts code and live view side by side, so it needs more room
+   than the usual reading width. */
+body.wide {
+  max-width: 96rem;
+}
+
+.playground {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.playground-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.playground-toolbar select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.3rem;
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+
+.playground-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.playground-editor {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 18rem;
+  resize: vertical;
+  padding: 0.75rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  tab-size: 2;
+  color: var(--text);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+}
+
+.playground-output-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.playground-output-header h2 {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.playground-status {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.playground-output {
+  box-sizing: border-box;
+  min-height: 8rem;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.5rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+}
+
+.playground-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0.15rem 0;
+}
+
+.playground-warn {
+  color: light-dark(#8a6100, #e8c15a);
+}
+
+.playground-error {
+  color: light-dark(#b1271b, #ff8a80);
+}
+
+.playground-result {
+  color: var(--text-muted);
+}
+
+.playground-result::before {
+  content: '← ';
+}
+
+.playground-image {
+  display: block;
+  max-width: 100%;
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 60rem) {
+  .playground {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

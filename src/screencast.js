@@ -5,13 +5,15 @@ import { browserCdpUrl } from './fleet.js';
 import { withCdpSession } from './cdp.js';
 
 // JPEG is much smaller than PNG; the size cap keeps big windows from flooding viewers.
-// Chrome renders about 60 frames per second, so every 15th frame is about 250ms apart.
+// Every frame: Chrome renders only when the page changes, so skipping frames can
+// drop the last paint and freeze the view on an old one. The ack (see ackFrame)
+// already holds the rate to what viewers read.
 const SCREENCAST_OPTIONS = Object.freeze({
   format: 'jpeg',
   quality: 60,
   maxWidth: 1920,
   maxHeight: 1080,
-  everyNthFrame: 15
+  everyNthFrame: 1
 });
 
 // A viewer polls again right after each frame, so a short gap means it left.

@@ -182,6 +182,13 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
     )
   );
   assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`), 'a running browser offers Terminate');
+  // Inside the connection panel, so it appears when the status poll refreshes it.
+  assert.match(
+    body,
+    new RegExp(
+      `<div id="browser-connection-info">[\\s\\S]*href="/browsers/${browserPublicId}/playground"[\\s\\S]*</div>`
+    )
+  );
   assert.doesNotMatch(body, /Browser handle/);
   assert.doesNotMatch(body, /hljs/);
   // The whole CDP URL is masked on screen; the real one only reaches the
@@ -280,6 +287,7 @@ test('GET /browsers/:browserId shows a distinct notice when the browser has been
   assert.doesNotMatch(body, /browser-error-notice/);
   assert.match(body, /<div\s+class="browser-preview"[^>]*>\s*<\/div>/, 'the preview column stays, empty');
   assert.doesNotMatch(body, /\/terminate"/, 'a stopped browser offers no Terminate');
+  assert.doesNotMatch(body, /\/playground"/, 'a stopped browser offers no playground');
 });
 
 // Deleting a personal workspace while the user's pointer still named it, then

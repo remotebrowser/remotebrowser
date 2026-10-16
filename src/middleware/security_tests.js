@@ -116,3 +116,19 @@ test('script-src nonce is freshly generated per request', async () => {
   const second = nonceOf((await app.request('/health')).headers.get('content-security-policy'));
   assert.notEqual(first, second, 'a reused nonce would let a leaked one authorize scripts on later responses');
 });
+
+test('a route can replace the Content-Security-Policy with its own', async () => {
+  const app = new Hono();
+  mountSecurity(app);
+  app.get('/worker.js', (c) => {
+    c.set('contentSecurityPolicy', "default-src 'none'");
+    return c.text('ok');
+  });
+  app.get('/health', (c) => c.text('ok'));
+  const replaced = await app.request('/worker.js');
+  assert.equal(replaced.headers.get('content-security-policy'), "default-src 'none'");
+  // The other hardening headers stay.
+  assert.equal(replaced.headers.get('cross-origin-embedder-policy'), 'require-corp');
+  const untouched = await app.request('/health');
+  assert.match(untouched.headers.get('content-security-policy'), /default-src 'self'/);
+});
