@@ -1,0 +1,16 @@
+[Unit]
+Description=Tell the host that the guest is ready for a snapshot
+# The host saves the snapshot when it sees this line on the serial console:
+# everything the browser needs is up, and the browser itself is not.
+Requires=xvnc.service nftables.service tinyproxy.service
+After=xvnc.service nftables.service tinyproxy.service cdp-proxy.service network.target
+
+[Service]
+Type=oneshot
+# Xvnc takes a moment to create its socket.
+ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X99 ]; do sleep 0.1; done'
+ExecStart=/bin/echo remotebrowser: guest ready
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

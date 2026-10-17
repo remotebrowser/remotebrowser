@@ -12,6 +12,7 @@ import {
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { absoluteOrigin } from '../../origin.js';
 import { listBrowserPages } from '../../cdp.js';
+import { canSuspendBrowsers } from '../../fleet.js';
 import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
 
 export const routes = new Hono();
@@ -19,7 +20,8 @@ export const routes = new Hono();
 // Same origin over websocket; http:/https: becomes ws:/wss:.
 export const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
 
-const renderBrowser = async (c) => {
+// `error` reports a failed action on this page, such as a resume.
+const renderBrowser = async (c, { error = null } = {}) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
   const publicId = c.req.param('browserId');
@@ -58,8 +60,11 @@ const renderBrowser = async (c) => {
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, result.data.browserName),
     browser: result.data,
-    // Only the creator (or an Admin/Owner) sees the Terminate control.
+    error,
+    // Only the creator (or an Admin/Owner) sees the Terminate, Suspend, and
+    // Resume controls.
     canTerminate: canTerminateBrowser(result.data, workspace, user),
+    canSuspend: canTerminateBrowser(result.data, workspace, user) && canSuspendBrowsers(),
     // Gates the code sample and the preview column; the URL itself never
     // reaches the view.
     isConnectable,
@@ -87,3 +92,5 @@ const handleShow = async (c) => {
 };
 
 routes.get('/:browserId', requireUser, requireWorkspaceRole('User'), handleShow);
+
+export { renderBrowser };

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Turns /etc/tinyproxy/denylist.txt, minus allowlist.txt, into the fnmatch
+# patterns of tinyproxy's filter: each domain, and "*.domain" for its
+# subdomains. Runs whenever tinyproxy starts or reloads.
+set -eu
+dir=/etc/tinyproxy
+out=/run/tinyproxy-filter
+
+# An allowlist that is missing is the same as an empty one.
+awk '
+  function clean(line) {
+    sub(/#.*/, "", line)
+    gsub(/[ \t\r]/, "", line)
+    sub(/\.$/, "", line)
+    return tolower(line)
+  }
+  FILENAME == ARGV[1] { domain = clean($0); if (domain != "") allowed[domain] = 1; next }
+  {
+    domain = clean($0)
+    if (domain == "" || domain in allowed) next
+    print domain
+    print "*." domain
+  }
+' "$(test -f "$dir/allowlist.txt" && echo "$dir/allowlist.txt" || echo /dev/null)" "$dir/denylist.txt" >"$out.part"
+chmod 0644 "$out.part"
+mv "$out.part" "$out"

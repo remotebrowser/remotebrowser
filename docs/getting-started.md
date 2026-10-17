@@ -1,27 +1,24 @@
 # Getting Started
 
-To try Remote Browser locally, use [Docker](https://www.docker.com/products/docker-desktop/) or [Podman](https://podman.io).
+To try Remote Browser locally on Linux, you need [KVM](https://linux-kvm.org), [Docker](https://www.docker.com), and [Postgres](https://www.postgresql.org). The steps below are for Linux.
 
-For a production deployment, see the [Self-Hosting Guide](self-hosting.md).
+To try Remote Browser locally on macOS, run it from source, as the [development setup for macOS](setup.md#macos) shows. Docker on macOS has no KVM, so the browser VMs cannot run in a container there.
 
-## Docker
+Check that your user can access KVM:
 
-Check that Docker is running:
+```bash
+test -r /dev/kvm -a -w /dev/kvm && echo "KVM is ready"
+```
+
+If the check fails, add your user to the `kvm` group. Then log out, log back in, and run the check again.
+
+Check that Docker works:
 
 ```bash
 docker info
 ```
 
-If the command fails, start the Docker daemon. On Windows or macOS, open [Docker Desktop](https://www.docker.com/products/docker-desktop/) and wait for it to start. On Linux, run `sudo systemctl start docker`.
-
-Get the Docker socket's group ID:
-
-```bash
-SOCK_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  docker.io/library/alpine stat -c '%g' /var/run/docker.sock)
-```
-
-Start a [Postgres](https://www.postgresql.org) database. The following command runs it in Docker:
+Remote Browser stores its data in Postgres. You can use a Postgres server that is installed on your system, or run one in Docker:
 
 ```bash
 docker run -d --name rb-pg -p 5433:5432 \
@@ -31,112 +28,46 @@ docker run -d --name rb-pg -p 5433:5432 \
   docker.io/library/postgres:17-alpine
 ```
 
-Set the database connection details:
+Set the database connection details. For the example above:
 
 ```bash
 export DB=remotebrowser
 export DATABASE_URL="postgres://${DB}:${DB}@host.docker.internal:5433/${DB}"
 ```
 
-Pull the browser image before launching Remote Browser. This makes the first launch faster:
+Create a directory for the browser virtual machines:
 
 ```bash
-docker pull ghcr.io/remotebrowser/chrome-live
-```
-
-Start Remote Browser and connect it to the database:
-
-```bash
-docker run --rm -it -p 3000:3000 \
-  --security-opt label=disable \
-  --add-host=host.docker.internal:host-gateway \
-  --group-add "${SOCK_GID}" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e NODE_ENV=development \
-  -e CONTAINER_RUNTIME=docker \
-  -e DOCKER_HOST=unix:///var/run/docker.sock \
-  -e DATABASE_URL \
-  ghcr.io/remotebrowser/remotebrowser
-```
-
-Then open `localhost:3000`.
-
-Sign in with any email address. Because this setup has no SMTP server, it cannot email you a sign-in link. The server prints the link to its console. Open that link to continue.
-
-## Podman
-
-Check that Podman is running:
-
-```bash
-podman info
-```
-
-If the command fails, start the Podman service. On Windows or macOS, open [Podman Desktop](https://podman-desktop.io/) and wait for it to start. On Linux, run `systemctl --user start podman.socket`.
-
-Start a [Postgres](https://www.postgresql.org) database. The following command runs it in Podman:
-
-```bash
-podman run -d --name rb-pg -p 5433:5432 \
-  -e POSTGRES_USER=remotebrowser \
-  -e POSTGRES_PASSWORD=remotebrowser \
-  -e POSTGRES_DB=remotebrowser \
-  docker.io/library/postgres:17-alpine
-```
-
-Set the database connection details:
-
-```bash
-export DB=remotebrowser
-export DATABASE_URL="postgres://${DB}:${DB}@host.containers.internal:5433/${DB}"
-```
-
-Start Remote Browser and connect it to the database:
-
-```bash
-podman run --rm -it -p 3000:3000 \
-  --userns=keep-id \
-  --security-opt label=disable \
-  -v /run/user/1000/podman/podman.sock:/run/podman/podman.sock \
-  -e NODE_ENV=development \
-  -e CONTAINER_HOST=unix:///run/podman/podman.sock \
-  -e DATABASE_URL \
-  ghcr.io/remotebrowser/remotebrowser
-```
-
-Then open `localhost:3000`.
-
-Sign in with any email address. Because this setup has no SMTP server, it cannot email you a sign-in link. The server prints the link to its console. Open that link to continue.
-
-## Node.js
-
-To run the latest development version of Remote Browser from source, you need the latest [Node.js LTS](https://nodejs.org) and [Docker](https://www.docker.com/products/docker-desktop/).
-
-Check that Docker is available and can run containers:
-
-```bash
-docker info
-```
-
-Pull the browser image before launching Remote Browser. This makes the first launch faster:
-
-```bash
-docker pull ghcr.io/remotebrowser/chrome-live
+mkdir -p .data/vm
 ```
 
 Start Remote Browser:
 
 ```bash
-export CONTAINER_RUNTIME=docker
-npm install
-npm start
+docker run --rm -it -p 3000:3000 \
+  --security-opt label=disable \
+  --add-host=host.docker.internal:host-gateway \
+  --user "$(id -u):$(id -g)" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  --device /dev/kvm \
+  --group-add "$(stat -c '%g' /dev/kvm)" \
+  -v "$PWD/.data/vm:/app/.data/vm" \
+  -e NODE_ENV=development \
+  -e DATABASE_URL \
+  ghcr.io/remotebrowser/remotebrowser
 ```
 
-Then open `localhost:3000`.
+At startup, Remote Browser builds the VM image and saves a snapshot of a booted VM. The first start takes a few minutes, but later starts are quick.
 
-Sign in with any email address. Because this setup has no SMTP server, it cannot email you a sign-in link. The server prints the link to its console. Open that link to continue.
+When the server is ready, open `http://localhost:3000` in your browser.
 
-Start a browser session and follow the on-screen instructions. The video below shows a coding assistant using Remote Browser to sign in to Amazon, find a product, and read its customer reviews.
+Sign in with any email address. This setup has no SMTP server, so it cannot email you the sign-in link. Instead, the server prints the link to its console. Open that link to continue.
+
+Start a browser session and follow the instructions on the screen. The video below shows a coding assistant that uses Remote Browser to sign in to Amazon, find a product, and read its customer reviews.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/w3pg9wJhfqY" title="Remote Browser demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
-If you use [Podman](https://podman.io), replace `docker` with `podman` in the commands and set `CONTAINER_RUNTIME=podman`.
+!!! warning
+
+    Access to the Docker socket gives full control of the host. This is fine for a quick try, but not for a server that others use. To run the server without the socket, see [VM image](self-hosting.md#vm-image).

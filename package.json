@@ -13,6 +13,7 @@
     "db:console": "node src/db/console.js",
     "test": "node --test --test-concurrency=4 \"src/**/*_tests.js\"",
     "test:e2e": "playwright test",
+    "vm:build": "node vm/scripts/build.js",
     "format": "oxfmt \"src/**/*.js\" \"views/**/*.eta.html\" \"public/**/*.css\" \"*.{json,md}\"",
     "typecheck": "oxlint --type-aware"
   },

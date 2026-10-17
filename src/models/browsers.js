@@ -89,13 +89,30 @@ const recordProvisionedBrowser = async ({ workspaceId, browserInstanceId, intern
   return { error: owned.rows[0] ? 'ALREADY_PROVISIONED' : 'NOT_AUTHORIZED' };
 };
 
+// For statuses observed from the browser (monitors, screenshots, launch). A
+// suspended browser is unreachable on purpose, so these leave it alone; only
+// transitionBrowserInstanceStatus moves a browser in or out of 'suspended'.
 const updateBrowserInstanceStatus = async ({ workspaceId, browserInstanceId, toStatus }) => {
   const r = await (
     await db()
-  ).query('UPDATE browser_instances SET status=$3 WHERE workspace_id=$1 AND id=$2', [
+  ).query("UPDATE browser_instances SET status=$3 WHERE workspace_id=$1 AND id=$2 AND status <> 'suspended'", [
     workspaceId,
     browserInstanceId,
     toStatus
+  ]);
+  return { data: r.rowCount > 0 };
+};
+
+// Changes the status only from one of `fromStatuses`, so two requests racing
+// on the same browser cannot both make the same change.
+const transitionBrowserInstanceStatus = async ({ workspaceId, browserInstanceId, fromStatuses, toStatus }) => {
+  const r = await (
+    await db()
+  ).query('UPDATE browser_instances SET status=$3 WHERE workspace_id=$1 AND id=$2 AND status = ANY($4::text[])', [
+    workspaceId,
+    browserInstanceId,
+    toStatus,
+    fromStatuses
   ]);
   return { data: r.rowCount > 0 };
 };
@@ -108,11 +125,14 @@ const deleteBrowserInstance = async ({ workspaceId, browserInstanceId }) => {
 };
 
 // Every browser that has a fleet id, across all workspaces: the monitors to
-// restore at startup. Unprovisioned rows have nothing to attach to.
+// restore at startup. Unprovisioned rows have nothing to attach to, and a
+// suspended browser gets its monitor back when it is resumed.
 const listProvisionedBrowserInstances = async () => {
   const r = await (
     await db()
-  ).query("SELECT id, workspace_id, internal_browser_id FROM browser_instances WHERE internal_browser_id <> ''");
+  ).query(
+    "SELECT id, workspace_id, internal_browser_id FROM browser_instances WHERE internal_browser_id <> '' AND status <> 'suspended'"
+  );
   return {
     data: r.rows.map((row) => ({
       workspaceId: row.workspace_id,
@@ -160,6 +180,7 @@ export {
   launchBrowserInstance,
   recordProvisionedBrowser,
   updateBrowserInstanceStatus,
+  transitionBrowserInstanceStatus,
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
   listProvisionedBrowserInstances,
