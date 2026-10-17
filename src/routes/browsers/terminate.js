@@ -17,6 +17,7 @@ import { formString } from '../../form.js';
 
 export const routes = new Hono();
 
+// Shared with suspend.js, which loads the browser the same way.
 const loadBrowser = async (c) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
@@ -115,3 +116,5 @@ routes.post(
     return c.redirect('/browsers', 303);
   }
 );
+
+export { loadBrowser };

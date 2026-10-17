@@ -1,0 +1,14 @@
+[Unit]
+Description=Virtual display for the browser, viewable over VNC
+
+[Service]
+User=browser
+# Port 5900 serves the display over RFB to any VNC viewer. It needs no
+# password: QEMU forwards it only to the host's loopback, like CDP.
+# -alwaysshared lets several viewers watch at once.
+ExecStart=/usr/bin/Xvnc :99 -alwaysshared -geometry 1920x1080 -depth 24 \
+  -rfbport 5900 -SecurityTypes None -nolisten tcp
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# Domains that the browser may not reach, one per line. Each one also blocks its
+# subdomains. An entry in allowlist.txt overrides an entry here.
+doubleclick.net
+googlesyndication.com
+edgedl.me.gvt1.com
+optimizationguide-pa.googleapis.com
+safebrowsing.googleapis.com

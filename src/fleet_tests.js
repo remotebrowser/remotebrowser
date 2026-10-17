@@ -4,12 +4,21 @@ import assert from 'node:assert/strict';
 // Set before ./config is first required, since config freezes what it read.
 // The trailing slash is deliberate: it must not survive into the request URL.
 // With an origin set the facade delegates to an external fleet; the in-process
-// container path is covered in src/fleet_local_tests.js.
+// VM path is covered in src/fleet_local_tests.js.
 process.env.BROWSERFLEET_URL = 'http://browserfleet.test/';
 
-const { isWellFormedBrowserId, startBrowser, checkBrowserFleetHealth, browserExists, browserCdpUrl, stopBrowser } =
-  await import('./fleet.js');
-const { setContainerClient, createContainerClient } = await import('./container.js');
+const {
+  isWellFormedBrowserId,
+  startBrowser,
+  checkBrowserFleetHealth,
+  browserExists,
+  browserCdpUrl,
+  stopBrowser,
+  canSuspendBrowsers,
+  suspendBrowser,
+  resumeBrowser
+} = await import('./fleet.js');
+const { setVmClient, createVmClient } = await import('./vm/index.js');
 
 const jsonResponse = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -30,20 +39,19 @@ const stubFetch = (respond) => {
 };
 
 // Precedence: with an origin configured, every operation must go to the
-// external fleet and never fall through to the local container runtime.
-test('a configured BROWSERFLEET_URL takes precedence over the local container manager', async () => {
-  const containerCalls = [];
+// external fleet and never fall through to the local VM manager.
+test('a configured BROWSERFLEET_URL takes precedence over the local VM manager', async () => {
+  const vmCalls = [];
   const recording = (name, result) => async () => {
-    containerCalls.push(name);
+    vmCalls.push(name);
     return result;
   };
-  setContainerClient({
+  setVmClient({
     launchBrowser: recording('launchBrowser', { browserId: 'local-should-not-be-used' }),
     browserIsRunning: recording('browserIsRunning', true),
     browserExists: recording('browserExists', true),
     stopBrowser: recording('stopBrowser', undefined),
-    resolveCdpUrl: recording('resolveCdpUrl', 'ws://local-should-not-be-used'),
-    health: recording('health', true)
+    resolveCdpUrl: recording('resolveCdpUrl', 'ws://local-should-not-be-used')
   });
   const { restore } = stubFetch(() => jsonResponse({ browser_id: 'fleet-1' }));
   try {
@@ -54,9 +62,9 @@ test('a configured BROWSERFLEET_URL takes precedence over the local container ma
     assert.equal(await browserCdpUrl({ browserId: 'fleet-1' }), 'ws://browserfleet.test/api/v1/browsers/fleet-1/cdp');
   } finally {
     restore();
-    setContainerClient(createContainerClient());
+    setVmClient(createVmClient());
   }
-  assert.deepEqual(containerCalls, [], 'the external fleet path must not consult the local container runtime');
+  assert.deepEqual(vmCalls, [], 'the external fleet path must not consult the local VM manager');
 });
 
 test('startBrowser posts to /api/v1/browsers and returns the id the server assigned', async () => {
@@ -316,4 +324,16 @@ test('isWellFormedBrowserId rejects empty, over-long, and non-string input', () 
   for (const bad of ['', 'A'.repeat(65), null, undefined, 42, {}]) {
     assert.equal(isWellFormedBrowserId(bad), false, `for ${JSON.stringify(bad)}`);
   }
+});
+
+test('an external fleet cannot suspend or resume browsers', async () => {
+  const { calls, restore } = stubFetch(() => new Response(null, { status: 204 }));
+  try {
+    assert.equal(canSuspendBrowsers(), false);
+    assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
+    assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
+  } finally {
+    restore();
+  }
+  assert.equal(calls.length, 0);
 });

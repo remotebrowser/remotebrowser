@@ -7,6 +7,7 @@ const {
   launchBrowserInstance,
   recordProvisionedBrowser,
   updateBrowserInstanceStatus,
+  transitionBrowserInstanceStatus,
   deleteBrowserInstance,
   listBrowserInstancesByWorkspace,
   listProvisionedBrowserInstances,
@@ -290,4 +291,66 @@ test('listProvisionedBrowserInstances returns only browsers that have a fleet id
   assert.deepEqual(listed.data, [
     { workspaceId, browserInstanceId: provisioned.data.browserInstanceId, internalBrowserId: 'br-1' }
   ]);
+});
+
+const makeProvisionedBrowser = async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const launched = await launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'calm-otter' });
+  const { browserInstanceId } = launched.data;
+  await recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId: 'Qabc12345', userId: ownerId });
+  await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: 'running' });
+  const status = async () => (await getBrowserInstance({ workspaceId, browserInstanceId })).data.status;
+  return { workspaceId, browserInstanceId, status };
+};
+
+test('transitionBrowserInstanceStatus changes the status only from the given ones', async () => {
+  const { workspaceId, browserInstanceId, status } = await makeProvisionedBrowser();
+  const suspend = () =>
+    transitionBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId,
+      fromStatuses: ['running', 'error'],
+      toStatus: 'suspended'
+    });
+  assert.deepEqual(await suspend(), { data: true });
+  assert.equal(await status(), 'suspended');
+  // A second, racing suspend finds nothing to change.
+  assert.deepEqual(await suspend(), { data: false });
+  assert.deepEqual(
+    await transitionBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId,
+      fromStatuses: ['suspended'],
+      toStatus: 'running'
+    }),
+    { data: true }
+  );
+  assert.equal(await status(), 'running');
+});
+
+test('updateBrowserInstanceStatus leaves a suspended browser alone', async () => {
+  const { workspaceId, browserInstanceId, status } = await makeProvisionedBrowser();
+  await transitionBrowserInstanceStatus({
+    workspaceId,
+    browserInstanceId,
+    fromStatuses: ['running'],
+    toStatus: 'suspended'
+  });
+  // A monitor or a failed screenshot reporting the VM unreachable.
+  assert.deepEqual(await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: 'error' }), {
+    data: false
+  });
+  assert.equal(await status(), 'suspended');
+});
+
+test('listProvisionedBrowserInstances skips suspended browsers, which have nothing to monitor', async () => {
+  const { workspaceId, browserInstanceId } = await makeProvisionedBrowser();
+  assert.equal((await listProvisionedBrowserInstances()).data.length, 1);
+  await transitionBrowserInstanceStatus({
+    workspaceId,
+    browserInstanceId,
+    fromStatuses: ['running'],
+    toStatus: 'suspended'
+  });
+  assert.deepEqual((await listProvisionedBrowserInstances()).data, []);
 });

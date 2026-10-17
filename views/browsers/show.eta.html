@@ -23,6 +23,9 @@
 <main>
   <article class="browser-layout">
     <div class="browser-main">
+      <% if (it.error) { %>
+      <div role="alert" class="danger"><%= it.error %></div>
+      <% } %>
       <p
         id="browser-status"
         hx-get="<%= it.browserUrl %>"
@@ -72,13 +75,25 @@
         </p>
         <% } else if (it.browser.status === 'terminated') { %>
         <p>This browser has been stopped and can no longer be reached.</p>
+        <% } else if (it.browser.status === 'suspended') { %>
+        <p>This browser is suspended. Resume it to use it again, with its pages as they were.</p>
         <% } else { %>
         <p>Connection details will appear here once the browser is ready.</p>
+        <% } %> <% /* Inside the refreshed block, so the buttons follow the status. */ %> <% if (it.canTerminate &&
+        (it.isConnectable || it.browser.status === 'suspended')) { %>
+        <div class="browser-actions">
+          <% if (it.canSuspend && it.isConnectable) { %>
+          <a href="/browsers/<%= it.browser.publicId %>/suspend" class="btn-secondary">Suspend</a>
+          <% } %> <% if (it.canSuspend && it.browser.status === 'suspended') { %>
+          <form method="post" action="/browsers/<%= it.browser.publicId %>/resume">
+            <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+            <button type="submit" class="btn-primary">Resume</button>
+          </form>
+          <% } %>
+          <a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a>
+        </div>
         <% } %>
       </div>
-      <% if (it.canTerminate && it.isConnectable) { %>
-      <p><a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a></p>
-      <% } %>
     </div>
     <div
       class="browser-preview"

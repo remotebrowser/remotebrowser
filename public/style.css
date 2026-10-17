@@ -486,6 +486,18 @@ a.btn-secondary {
   background-color: var(--fill-soft);
 }
 
+/* The Suspend, Resume, and Terminate controls on a browser's page; Resume is
+   a form, the others are links. */
+.browser-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.browser-actions form {
+  margin: 0;
+}
 /* Keeps a row of buttons together in the form grid's second column,
    alongside the inputs rather than under the labels. */
 .form-actions {

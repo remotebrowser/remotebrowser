@@ -217,3 +217,8 @@ test('startAllBrowserMonitors reports a failed listing', async () => {
   const { registry } = setup({ listBrowsers: async () => ({ error: 'DB_DOWN' }) });
   assert.deepEqual(await registry.startAllBrowserMonitors(), { error: 'DB_DOWN' });
 });
+
+test('nextBrowserStatus never changes a suspended browser, which is unreachable on purpose', () => {
+  assert.equal(nextBrowserStatus({ currentStatus: 'suspended', cdpConnected: false }), null);
+  assert.equal(nextBrowserStatus({ currentStatus: 'suspended', cdpConnected: true }), null);
+});

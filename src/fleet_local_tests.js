@@ -2,16 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
-// No external fleet: the facade must drive the in-process container runtime.
+// No external fleet: the facade must drive the in-process QEMU VM manager.
 process.env.BROWSERFLEET_URL = '';
 
-const { setContainerClient } = await import('./container.js');
-const { startBrowser, checkBrowserFleetHealth, browserExists, browserCdpUrl, stopBrowser, isWellFormedBrowserId } =
-  await import('./fleet.js');
+const { setVmClient } = await import('./vm/index.js');
+const {
+  startBrowser,
+  browserExists,
+  browserCdpUrl,
+  stopBrowser,
+  isWellFormedBrowserId,
+  canSuspendBrowsers,
+  suspendBrowser,
+  resumeBrowser
+} = await import('./fleet.js');
 
-// A fake container client that records calls and can be told to fail. Swapped in
-// for the real singleton so no container binary is needed here.
-const fakeContainers = (overrides = {}) => {
+// A fake VM client that records calls and can be told to fail. Swapped in
+// for the real singleton so no QEMU is needed here.
+const fakeVms = (overrides = {}) => {
   const calls = [];
   const record = (name, result) => async (args) => {
     calls.push({ name, args });
@@ -23,56 +31,43 @@ const fakeContainers = (overrides = {}) => {
     browserIsRunning: record('browserIsRunning', true),
     browserExists: record('browserExists', true),
     stopBrowser: record('stopBrowser', undefined),
+    suspendBrowser: record('suspendBrowser', undefined),
+    resumeBrowser: record('resumeBrowser', { browserId: 'Pabc12345' }),
     resolveCdpUrl: record('resolveCdpUrl', 'ws://127.0.0.1:32768/devtools/browser/abc'),
-    health: record('health', true),
     ...overrides
   };
   return { calls, client };
 };
 
-test('startBrowser launches a local container and returns its id', async () => {
-  const { calls, client } = fakeContainers();
-  setContainerClient(client);
+test('startBrowser launches a local VM and returns its id', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
   assert.deepEqual(await startBrowser(), { data: { browserId: 'Pabc12345' } });
   assert.equal(calls[0].name, 'launchBrowser');
 });
 
-test('startBrowser reports a failed container launch', async () => {
-  setContainerClient(
-    fakeContainers({
+test('startBrowser reports a failed VM launch', async () => {
+  setVmClient(
+    fakeVms({
       launchBrowser: async () => {
-        throw new Error('Unable to launch Google Chrome');
+        throw new Error('Unable to launch Chromium');
       }
     }).client
   );
-  assert.deepEqual(await startBrowser(), { error: 'Unable to launch Google Chrome' });
+  assert.deepEqual(await startBrowser(), { error: 'Unable to launch Chromium' });
 });
 
-test('checkBrowserFleetHealth probes the local container runtime', async () => {
-  setContainerClient(fakeContainers().client);
-  assert.deepEqual(await checkBrowserFleetHealth(), { data: { healthy: true } });
-
-  setContainerClient(
-    fakeContainers({
-      health: async () => {
-        throw new Error('container runtime is not available');
-      }
-    }).client
-  );
-  assert.deepEqual(await checkBrowserFleetHealth(), { error: 'container runtime is not available' });
-});
-
-test('browserExists checks the local container state', async () => {
-  const live = fakeContainers();
-  setContainerClient(live.client);
+test('browserExists checks the local VM state', async () => {
+  const live = fakeVms();
+  setVmClient(live.client);
   assert.deepEqual(await browserExists({ browserId: 'Pabc12345' }), { data: true });
   assert.equal(live.calls[0].name, 'browserIsRunning');
 
-  setContainerClient(fakeContainers({ browserIsRunning: async () => false }).client);
+  setVmClient(fakeVms({ browserIsRunning: async () => false }).client);
   assert.deepEqual(await browserExists({ browserId: 'Pabc12345' }), { data: false });
 
-  setContainerClient(
-    fakeContainers({
+  setVmClient(
+    fakeVms({
       browserIsRunning: async () => {
         throw new Error('runtime exploded');
       }
@@ -82,23 +77,23 @@ test('browserExists checks the local container state', async () => {
 });
 
 test('browserExists refuses a malformed id without touching the runtime', async () => {
-  const { calls, client } = fakeContainers();
-  setContainerClient(client);
+  const { calls, client } = fakeVms();
+  setVmClient(client);
   assert.deepEqual(await browserExists({ browserId: 'a/../b' }), { data: false });
   assert.equal(calls.length, 0);
 });
 
-test('stopBrowser removes the container, and a container already gone is success', async () => {
-  const present = fakeContainers();
-  setContainerClient(present.client);
+test('stopBrowser removes the VM, and a VM already gone is success', async () => {
+  const present = fakeVms();
+  setVmClient(present.client);
   assert.deepEqual(await stopBrowser({ browserId: 'Pabc12345' }), { data: true });
   assert.deepEqual(
     present.calls.map((call) => call.name),
     ['browserExists', 'stopBrowser']
   );
 
-  const gone = fakeContainers({ browserExists: async () => false });
-  setContainerClient(gone.client);
+  const gone = fakeVms({ browserExists: async () => false });
+  setVmClient(gone.client);
   assert.deepEqual(await stopBrowser({ browserId: 'Pabc12345' }), { data: true });
   assert.equal(
     gone.calls.some((call) => call.name === 'stopBrowser'),
@@ -107,33 +102,33 @@ test('stopBrowser removes the container, and a container already gone is success
 });
 
 test('stopBrowser treats an empty id as a no-op and a malformed one as corruption', async () => {
-  const { calls, client } = fakeContainers();
-  setContainerClient(client);
+  const { calls, client } = fakeVms();
+  setVmClient(client);
   assert.deepEqual(await stopBrowser({ browserId: '' }), { data: true });
   assert.deepEqual(await stopBrowser({ browserId: 'a/../b' }), { error: 'INVALID_BROWSER_ID' });
   assert.equal(calls.length, 0);
 });
 
 test('stopBrowser reports a failed kill', async () => {
-  setContainerClient(
-    fakeContainers({
+  setVmClient(
+    fakeVms({
       stopBrowser: async () => {
-        throw new Error('Unable to kill container');
+        throw new Error('Unable to stop VM');
       }
     }).client
   );
-  assert.deepEqual(await stopBrowser({ browserId: 'Pabc12345' }), { error: 'Unable to kill container' });
+  assert.deepEqual(await stopBrowser({ browserId: 'Pabc12345' }), { error: 'Unable to stop VM' });
 });
 
-test('browserCdpUrl resolves the local container CDP URL and null when it cannot', async () => {
-  setContainerClient(fakeContainers().client);
+test('browserCdpUrl resolves the local VM CDP URL and null when it cannot', async () => {
+  setVmClient(fakeVms().client);
   assert.equal(await browserCdpUrl({ browserId: 'Pabc12345' }), 'ws://127.0.0.1:32768/devtools/browser/abc');
 
-  setContainerClient(fakeContainers({ resolveCdpUrl: async () => null }).client);
+  setVmClient(fakeVms({ resolveCdpUrl: async () => null }).client);
   assert.equal(await browserCdpUrl({ browserId: 'Pabc12345' }), null);
 
-  setContainerClient(
-    fakeContainers({
+  setVmClient(
+    fakeVms({
       resolveCdpUrl: async () => {
         throw new Error('not up');
       }
@@ -145,4 +140,36 @@ test('browserCdpUrl resolves the local container CDP URL and null when it cannot
 test('isWellFormedBrowserId is re-exported from the facade', () => {
   assert.equal(isWellFormedBrowserId('Pabc12345'), true);
   assert.equal(isWellFormedBrowserId('a/../b'), false);
+});
+
+test('suspendBrowser and resumeBrowser drive the local VM', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  assert.equal(canSuspendBrowsers(), true);
+  assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { data: true });
+  assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { data: true });
+  assert.deepEqual(
+    calls.map(({ name, args }) => [name, args]),
+    [
+      ['suspendBrowser', 'Pabc12345'],
+      ['resumeBrowser', 'Pabc12345']
+    ]
+  );
+});
+
+test('suspendBrowser and resumeBrowser report a failure, and refuse a malformed id', async () => {
+  const { calls, client } = fakeVms({
+    suspendBrowser: async () => {
+      throw new Error('saving the VM state failed');
+    },
+    resumeBrowser: async () => {
+      throw new Error('Unable to resume chromium-Pabc12345');
+    }
+  });
+  setVmClient(client);
+  assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { error: 'saving the VM state failed' });
+  assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { error: 'Unable to resume chromium-Pabc12345' });
+  assert.deepEqual(await suspendBrowser({ browserId: '../etc' }), { error: 'INVALID_BROWSER_ID' });
+  assert.deepEqual(await resumeBrowser({ browserId: '' }), { error: 'INVALID_BROWSER_ID' });
+  assert.equal(calls.length, 0);
 });

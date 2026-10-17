@@ -11,7 +11,8 @@ const hasRole = (role, minRole) => Boolean(ROLE_RANK[role]) && ROLE_RANK[role] >
 
 const hasAdminRole = (role) => hasRole(role, 'Admin');
 
-// Only the browser's creator may terminate it. Admin and Owner are exempt.
+// Only the browser's creator may terminate, suspend, or resume it. Admin and
+// Owner are exempt.
 const canTerminateBrowser = (browser, workspace, user) =>
   hasAdminRole(workspace.role) || browser.creatorUserId === user.id;
 
