@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the upstream proxy that the host sets
+# The host writes the file through the guest agent (see src/vm/proxy.js).
+
+[Path]
+PathChanged=/etc/remotebrowser/proxy/upstream
+Unit=tinyproxy-upstream.service
+
+[Install]
+WantedBy=paths.target

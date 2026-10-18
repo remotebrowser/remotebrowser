@@ -9,6 +9,7 @@ import * as host from './host.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
+import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -131,7 +132,7 @@ const createVmClient = ({
 
   // Starts the VM as the snapshot left it, with the browser already up, on
   // a copy of the snapshot's disk.
-  const startFromSnapshot = async ({ name, dir, saved }) => {
+  const startFromSnapshot = async ({ name, dir, saved, proxy }) => {
     // A reflink where the filesystem has them, else a plain copy.
     await copyFile(
       path.join(snapshotDir, 'overlay.qcow2'),
@@ -156,6 +157,11 @@ const createVmClient = ({
         await continueIncoming(qmp, suspendTimeoutMs);
       } finally {
         qmp.close();
+      }
+      // Before the clock, which starts the browser, so its first request
+      // already takes this route.
+      if (proxy) {
+        await writeGuestProxy({ dir, proxy, connectQmp });
       }
       // The guest clock stopped when the snapshot was saved. Setting it also
       // starts the browser, which is not in the snapshot (see
@@ -191,7 +197,10 @@ const createVmClient = ({
   // the snapshot at startup.
   const canLaunchBrowser = async () => Boolean((await usableSnapshot(await getAccel())).saved);
 
-  const launchBrowser = async () => {
+  // `proxy` is an upstream proxy URL for the browser's traffic; see proxy.js.
+  const launchBrowser = async ({ proxy = null } = {}) => {
+    // A bad URL fails here, before a VM starts.
+    const upstreamProxy = normalizeProxyUrl(proxy);
     const browserId = generateShortId('Q', 8);
     const name = vmName(browserId);
     const dir = vmDir(browserId);
@@ -222,12 +231,13 @@ const createVmClient = ({
       'rb.vm_snapshot_dir': snapshotDir
     });
     try {
-      const started = await startFromSnapshot({ name, dir, saved });
+      const started = await startFromSnapshot({ name, dir, saved, proxy: upstreamProxy });
       consola.log(`QEMU started browser VM ${name}`, {
         'event.domain': 'qemu',
         'rb.runtime': 'qemu',
         'rb.cdp_port': started.cdpHostPort,
-        'rb.vnc_port': started.vncHostPort
+        'rb.vnc_port': started.vncHostPort,
+        'rb.upstream_proxy': Boolean(upstreamProxy)
       });
       return { browserId };
     } catch (error) {
@@ -271,6 +281,44 @@ const createVmClient = ({
       await waitForExit(pid, dir);
     }
     await rm(dir, { recursive: true, force: true });
+  };
+
+  // The guest keeps the upstream proxy on its disk, so it stays across a
+  // suspend and resume. Null means direct.
+  const applyProxy = async (browserId, upstreamProxy) => {
+    const name = vmName(browserId);
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${name} is not running`);
+    }
+    await writeGuestProxy({ dir: vmDir(browserId), proxy: upstreamProxy, connectQmp });
+    // Never the URL itself, which may hold a password.
+    consola.log(`QEMU ${upstreamProxy ? 'set' : 'cleared'} the upstream proxy of browser VM ${name}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.upstream_proxy': Boolean(upstreamProxy)
+    });
+  };
+
+  // Sends a running browser's traffic through `proxy`, a URL as in proxy.js.
+  const setProxy = async (browserId, proxy) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    const upstreamProxy = normalizeProxyUrl(proxy);
+    // Going direct by mistake, e.g. with an empty form field, could reveal the
+    // real IP address, so that takes clearProxy.
+    if (!upstreamProxy) {
+      throw new Error('The proxy URL is empty; clear the proxy instead to connect directly');
+    }
+    await applyProxy(browserId, upstreamProxy);
+  };
+
+  // Lets a running browser connect directly again.
+  const clearProxy = async (browserId) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    await applyProxy(browserId, null);
   };
 
   const { browserIsSuspended, suspendBrowser, resumeBrowser } = createSuspender({
@@ -322,6 +370,8 @@ const createVmClient = ({
     stopBrowser,
     suspendBrowser,
     resumeBrowser,
+    setProxy,
+    clearProxy,
     resolveCdpUrl
   };
 };

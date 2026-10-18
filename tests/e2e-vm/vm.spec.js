@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { connect } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 
@@ -83,10 +85,33 @@ const signIn = async (page, email) => {
   await page.getByRole('button', { name: 'Sign In' }).click();
 };
 
+// The guest cannot reach the host's loopback, but it can reach the host's
+// other addresses, as it would a proxy elsewhere on the network.
+const hostAddress = () =>
+  Object.values(networkInterfaces())
+    .flat()
+    .find((info) => info && info.family === 'IPv4' && !info.internal)?.address;
+
+// A stand-in upstream proxy that records each CONNECT and refuses it.
+const startUpstreamProxy = (address) =>
+  new Promise((resolve) => {
+    const seen = [];
+    const server = createServer((req, res) => res.writeHead(502).end());
+    server.on('connect', (req, socket) => {
+      seen.push({ target: req.url, auth: req.headers['proxy-authorization'] ?? null });
+      socket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+    });
+    server.listen(0, address, () => resolve({ seen, port: server.address().port, close: () => server.close() }));
+  });
+
 // Launches through the real UI and returns the new browser's public id.
-const launchBrowser = async (page, name) => {
+const launchBrowser = async (page, name, { proxy } = {}) => {
   await page.goto('/browsers/launch');
   await page.locator('#name').fill(name);
+  if (proxy) {
+    await page.getByLabel('Use proxy').check();
+    await page.getByLabel('Proxy URL').fill(proxy);
+  }
   await page.getByRole('button', { name: 'Launch' }).click();
   await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
   return new URL(page.url()).pathname.split('/').pop();
@@ -169,6 +194,42 @@ test.describe('real QEMU VMs', () => {
     expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
 
     await terminateBrowser(page, publicId, browserName);
+  });
+
+  test('the launch form refuses a proxy URL it cannot use, before any VM starts', async ({ page }) => {
+    await signIn(page, 'e2e-qemu-bad-proxy@example.com');
+    await page.goto('/browsers/launch');
+    await page.locator('#name').fill('e2e-qemu-lost-otter');
+    // The URL input is off until the box is checked.
+    await expect(page.getByLabel('Proxy URL')).toBeDisabled();
+    await page.getByLabel('Use proxy').check();
+    await expect(page.getByLabel('Proxy URL')).toBeEnabled();
+    await expect(page.getByLabel('Proxy URL')).toBeFocused();
+    await page.getByLabel('Proxy URL').fill('https://proxy.example.com:443');
+    await page.getByRole('button', { name: 'Launch' }).click();
+    await expect(page.getByRole('alert')).toContainText('The proxy URL must start with http://');
+    await expect(page.locator('#proxy')).toHaveValue('https://proxy.example.com:443');
+    expect(listBrowserVms()).toHaveLength(0);
+  });
+
+  test('a browser launched with a proxy sends its traffic through it', async ({ page }) => {
+    const address = hostAddress();
+    test.skip(!address, 'requires a non-loopback IPv4 address on this host');
+    const upstream = await startUpstreamProxy(address);
+    try {
+      await signIn(page, 'e2e-qemu-proxy@example.com');
+      const browserName = 'e2e-qemu-proxied-otter';
+      const publicId = await launchBrowser(page, browserName, { proxy: `http://alice:s3cret@${address}:${upstream.port}` });
+      await expect(page.locator('#browser-status')).toContainText('running', { timeout: 150000 });
+      // The browser opens a search engine at launch, over HTTPS.
+      await expect
+        .poll(() => upstream.seen.filter(({ target }) => target.endsWith(':443')).length, { timeout: 60000 })
+        .toBeGreaterThan(0);
+      expect(upstream.seen[0].auth).toBe(`Basic ${Buffer.from('alice:s3cret').toString('base64')}`);
+      await terminateBrowser(page, publicId, browserName);
+    } finally {
+      upstream.close();
+    }
   });
 
   test('suspending a browser stops its VM, and resuming brings back the same pages', async ({ page }) => {

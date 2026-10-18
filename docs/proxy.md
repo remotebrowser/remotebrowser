@@ -4,9 +4,7 @@ All of the browser's traffic goes through [tinyproxy](https://tinyproxy.github.i
 
 The browser finds the proxy through `--proxy-server` in `/etc/remotebrowser/browser.env`. The `chromium` service requires `tinyproxy`, so the browser does not start without it.
 
-## Blocklist
-
-tinyproxy refuses the domains in a denylist, so the browser cannot reach them. Two lists in `vm/files/etc/tinyproxy` control it:
+Two lists in `vm/files/etc/tinyproxy` decide which domains tinyproxy refuses, so the browser cannot reach them:
 
 - `denylist.txt` lists the domains to block. Each entry also blocks its subdomains.
 - `allowlist.txt` lists domains to take out of the denylist. This matters most when the denylist is a large public blocklist that blocks too much.
@@ -20,24 +18,22 @@ Every time tinyproxy starts or reloads, `/usr/local/sbin/tinyproxy-filter` turns
 - To change them for all new browsers, edit the files in `vm/files/etc/tinyproxy`, then build again.
 - To try a change in a running VM, edit `/etc/tinyproxy/denylist.txt` or `allowlist.txt` in its root shell, then run `systemctl reload tinyproxy`.
 
-## Change the proxy
+By default, tinyproxy connects to sites directly. The app can give each browser its own upstream proxy, for example for a fixed egress IP address, when it launches the browser or at any time while the browser runs:
 
-The browser always uses tinyproxy, so `vm/files/etc/tinyproxy/tinyproxy.conf` decides how the browser reaches the internet. By default, tinyproxy connects to sites directly. To send all browser traffic through another proxy, for example for a fixed egress IP address, uncomment one `Upstream` line in that file:
-
-```
-Upstream http user:password@proxy.example.com:8080
-```
-
-See the comments in that file, and `man tinyproxy.conf`, for the other options.
-
-Then build the image again. VMs that are already running keep their old configuration; new browsers get the new one.
-
-To try a change first, start a VM with `vm/scripts/run.js` (see [Manual test](sandboxing.md#manual-test)), then edit the file in the VM's root shell and reload tinyproxy:
-
-```bash
-nano /etc/tinyproxy/tinyproxy.conf
-systemctl reload tinyproxy
-journalctl -u tinyproxy -f             # watch the browser's requests go through
+```js
+await startBrowser({ proxy: 'http://user:password@proxy.example.com:8080' });
+await setBrowserProxy(browserId, 'socks5://proxy.example.com:1080');
+await clearBrowserProxy(browserId); // direct again
 ```
 
-Connections that the browser already has open keep their old route until they close, so test with a site you have not opened yet. A change to `Port` or `Listen` needs `systemctl restart tinyproxy` and a restart of `chromium`, and then `--proxy-server` in `/etc/remotebrowser/browser.env` must match. The edit is lost when the VM stops, because `vm/scripts/run.js` starts from a throwaway copy of the snapshot's disk.
+The URL starts with `http://`, `socks4://`, or `socks5://`. An HTTP proxy carries HTTPS too, with `CONNECT`. tinyproxy does not decode the user and password, so they can only have letters, digits, and `- . _ ~ ! $ & * + , ; =`. See `src/vm/proxy.js`. Only local VMs have this; with `BROWSERFLEET_URL`, the calls answer `NOT_SUPPORTED`.
+
+How it works:
+
+1. The app writes the URL, or `direct`, as one line into `/etc/remotebrowser/proxy/upstream` in the guest, through the guest agent. Only root can read that directory, so the browser cannot read the password.
+2. `tinyproxy-upstream.path` sees the change and restarts tinyproxy. The restart also ends the browser's open connections, so none of them keep the old route. Requests that are in flight at that moment fail.
+3. Before tinyproxy starts, `/usr/local/sbin/tinyproxy-config` builds its config, `/run/tinyproxy.conf`, from `/etc/tinyproxy/tinyproxy.conf` plus an `Upstream` line for that URL.
+
+At launch, the app sets the proxy before the browser starts, so even its first request takes that route. The setting is on the VM's disk, so it stays across a suspend and resume. If the file does not hold exactly one valid line, for example after a write that did not finish, tinyproxy does not start, and the browser stays offline rather than going out directly.
+
+Check it in the VM's root shell with `journalctl -u tinyproxy`, which logs `Added upstream` when it starts.

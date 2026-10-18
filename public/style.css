@@ -192,6 +192,7 @@ label {
 
 .page-form {
   margin-top: 2.5rem;
+  max-width: 30rem;
 }
 
 input {
@@ -511,6 +512,25 @@ a.btn-secondary {
 .form-note {
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* A checkbox with the input it turns on, side by side in a form grid. */
+.field-checkbox-input {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.field-checkbox-input .checkbox-label {
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+}
+
+.field-checkbox-input input[type='text'] {
+  flex: 1;
+  min-width: 0;
 }
 
 .icon-caret-right {

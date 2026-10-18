@@ -440,6 +440,74 @@ test('launchBrowser starts QEMU from the snapshot, sets the clock, and records t
   assert.equal(readFileSync(path.join(dir, 'vnc-port'), 'utf8'), '34568');
 });
 
+test('launchBrowser sets the upstream proxy before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = fakeQmp({
+    'query-status': { status: 'paused' },
+    'guest-file-open': 3,
+    'guest-file-write': (args) => ({ count: Buffer.from(args['buf-b64'], 'base64').length })
+  });
+  const { vm } = await launcher({ start, portOpen, connectQmp });
+  await vm.launchBrowser({ proxy: 'http://u:p@Proxy.example.com:8080' });
+  assert.deepEqual(names(commands), [
+    'query-status',
+    'cont',
+    'guest-file-open',
+    'guest-file-write',
+    'guest-file-close',
+    'guest-set-time'
+  ]);
+  const write = commands.find(({ command }) => command === 'guest-file-write');
+  assert.equal(Buffer.from(write.args['buf-b64'], 'base64').toString(), 'http://u:p@proxy.example.com:8080\n');
+});
+
+test('launchBrowser refuses a bad proxy URL before it starts a VM', async () => {
+  const dataDir = tempDataDir();
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen, dataDir });
+  await assert.rejects(vm.launchBrowser({ proxy: 'https://proxy.example.com' }), /must start with/);
+  assert.equal(starts.length, 0);
+  assert.deepEqual(machines(dataDir), []);
+});
+
+test('setProxy writes the upstream proxy into a running VM, and clearProxy goes direct', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const { commands, connectQmp } = fakeQmp({
+    'guest-file-open': 3,
+    'guest-file-write': (args) => ({
+      count: Buffer.from(args['buf-b64'], 'base64').length
+    })
+  });
+  const vm = client({ dataDir, connectQmp, isAlive: async () => true });
+  await vm.setProxy('Qabc12345', 'socks5://proxy.example.com:1080');
+  await vm.clearProxy('Qabc12345');
+  const written = commands
+    .filter(({ command }) => command === 'guest-file-write')
+    .map(({ socket, args }) => [socket, Buffer.from(args['buf-b64'], 'base64').toString()]);
+  assert.deepEqual(written, [
+    ['qga.sock', 'socks5://proxy.example.com:1080\n'],
+    ['qga.sock', 'direct\n']
+  ]);
+});
+
+test('setProxy and clearProxy refuse a VM that is not running, a bad id, and a bad or empty URL', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const { commands, connectQmp } = fakeQmp();
+  const vm = client({ dataDir, connectQmp, isAlive: async () => false });
+  await assert.rejects(vm.setProxy('Qabc12345', 'http://proxy.example.com:8080'), /is not running/);
+  await assert.rejects(vm.clearProxy('Qabc12345'), /is not running/);
+  await assert.rejects(vm.setProxy('a/../b', 'http://proxy.example.com:8080'), /Invalid browser id/);
+  await assert.rejects(vm.clearProxy('a/../b'), /Invalid browser id/);
+  await assert.rejects(vm.setProxy('Qabc12345', 'ftp://proxy.example.com'), /must start with/);
+  // Going direct takes clearProxy, never an empty URL.
+  for (const empty of [null, undefined, '', '  ']) {
+    await assert.rejects(vm.setProxy('Qabc12345', empty), /clear the proxy instead/);
+  }
+  assert.equal(commands.length, 0);
+});
+
 test('launchBrowser records the machine, so a resume starts the same one', async () => {
   const dataDir = tempDataDir();
   const { start, portOpen } = startStub();

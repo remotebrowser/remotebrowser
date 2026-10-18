@@ -26,7 +26,29 @@ include('/partials/breadcrumbs', it) %>
         <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" />
         <% } %> Block ads and trackers
       </label>
-      <% if (it.notReady) { %>
+      <% if (it.canSetProxy) { %>
+      <div class="field-checkbox-input">
+        <label class="checkbox-label">
+          <% if (it.useProxy) { %>
+          <input type="checkbox" id="useProxy" name="useProxy" checked />
+          <% } else { %>
+          <input type="checkbox" id="useProxy" name="useProxy" />
+          <% } %> Use proxy
+        </label>
+        <input
+          type="text"
+          id="proxy"
+          name="proxy"
+          value="<%= it.proxy %>"
+          maxlength="512"
+          placeholder="http://user:password@host:8080"
+          aria-label="Proxy URL"
+          spellcheck="false"
+          autocomplete="off"
+          autocapitalize="off"
+        />
+      </div>
+      <% } %> <% if (it.notReady) { %>
       <button type="submit" class="btn-primary" disabled>Launch</button>
       <% } else { %>
       <button type="submit" class="btn-primary">Launch</button>
@@ -34,3 +56,21 @@ include('/partials/breadcrumbs', it) %>
     </form>
   </article>
 </main>
+<% if (it.canSetProxy) { %>
+<script nonce="<%= it.scriptNonce %>">
+  // The server ignores the URL unless the box is checked. The input starts
+  // enabled in markup, so the form still works with JavaScript off.
+  const useProxy = document.getElementById('useProxy');
+  const proxyInput = document.getElementById('proxy');
+  const syncProxyInput = () => {
+    proxyInput.disabled = !useProxy.checked;
+  };
+  syncProxyInput();
+  useProxy.addEventListener('change', () => {
+    syncProxyInput();
+    if (useProxy.checked) {
+      proxyInput.focus();
+    }
+  });
+</script>
+<% } %>

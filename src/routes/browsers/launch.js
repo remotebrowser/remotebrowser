@@ -12,7 +12,8 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canStartBrowser, startBrowser as startBrowserOnFleet } from '../../fleet.js';
+import { canSetBrowserProxy, canStartBrowser, startBrowser as startBrowserOnFleet } from '../../fleet.js';
+import { normalizeProxyUrl } from '../../vm/index.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
@@ -51,6 +52,10 @@ const renderBrowserLaunch = async (c, data = {}) => {
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
     notReady: false,
+    canSetProxy: canSetBrowserProxy(),
+    scriptNonce: c.get('secureHeadersNonce'),
+    useProxy: false,
+    proxy: '',
     ...data
   });
 };
@@ -62,7 +67,10 @@ const renderBrowserLaunchError = (c, body, error, data = {}) =>
     suggestedName: formString(body.name).trim(),
     description: formString(body.description).trim(),
     enableScreenRecording: Boolean(body.enableScreenRecording),
-    blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers)
+    blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers),
+    useProxy: Boolean(body.useProxy),
+    // Kept, password included, so a typo is easy to fix; it goes back only to its sender.
+    proxy: formString(body.proxy).trim()
   });
 
 routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) => {
@@ -77,10 +85,11 @@ const startBrowser = async ({
   workspaceId,
   browserInstanceId,
   userId,
+  proxy = null,
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserOnFleet();
+  const started = await startBrowserOnFleet({ proxy });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -139,6 +148,25 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, NOT_READY_ERROR, { notReady: true }), 503);
   }
 
+  // Checked before the instance row exists, so a bad URL leaves nothing behind.
+  // Without JavaScript, the URL input stays enabled, so it may hold a value
+  // even when the box is not checked.
+  /** @type {string | null} */
+  let proxy = null;
+  if (body.useProxy) {
+    try {
+      proxy = normalizeProxyUrl(formString(body.proxy));
+    } catch (error) {
+      return c.html(renderBrowserLaunchError(c, body, `${error.message}.`), 400);
+    }
+    if (!proxy) {
+      return c.html(renderBrowserLaunchError(c, body, 'Enter the proxy URL, or uncheck Use proxy.'), 400);
+    }
+  }
+  if (proxy && !canSetBrowserProxy()) {
+    return c.html(renderBrowserLaunchError(c, body, 'This server cannot set a proxy for its browsers.'), 400);
+  }
+
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -157,7 +185,8 @@ const handleLaunch = async (c) => {
   void startBrowser({
     workspaceId: workspace.id,
     browserInstanceId: launched.data.browserInstanceId,
-    userId: user.id
+    userId: user.id,
+    proxy
   });
 
   return c.redirect(`/browsers/${launched.data.publicId}`, 303);

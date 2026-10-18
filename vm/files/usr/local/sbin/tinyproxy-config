@@ -1,0 +1,45 @@
+#!/bin/sh
+# tinyproxy has no include, so this builds its config, /run/tinyproxy.conf,
+# from /etc/tinyproxy/tinyproxy.conf plus an Upstream line for the proxy that
+# the host sets in /etc/remotebrowser/proxy/upstream (see src/vm/proxy.js).
+# Runs whenever tinyproxy starts or reloads.
+#
+# That file holds one line: a proxy URL, or "direct". Anything else, e.g. a
+# write that the host did not finish, is an error, so tinyproxy does not start
+# and the browser stays offline instead of going out directly.
+set -eu
+base=/etc/tinyproxy/tinyproxy.conf
+upstream=/etc/remotebrowser/proxy/upstream
+out=/run/tinyproxy.conf
+
+line=
+# No file is the image as it was built: direct.
+if [ -f "$upstream" ]; then
+  if [ "$(wc -l <"$upstream")" -ne 1 ] || [ -n "$(tail -c 1 "$upstream")" ]; then
+    echo "$upstream must hold exactly one line" >&2
+    exit 1
+  fi
+  url=$(cat "$upstream")
+  if [ "$url" != direct ]; then
+    # tinyproxy takes the user and password as they are, without decoding.
+    cred='[-A-Za-z0-9._~!$&*+,;=]'
+    line=$(printf '%s\n' "$url" |
+      sed -nE "s#^(http|socks4|socks5)://(($cred+:$cred*)@)?([a-z0-9][-a-z0-9.]*):([0-9]{1,5})\$#Upstream \\1 \\2\\4:\\5#p")
+    if [ -z "$line" ]; then
+      echo "$upstream does not hold a valid proxy URL" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# It may hold a password. tinyproxy reads it again on reload, after it drops
+# root, so its group may read it too.
+umask 027
+{
+  cat "$base"
+  if [ -n "$line" ]; then
+    printf '\n# The upstream proxy from %s\n%s\n' "$upstream" "$line"
+  fi
+} >"$out.part"
+chgrp tinyproxy "$out.part"
+mv "$out.part" "$out"

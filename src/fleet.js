@@ -39,9 +39,9 @@ const startBrowserOnFleet = async () => {
   return { data: { browserId } };
 };
 
-const startBrowserLocally = async () => {
+const startBrowserLocally = async ({ proxy }) => {
   try {
-    const { browserId } = await vms.launchBrowser();
+    const { browserId } = await vms.launchBrowser({ proxy });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }
@@ -53,9 +53,16 @@ const startBrowserLocally = async () => {
 
 /**
  * Starts a browser, either on an external fleet server or in a local VM.
+ * Only a local VM takes an upstream `proxy` URL (see src/vm/proxy.js).
+ * @param {{proxy?: string | null}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
-const startBrowser = async () => (config.browserFleetUrl ? startBrowserOnFleet() : startBrowserLocally());
+const startBrowser = async ({ proxy = null } = {}) => {
+  if (config.browserFleetUrl) {
+    return proxy ? { error: 'NOT_SUPPORTED' } : startBrowserOnFleet();
+  }
+  return startBrowserLocally({ proxy });
+};
 
 /**
  * Whether a browser can be started now. Locally, that needs the VM snapshot,
@@ -185,10 +192,11 @@ const stopBrowser = async ({ browserId }) => {
   return config.browserFleetUrl ? stopBrowserOnFleet({ browserId }) : stopBrowserLocally({ browserId });
 };
 
-// The external fleet API has no suspend or resume, so only local VMs offer them.
+// The external fleet API has no suspend, resume, or proxy, so only local VMs offer them.
 const canSuspendBrowsers = () => !config.browserFleetUrl;
+const canSetBrowserProxy = canSuspendBrowsers;
 
-const checkSuspendable = (browserId) => {
+const checkLocalVm = (browserId) => {
   if (!canSuspendBrowsers()) {
     return 'NOT_SUPPORTED';
   }
@@ -205,7 +213,7 @@ const checkSuspendable = (browserId) => {
  * @returns {Promise<{data?: true, error?: string}>}
  */
 const suspendBrowser = async ({ browserId }) => {
-  const invalid = checkSuspendable(browserId);
+  const invalid = checkLocalVm(browserId);
   if (invalid) {
     return { error: invalid };
   }
@@ -224,7 +232,7 @@ const suspendBrowser = async ({ browserId }) => {
  * @returns {Promise<{data?: true, error?: string}>}
  */
 const resumeBrowser = async ({ browserId }) => {
-  const invalid = checkSuspendable(browserId);
+  const invalid = checkLocalVm(browserId);
   if (invalid) {
     return { error: invalid };
   }
@@ -235,6 +243,36 @@ const resumeBrowser = async ({ browserId }) => {
     return { error: errorMessage(error) };
   }
 };
+
+const changeBrowserProxy = async (browserId, change) => {
+  const invalid = checkLocalVm(browserId);
+  if (invalid) {
+    return { error: invalid };
+  }
+  try {
+    await change();
+    return { data: true };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
+/**
+ * Sends a running browser's traffic through an upstream proxy, e.g.
+ * `http://user:password@host:8080` (see src/vm/proxy.js). The external fleet
+ * API has no such call, so only local VMs offer it.
+ * @param {string} browserId
+ * @param {string} proxy
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const setBrowserProxy = (browserId, proxy) => changeBrowserProxy(browserId, () => vms.setProxy(browserId, proxy));
+
+/**
+ * Removes a running browser's upstream proxy, so it connects directly.
+ * @param {string} browserId
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const clearBrowserProxy = (browserId) => changeBrowserProxy(browserId, () => vms.clearProxy(browserId));
 
 // Only http/https map to a websocket scheme; anything else is a misconfiguration.
 const CDP_SCHEME_FOR = { 'http:': 'ws:', 'https:': 'wss:' };
@@ -289,6 +327,9 @@ export {
   browserCdpUrl,
   stopBrowser,
   canSuspendBrowsers,
+  canSetBrowserProxy,
   suspendBrowser,
-  resumeBrowser
+  resumeBrowser,
+  setBrowserProxy,
+  clearBrowserProxy
 };

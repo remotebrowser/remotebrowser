@@ -37,9 +37,12 @@ COPY files/ /
 
 # Chromium is not enabled: chromium-start.timer starts it, once a VM starts
 # from the snapshot.
-RUN systemctl enable systemd-networkd nftables tinyproxy xvnc cdp-proxy guest-ready chromium-start.timer \
+RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path xvnc cdp-proxy guest-ready \
+        chromium-start.timer \
     # Nothing in the VM needs these, and each one slows the boot.
     && systemctl mask systemd-networkd-wait-online apt-daily.timer apt-daily-upgrade.timer \
         e2scrub_reap getty@tty1 \
     # A random machine id per boot, instead of one baked into the image.
-    && truncate -s 0 /etc/machine-id
+    && truncate -s 0 /etc/machine-id \
+    # The upstream proxy may hold a password, which the browser must not read.
+    && install -d -m 0700 /etc/remotebrowser/proxy
