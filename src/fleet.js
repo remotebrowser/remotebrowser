@@ -58,6 +58,23 @@ const startBrowserLocally = async () => {
 const startBrowser = async () => (config.browserFleetUrl ? startBrowserOnFleet() : startBrowserLocally());
 
 /**
+ * Whether a browser can be started now. Locally, that needs the VM snapshot,
+ * which the server saves in the background at startup. The external fleet
+ * is checked at startup instead (checkBrowserFleetHealth).
+ * @returns {Promise<{data?: boolean, error?: string}>}
+ */
+const canStartBrowser = async () => {
+  if (config.browserFleetUrl) {
+    return { data: true };
+  }
+  try {
+    return { data: await vms.canLaunchBrowser() };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
+/**
  * Checks the external fleet once at startup. Local QEMU needs no probe: the
  * server builds the VM image itself, and launch errors are reported per browser.
  * @returns {Promise<{data?: {healthy: true}, error?: string}>}
@@ -266,6 +283,7 @@ const browserCdpUrl = async ({ browserId, origin = config.browserFleetUrl }) => 
 export {
   isWellFormedBrowserId,
   startBrowser,
+  canStartBrowser,
   checkBrowserFleetHealth,
   browserExists,
   browserCdpUrl,

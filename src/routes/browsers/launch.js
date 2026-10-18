@@ -12,7 +12,7 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { startBrowser as startBrowserOnFleet } from '../../fleet.js';
+import { canStartBrowser, startBrowser as startBrowserOnFleet } from '../../fleet.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
@@ -20,6 +20,18 @@ import { formString } from '../../form.js';
 const INITIAL_URLS = ['https://duck.com', 'https://startpage.com', 'https://search.brave.com'];
 
 export const routes = new Hono();
+
+const NOT_READY_ERROR =
+  'Browsers are still being prepared, so none can be launched yet. Please come back again in a few minutes.';
+
+// Not ready also covers a failed check: a launch would fail the same way.
+const browsersReady = async () => {
+  const ready = await canStartBrowser();
+  if (ready.error) {
+    consola.error(`Unable to check whether a browser can be started: ${ready.error}`);
+  }
+  return ready.data === true;
+};
 
 const generateBrowserName = () => `${randomItem(ADJECTIVES)}-${randomItem(SOLITARY_ANIMALS)}`;
 
@@ -38,20 +50,27 @@ const renderBrowserLaunch = async (c, data = {}) => {
     description: '',
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
+    notReady: false,
     ...data
   });
 };
 
-const renderBrowserLaunchError = (c, body, error) =>
+const renderBrowserLaunchError = (c, body, error, data = {}) =>
   renderBrowserLaunch(c, {
     error,
+    ...data,
     suggestedName: formString(body.name).trim(),
     description: formString(body.description).trim(),
     enableScreenRecording: Boolean(body.enableScreenRecording),
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers)
   });
 
-routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) => c.html(await renderBrowserLaunch(c)));
+routes.get('/launch', requireUser, requireWorkspaceRole('User'), async (c) => {
+  if (!(await browsersReady())) {
+    return c.html(await renderBrowserLaunch(c, { error: NOT_READY_ERROR, notReady: true }), 503);
+  }
+  return c.html(await renderBrowserLaunch(c));
+});
 
 // Post-response only: may not throw, and navigate/startMonitor are injectable for tests.
 const startBrowser = async ({
@@ -114,6 +133,10 @@ const handleLaunch = async (c) => {
   const description = formString(body.description).trim();
   if (description.length > 140) {
     return c.html(renderBrowserLaunchError(c, body, 'The description must be 140 characters or fewer.'), 400);
+  }
+
+  if (!(await browsersReady())) {
+    return c.html(renderBrowserLaunchError(c, body, NOT_READY_ERROR, { notReady: true }), 503);
   }
 
   const user = c.get('user');

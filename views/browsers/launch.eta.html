@@ -26,7 +26,11 @@ include('/partials/breadcrumbs', it) %>
         <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" />
         <% } %> Block ads and trackers
       </label>
+      <% if (it.notReady) { %>
+      <button type="submit" class="btn-primary" disabled>Launch</button>
+      <% } else { %>
       <button type="submit" class="btn-primary">Launch</button>
+      <% } %>
     </form>
   </article>
 </main>

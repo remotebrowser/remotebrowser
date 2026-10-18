@@ -8,6 +8,7 @@ process.env.BROWSERFLEET_URL = '';
 const { setVmClient } = await import('./vm/index.js');
 const {
   startBrowser,
+  canStartBrowser,
   browserExists,
   browserCdpUrl,
   stopBrowser,
@@ -27,6 +28,7 @@ const fakeVms = (overrides = {}) => {
     return typeof result === 'function' ? result(args) : result;
   };
   const client = {
+    canLaunchBrowser: record('canLaunchBrowser', true),
     launchBrowser: record('launchBrowser', { browserId: 'Pabc12345' }),
     browserIsRunning: record('browserIsRunning', true),
     browserExists: record('browserExists', true),
@@ -55,6 +57,21 @@ test('startBrowser reports a failed VM launch', async () => {
     }).client
   );
   assert.deepEqual(await startBrowser(), { error: 'Unable to launch Chromium' });
+});
+
+test('canStartBrowser asks the local VM manager', async () => {
+  setVmClient(fakeVms().client);
+  assert.deepEqual(await canStartBrowser(), { data: true });
+  setVmClient(fakeVms({ canLaunchBrowser: async () => false }).client);
+  assert.deepEqual(await canStartBrowser(), { data: false });
+  setVmClient(
+    fakeVms({
+      canLaunchBrowser: async () => {
+        throw new Error('no accel');
+      }
+    }).client
+  );
+  assert.deepEqual(await canStartBrowser(), { error: 'no accel' });
 });
 
 test('browserExists checks the local VM state', async () => {
