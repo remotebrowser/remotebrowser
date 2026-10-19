@@ -25,7 +25,7 @@ const MAX_RESTART_BACKOFF = 30000;
 const MAX_RESTARTS = 122;
 
 // 'ready' proves the CDP connection opened, which is exactly what 'running' means.
-const STATUS_FOR_STATE = { ready: 'running', disconnected: 'error', error: 'error' };
+const STATUS_FOR_STATE = { ready: 'running', disconnected: 'error', error: 'error', gone: 'terminated' };
 
 // Navigations are surfaced on stdout for now; nothing consumes them yet.
 const logNavigation = ({ internalBrowserId, pageId, url }) => {
@@ -72,6 +72,15 @@ const createBrowserMonitors = ({
     }
   };
 
+  const markGone = (record) => {
+    consola.info('Browser is gone; removing its monitor', {
+      'event.domain': 'browser-monitor',
+      'rb.browser_id': record.internalBrowserId
+    });
+    drop(record);
+    setStatus({ workspaceId: record.workspaceId, browserInstanceId: record.browserInstanceId, state: 'gone' });
+  };
+
   const restart = async (record) => {
     // A stop we asked for is not a crash.
     if (record.stopping) {
@@ -84,11 +93,7 @@ const createBrowserMonitors = ({
     }
     // Only a definite "gone" ends the monitor; a failed check proves nothing.
     if (present === false) {
-      consola.info('Browser is gone; removing its monitor', {
-        'event.domain': 'browser-monitor',
-        'rb.browser_id': record.internalBrowserId
-      });
-      drop(record);
+      markGone(record);
       return;
     }
     if (record.restarts > maxRestarts) {
@@ -170,7 +175,8 @@ const createBrowserMonitors = ({
       return { data: false };
     }
     if (!record.cdpUrl) {
-      drop(record);
+      const { data: present } = await exists({ browserId: internalBrowserId });
+      (present === false && !record.stopping ? markGone : drop)(record);
       return { error: 'CDP_URL_UNAVAILABLE' };
     }
     spawn(record);

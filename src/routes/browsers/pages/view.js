@@ -12,12 +12,14 @@ export const routes = new Hono();
 const screenshotImpliesConnected = (screenshotResult) =>
   !screenshotResult.error || screenshotResult.error === 'NO_SUCH_PAGE';
 
-// Update status from the capture a miss queued, fire-and-forget.
+// Update status from the capture a miss queued, fire-and-forget. Only a success
+// counts: a capture can fail on a busy page, so the monitor decides when a
+// browser is unreachable.
 const reportOpportunisticStatus = ({ workspaceId, browserInstanceId, currentStatus, screenshotResult }) => {
-  const toStatus = nextBrowserStatus({
-    currentStatus,
-    cdpConnected: screenshotImpliesConnected(screenshotResult)
-  });
+  if (!screenshotImpliesConnected(screenshotResult)) {
+    return;
+  }
+  const toStatus = nextBrowserStatus({ currentStatus, cdpConnected: true });
   if (toStatus === null) {
     return;
   }

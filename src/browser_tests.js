@@ -137,12 +137,29 @@ test('a failed existence check keeps the worker restarting', async () => {
 });
 
 test('a worker exit is final once the fleet confirms the browser is gone', async () => {
-  const { registry, spawned } = setup({ exists: async () => ({ data: false }) });
+  const { registry, spawned, statuses } = setup({ exists: async () => ({ data: false }) });
   await registry.startBrowserMonitor(monitoredBrowser);
   spawned[0].onExit();
   assert.ok(await waitFor(() => !registry.isMonitored('br-1')));
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(spawned.length, 1);
+  assert.deepEqual(statuses, ['gone']);
+});
+
+test('start marks a browser gone when it has no CDP URL and the fleet confirms it is gone', async () => {
+  const { registry, spawned, statuses } = setup({ cdpUrlFor: async () => null, exists: async () => ({ data: false }) });
+  assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { error: 'CDP_URL_UNAVAILABLE' });
+  assert.equal(registry.isMonitored('br-1'), false);
+  assert.equal(spawned.length, 0);
+  assert.deepEqual(statuses, ['gone']);
+});
+
+test('start leaves the status alone when it has no CDP URL but the browser may still exist', async () => {
+  for (const exists of [async () => ({ data: true }), async () => ({ error: 'NETWORK' })]) {
+    const { registry, statuses } = setup({ cdpUrlFor: async () => null, exists });
+    assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { error: 'CDP_URL_UNAVAILABLE' });
+    assert.deepEqual(statuses, []);
+  }
 });
 
 test('the monitor gives up after the restart limit', async () => {

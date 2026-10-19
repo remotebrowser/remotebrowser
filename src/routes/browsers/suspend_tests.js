@@ -168,7 +168,7 @@ test('POST /browsers/:browserId/resume resumes the VM, marks it running, and wat
   assert.equal(await statusNow(), 'running');
   // The monitor asks for the CDP URL, which may have moved to a new port.
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(names(calls), ['resumeBrowser', 'resolveCdpUrl']);
+  assert.deepEqual(names(calls), ['resumeBrowser', 'resolveCdpUrl', 'browserIsRunning']);
 });
 
 test('a failed resume keeps the browser suspended and shows the error on its page', async () => {

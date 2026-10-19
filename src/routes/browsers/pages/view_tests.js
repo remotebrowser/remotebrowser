@@ -228,35 +228,23 @@ test('GET /browsers/:browserId/pages/:pageId/view writes nothing when an already
   assert.equal(fetched.data.status, 'running');
 });
 
-test('GET /browsers/:browserId/pages/:pageId/view opportunistically demotes a running browser to error when the capture fails', async () => {
-  const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
-  captureResult = { error: 'CDP_ERROR' };
+for (const status of ['running', 'error']) {
+  test(`GET /browsers/:browserId/pages/:pageId/view keeps the status ${status} when the capture fails`, async () => {
+    const workspaceId = await makeUser();
+    const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status });
+    captureResult = { error: 'CDP_ERROR' };
 
-  const app = setupApp();
-  const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
-    headers: { cookie: `session=${cookie}` }
+    const app = setupApp();
+    const cookie = makeSessionCookie();
+    const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
+      headers: { cookie: `session=${cookie}` }
+    });
+    assert.equal(res.status, 200);
+    await settleStatus(workspaceId, browserPublicId, () => false);
+    const fetched = await getBrowserInstanceByPublicId({ workspaceId, publicId: browserPublicId });
+    assert.equal(fetched.data.status, status);
   });
-  assert.equal(res.status, 200);
-  const status = await settleStatus(workspaceId, browserPublicId, (s) => s === 'error');
-  assert.equal(status, 'error', 'the status write should have run');
-});
-
-test('GET /browsers/:browserId/pages/:pageId/view opportunistically terminates a browser still unreachable after erroring', async () => {
-  const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'error' });
-  captureResult = { error: 'CDP_ERROR' };
-
-  const app = setupApp();
-  const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
-    headers: { cookie: `session=${cookie}` }
-  });
-  assert.equal(res.status, 200);
-  const status = await settleStatus(workspaceId, browserPublicId, (s) => s === 'terminated');
-  assert.equal(status, 'terminated', 'the status write should have run');
-});
+}
 
 test('GET /browsers/:browserId/pages/:pageId/view redirects to / and clears a stale active workspace', async () => {
   await makeUser();
