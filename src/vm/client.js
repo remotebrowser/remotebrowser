@@ -187,6 +187,10 @@ const createVmClient = ({
     );
   };
 
+  // Lets the app refuse a launch up front while the server is still saving
+  // the snapshot at startup.
+  const canLaunchBrowser = async () => Boolean((await usableSnapshot(await getAccel())).saved);
+
   const launchBrowser = async () => {
     const browserId = generateShortId('Q', 8);
     const name = vmName(browserId);
@@ -310,6 +314,7 @@ const createVmClient = ({
     runtime: 'qemu',
     arch,
     getAccel,
+    canLaunchBrowser,
     launchBrowser,
     browserExists,
     browserIsRunning,

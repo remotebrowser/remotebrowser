@@ -10,6 +10,7 @@ process.env.BROWSERFLEET_URL = 'http://browserfleet.test/';
 const {
   isWellFormedBrowserId,
   startBrowser,
+  canStartBrowser,
   checkBrowserFleetHealth,
   browserExists,
   browserCdpUrl,
@@ -332,6 +333,16 @@ test('an external fleet cannot suspend or resume browsers', async () => {
     assert.equal(canSuspendBrowsers(), false);
     assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
     assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
+  } finally {
+    restore();
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('canStartBrowser trusts an external fleet without asking it', async () => {
+  const { calls, restore } = stubFetch(() => new Response(null, { status: 500 }));
+  try {
+    assert.deepEqual(await canStartBrowser(), { data: true });
   } finally {
     restore();
   }

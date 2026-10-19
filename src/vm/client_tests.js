@@ -474,6 +474,13 @@ test('launchBrowser refuses, and logs why, when there is no usable snapshot', as
   }
 });
 
+test('canLaunchBrowser is true only with a usable snapshot', async () => {
+  const { vm } = await launcher();
+  assert.equal(await vm.canLaunchBrowser(), true);
+  assert.equal(await client({ dataDir: tempDataDir() }).canLaunchBrowser(), false);
+  assert.equal(await (await launcher({}, { accel: 'tcg' })).vm.canLaunchBrowser(), false);
+});
+
 test('launchBrowser fails, without booting, when the VM does not load from the snapshot', async () => {
   const dataDir = tempDataDir();
   const { starts, start, portOpen } = startStub();

@@ -430,7 +430,8 @@ a.btn-primary {
 /* A disabled "Launch a browser" is a <span>, not an <a> with no href - an
    anchor can't be given a real disabled state, and one still stripped of its
    href would sit there inert with no visual cue why. */
-.btn-primary[aria-disabled='true'] {
+.btn-primary[aria-disabled='true'],
+.btn-primary[disabled] {
   background-color: var(--fill-disabled);
   cursor: not-allowed;
 }
