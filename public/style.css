@@ -1758,19 +1758,6 @@ pre {
   }
 }
 
-/* The playground puts code and live view side by side, so it needs more room
-   than the usual reading width. */
-body.wide {
-  max-width: 96rem;
-}
-
-.playground {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-
 .playground-toolbar {
   display: flex;
   gap: 0.5rem;
@@ -1786,6 +1773,17 @@ body.wide {
   background-color: var(--surface);
   color: var(--text);
   border: 1px solid var(--border-strong);
+}
+
+/* Stays on the right while the drop-down is hidden during a run. */
+.playground-toolbar button {
+  margin-left: auto;
+}
+
+.playground-elapsed {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .playground-toolbar button:disabled {
@@ -1810,19 +1808,8 @@ body.wide {
   border-radius: 0.25rem;
 }
 
-.playground-output-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.playground-output-header h2 {
-  font-size: 1rem;
-  margin: 0.75rem 0 0.5rem;
-}
-
 .playground-status {
-  flex: 1;
+  margin: 0.375rem 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
@@ -1854,6 +1841,10 @@ body.wide {
   color: light-dark(#b1271b, #ff8a80);
 }
 
+.playground-empty {
+  color: var(--text-muted);
+}
+
 .playground-result {
   color: var(--text-muted);
 }
@@ -1867,10 +1858,4 @@ body.wide {
   max-width: 100%;
   margin: 0.5rem 0;
   border: 1px solid var(--border);
-}
-
-@media (max-width: 60rem) {
-  .playground {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

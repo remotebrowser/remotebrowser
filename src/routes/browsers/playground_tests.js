@@ -133,15 +133,43 @@ test('GET /browsers/:browserId/playground renders the editor and live view for a
   assert.match(
     body,
     new RegExp(
-      `<article id="playground" class="playground" data-cdp-url="ws://localhost/cdp/${handle}" data-pages-url="/browsers/${browserPublicId}/pages">`
+      `<article id="playground" class="browser-layout" data-cdp-url="ws://localhost/cdp/${handle}" data-pages-url="/browsers/${browserPublicId}/pages">`
     )
   );
   assert.match(body, /<textarea\s+id="playground-editor"/);
   assert.match(body, /<button type="button" id="playground-run" class="btn-primary" disabled>Run<\/button>/);
+  // Hidden until a run takes longer than 2 seconds; playground.js fills it in.
+  assert.match(
+    body,
+    /<\/select>\s*<span id="playground-elapsed" class="playground-elapsed hidden"><\/span>\s*<button type="button" id="playground-run"/
+  );
+  // The same button stops a run, so there is no separate Stop button.
+  assert.doesNotMatch(body, /id="playground-stop"/);
+  // Each run replaces the output, so it needs no Clear button.
+  assert.doesNotMatch(body, /id="playground-clear"/);
   // The live view starts on the first page target, not the service worker.
   assert.match(body, new RegExp(`data-frame-url="/browsers/${browserPublicId}/pages/page0/frame"`));
+  // Clicking it opens that page's own view, like the previews on the browser page.
+  assert.match(
+    body,
+    new RegExp(
+      `<a class="page-preview-link" href="/browsers/${browserPublicId}/pages/page0">\\s*<canvas\\s+class="browser-screenshot"`
+    )
+  );
   assert.match(body, /<script src="\/screencast\.js"><\/script>\s*<script src="\/playground\.js"><\/script>/);
-  assert.match(body, /<body class="wide">/);
+  // Same page width as the other pages, with the live view as the usual sidebar.
+  assert.match(body, /<body class="">/);
+  assert.match(
+    body,
+    /<section class="playground-live browser-preview" aria-label="Live view and output">\s*<div id="page-live-view">\s*<a class="page-preview-link"/
+  );
+  // The output sits under the live view, in the same column, hidden until a run ends.
+  // No heading: the status line under the box says how the run ended.
+  assert.match(
+    body,
+    /<\/canvas>\s*<\/a>\s*<\/div>\s*<div id="playground-output-block" class="hidden">\s*<div id="playground-output"[^>]*><\/div>\s*<p id="playground-status"[^>]*>[^<]*<\/p>\s*<\/div>\s*<\/section>\s*<\/article>/
+  );
+  assert.doesNotMatch(body, /<h2>Output<\/h2>/);
   assert.match(body, /aria-current="page">Playground/);
   assert.match(body, new RegExp(`<a href="/browsers/${browserPublicId}">calm-otter</a>`));
 });
@@ -164,6 +192,8 @@ test('GET /browsers/:browserId/playground leaves the live view empty when listin
   const body = await (await request(`/browsers/${browserPublicId}/playground`)).text();
   assert.match(body, /id="playground-editor"/);
   assert.match(body, /data-frame-url=""/);
+  // No known page yet, so the live view falls back to the browser's page list.
+  assert.match(body, new RegExp(`<a class="page-preview-link" href="/browsers/${browserPublicId}/pages">\\s*<canvas`));
 });
 
 for (const status of ['starting', 'error', 'terminated']) {
