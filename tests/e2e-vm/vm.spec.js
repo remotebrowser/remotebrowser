@@ -182,11 +182,12 @@ test.describe('real QEMU VMs', () => {
     await expect(page.locator('#browser-status')).toContainText('running', { timeout: 150000 });
     // The preview only renders after the app has listed the browser's page
     // targets over CDP, so its presence proves Chrome is answering.
-    const preview = page.locator('img.browser-screenshot').first();
+    // The link, not the image: htmx soon swaps the <img> for a live <canvas>.
+    const preview = page.locator('a.page-preview-link').first();
     await expect(preview).toBeVisible({ timeout: 60000 });
-    const src = await preview.getAttribute('src');
+    const href = await preview.getAttribute('href');
 
-    const shot = await page.request.get(src);
+    const shot = await page.request.get(`${href}/view`);
     expect(shot.status()).toBe(200);
     expect(shot.headers()['content-type']).toBe('image/png');
     const png = await shot.body();
