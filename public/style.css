@@ -304,11 +304,11 @@ footer {
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-top: 2px solid #fff;
   border-radius: 50%;
-  animation: signin-spin 1.2s infinite linear;
+  animation: spinner-spin 1.2s infinite linear;
   vertical-align: -0.15em;
 }
 
-@keyframes signin-spin {
+@keyframes spinner-spin {
   100% {
     transform: rotate(360deg);
   }
@@ -516,6 +516,31 @@ a.btn-secondary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.busy-message {
+  display: none;
+}
+
+.busy-message::before {
+  content: '';
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.4em;
+  border: 2px solid var(--fill);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spinner-spin 1.2s infinite linear;
+  vertical-align: -0.15em;
+}
+
+.busy-on-request.htmx-request > .busy-message {
+  display: block;
+}
+
+.busy-on-request.htmx-request > :not(.busy-message) {
+  display: none;
 }
 
 .form-note {
@@ -1754,6 +1779,10 @@ pre {
   }
 
   .auth-stars {
+    animation: none;
+  }
+
+  .busy-message::before {
     animation: none;
   }
 }

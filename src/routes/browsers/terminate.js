@@ -41,6 +41,7 @@ const renderTerminate = async (c, data = {}) => {
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, data.browser.browserName),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
+    terminated: false,
     ...data
   });
 };
@@ -113,6 +114,10 @@ routes.post(
       'workspace.id': workspace.id,
       'browser.public_id': browser.publicId
     });
+    // htmx swaps in the page it gets, so it gets the result; a plain form follows the redirect.
+    if (c.req.header('HX-Request') === 'true') {
+      return c.html(await renderTerminate(c, { browser, terminated: true }));
+    }
     return c.redirect('/browsers', 303);
   }
 );

@@ -32,6 +32,8 @@ const renderSuspend = async (c, data = {}) => {
     workspace,
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, data.browser.browserName),
+    // Set by secureHeaders first; the inline script reads it back for CSP.
+    scriptNonce: c.get('secureHeadersNonce'),
     ...data
   });
 };
@@ -118,6 +120,10 @@ routes.post('/:browserId/suspend', requireUser, requireWorkspaceRole('User'), re
     busy.delete(internalBrowserId);
   }
   logAction(c, 'SUSPEND_BROWSER', browser);
+  // htmx follows a redirect without changing the address bar, so ask it to navigate.
+  if (c.req.header('HX-Request') === 'true') {
+    return c.body(null, 204, { 'HX-Redirect': `/browsers/${browser.publicId}` });
+  }
   return c.redirect(`/browsers/${browser.publicId}`, 303);
 });
 
@@ -167,5 +173,9 @@ routes.post('/:browserId/resume', requireUser, requireWorkspaceRole('User'), req
     }
   });
   logAction(c, 'RESUME_BROWSER', browser);
+  // htmx follows a redirect without changing the address bar, so ask it to navigate.
+  if (c.req.header('HX-Request') === 'true') {
+    return c.body(null, 204, { 'HX-Redirect': `/browsers/${browser.publicId}` });
+  }
   return c.redirect(`/browsers/${browser.publicId}`, 303);
 });
