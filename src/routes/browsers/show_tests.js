@@ -174,13 +174,15 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(body, /<main>/);
   assert.doesNotMatch(body, /<main\s[^>]*hx-/);
   assert.match(body, /<div\s+class="browser-preview"[^>]*>/);
-  // The preview reloads itself every 4s.
+  // The preview loads its live version right away, then reloads every 4s.
   assert.match(
     body,
     new RegExp(
-      `<div\\s+class="browser-preview"[^>]*hx-get="/browsers/${browserPublicId}"[^>]*hx-trigger="every 4s"[^>]*hx-select="\\.browser-preview"`
+      `<div\\s+class="browser-preview"[^>]*hx-get="/browsers/${browserPublicId}"[^>]*hx-trigger="load, every 4s"[^>]*hx-select="\\.browser-preview"`
     )
   );
+  assert.doesNotMatch(body, /<canvas\s/);
+  assert.match(body, /<script src="\/screencast\.js" defer><\/script>/);
   assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`), 'a running browser offers Terminate');
   // Inside the connection panel, so it appears when the status poll refreshes it.
   assert.match(
@@ -214,6 +216,32 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(body, /htmx:beforeSwap[\s\S]*img\[id\^="screenshot-"\]/);
   // A timer refreshes the connection panel and the preview when the status changes.
   assert.match(body, /setInterval\([\s\S]*#browser-status[\s\S]*#browser-connection-info[\s\S]*\.browser-preview/);
+});
+
+test('GET /browsers/:browserId streams each page preview for an htmx request', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-happy' });
+
+  const app = setupApp();
+  const cookie = makeSessionCookie();
+  const res = await app.request(`/browsers/${browserPublicId}`, {
+    headers: { 'cookie': `session=${cookie}`, 'HX-Request': 'true' }
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('vary'), 'HX-Request');
+  const body = await res.text();
+  // One canvas per page, stacked in the same preview column.
+  for (const pageId of ['page0', 'page1']) {
+    assert.match(
+      body,
+      new RegExp(
+        `<a class="page-preview-link" href="/browsers/${browserPublicId}/pages/${pageId}">\\s*<canvas\\s+class="browser-screenshot"\\s+id="screencast-${pageId}"[^>]*aria-label="Live view of Title for ${pageId} in calm-otter"[^>]*data-frame-url="/browsers/${browserPublicId}/pages/${pageId}/frame"`
+      )
+    );
+  }
+  assert.doesNotMatch(body, /<img\s+class="browser-screenshot"/);
+  // No "load" here, or every swap would load the preview again.
+  assert.match(body, /<div\s+class="browser-preview"[^>]*hx-trigger="every 4s"/);
 });
 
 test('GET /browsers/:browserId renders a preview for a browser with exactly one page', async () => {

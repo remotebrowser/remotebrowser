@@ -165,6 +165,15 @@ body {
   padding: 1.5rem 1rem;
 }
 
+/* Same breakpoint as the split sign-in page: iPad landscape and laptops get
+   more room. */
+@media (min-width: 64rem) and (orientation: landscape) {
+  body {
+    max-width: 84rem;
+    padding: 2rem 2.5rem;
+  }
+}
+
 button,
 input {
   font-family: inherit;
@@ -613,6 +622,16 @@ a.btn-secondary {
   margin-bottom: 1rem;
 }
 
+/* Fill the wider page instead of leaving a gap on the right. */
+@media (min-width: 64rem) and (orientation: landscape) {
+  .roster-table,
+  .roster-table-actions,
+  .browser-table-actions,
+  .key-table-actions {
+    max-width: none;
+  }
+}
+
 .key-preview {
   font-size: 0.9rem;
   color: var(--text-muted);
@@ -751,12 +770,26 @@ a.btn-secondary {
 /* Two columns - details on the left, the live preview on the right - rather
    than the preview floating alongside the text, so its width is a real
    fraction of the page instead of a fixed pixel box wherever the text
-   happens to wrap around it. */
+   happens to wrap around it. The golden ratio keeps the preview readable
+   without a 1:1 split. */
 .browser-layout {
   display: grid;
-  grid-template-columns: 3fr 1fr;
+  grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
+}
+
+/* At the full 84rem page, a fixed 30rem keeps about the same ratio. The cap
+   holds the preview at 480px. */
+@media (min-width: 84rem) and (orientation: landscape) {
+  .browser-layout {
+    grid-template-columns: minmax(0, 1fr) 30rem;
+    gap: 2rem;
+  }
+
+  .browser-preview {
+    max-width: 30rem;
+  }
 }
 
 /* No screenshot yet (the browser is still starting) - the details column is
@@ -776,8 +809,8 @@ a.btn-secondary {
 }
 
 /* One <img> per open page, stacked top to bottom rather than side by side -
-   the column is already only 25% wide, so a row would squeeze each preview
-   into a sliver. */
+   the column is narrower than the details, so a row would squeeze each
+   preview into a sliver. */
 .browser-preview {
   display: flex;
   flex-direction: column;
@@ -802,20 +835,21 @@ a.btn-secondary {
   max-width: 100%;
   height: auto;
   aspect-ratio: auto 16 / 9;
-  border: 1px solid var(--border-strong);
   border-radius: 0.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-/* Stands in for .browser-screenshot while starting - same border and radius
+/* Stands in for .browser-screenshot while starting - same outline and radius
    so the right column doesn't change shape once a real screenshot swaps
    this out, light gray rather than white so it reads as "loading" and not
    as a blank space. */
 .browser-preview-placeholder {
   aspect-ratio: 16 / 9;
   background-color: var(--border);
-  border: 1px solid var(--border-strong);
   border-radius: 0.25rem;
+  box-shadow: 0 0 0 1px var(--border-strong);
 }
 
 /* Wraps each preview <img> so the whole thumbnail is the link target, not
@@ -827,7 +861,8 @@ a.btn-secondary {
   display: block;
 }
 
-@media (max-width: 40rem) {
+/* One column on portrait tablets too, so the details are not squeezed. */
+@media (max-width: 40rem), (orientation: portrait) {
   .browser-layout {
     grid-template-columns: 1fr;
   }

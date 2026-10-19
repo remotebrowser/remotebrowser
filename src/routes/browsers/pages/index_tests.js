@@ -174,12 +174,37 @@ test('GET /browsers/:browserId/pages lists every open page, each linking to its 
   assert.doesNotMatch(body, /worker1/);
   // Swaps all of <main> since the empty/not-ready states have no .pages-grid.
   assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
+  // Refreshes once right away, so the live previews arrive without a wait.
   assert.match(
     body,
     new RegExp(
-      `<script nonce="${TEST_SCRIPT_NONCE}">[\\s\\S]*setInterval[\\s\\S]*target: 'main', select: 'main', swap: 'outerHTML'`
+      `<script nonce="${TEST_SCRIPT_NONCE}">[\\s\\S]*target: 'main', select: 'main', swap: 'outerHTML'[\\s\\S]*refresh\\(\\);\\s*setInterval\\(refresh, 3000\\)`
     )
   );
+  assert.match(body, /<script src="\/screencast\.js" defer><\/script>/);
+  assert.doesNotMatch(body, /<canvas\s/);
+});
+
+test('GET /browsers/:browserId/pages streams each page for an htmx request', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeReadyBrowser(workspaceId, DEFAULT_BROWSER_ID);
+
+  const app = setupApp();
+  const res = await app.request(`/browsers/${browserPublicId}/pages`, {
+    headers: { 'cookie': sessionCookie(), 'HX-Request': 'true' }
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('vary'), 'HX-Request');
+  const body = await res.text();
+  for (const pageId of ['page1', 'page2']) {
+    assert.match(
+      body,
+      new RegExp(
+        `<canvas\\s+class="browser-screenshot"\\s+id="screencast-${pageId}"[^>]*aria-label="Title for ${pageId}"[^>]*data-frame-url="/browsers/${browserPublicId}/pages/${pageId}/frame"`
+      )
+    );
+  }
+  assert.doesNotMatch(body, /<img\s+class="browser-screenshot"/);
 });
 
 test('GET /browsers/:browserId/pages truncates a long title and shows only the URL domain', async () => {
