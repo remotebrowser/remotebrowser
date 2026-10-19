@@ -64,9 +64,9 @@ When the server is ready, open `http://localhost:3000` in your browser.
 
 Sign in with any email address. This setup has no SMTP server, so it cannot email you the sign-in link. Instead, the server prints the link to its console. Open that link to continue.
 
-Start a browser session and follow the instructions on the screen. The video below shows a coding assistant that uses Remote Browser to sign in to Amazon, find a product, and read its customer reviews.
+To try a simple automation, open the [Playground](playground.md) from the browser's page. It lets you run code against the live browser and see the result.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/w3pg9wJhfqY" title="Remote Browser demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+![Playground](playground.jpg){: style="width: 499px; max-width: 100%; height: auto; border: 1px solid darkgray" }
 
 !!! warning
 
