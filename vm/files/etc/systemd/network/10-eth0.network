@@ -1,0 +1,8 @@
+# QEMU user-mode networking answers DHCP with 10.0.2.15/24, via 10.0.2.2.
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=no
+IPv6AcceptRA=no

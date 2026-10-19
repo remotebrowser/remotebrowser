@@ -6,9 +6,10 @@ import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './
 // Shared browser logic: status transitions and the monitor registry.
 
 // Pure: pick the next status from a CDP check. null means no change, so callers
-// skip the write. Failed startups stay 'starting'; 'terminated' is never revisited.
+// skip the write. Failed startups stay 'starting'; 'terminated' is never
+// revisited, and a 'suspended' browser is unreachable on purpose.
 const nextBrowserStatus = ({ currentStatus, cdpConnected }) => {
-  if (currentStatus === 'terminated') {
+  if (currentStatus === 'terminated' || currentStatus === 'suspended') {
     return null;
   }
   const desired = cdpConnected ? 'running' : { running: 'error', error: 'terminated' }[currentStatus];

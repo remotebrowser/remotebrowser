@@ -4,7 +4,9 @@ import { config } from './config.js';
 import { shutdown as shutdownTelemetry } from './logging.js';
 import app from './app.js';
 import { checkBrowserFleetHealth } from './fleet.js';
-import { containers } from './container.js';
+import { bootstrapVm } from './vm/bootstrap.js';
+import { setupQemu } from './vm/setup.js';
+import { vms } from './vm/index.js';
 import { mountCdpRelay } from './cdp.js';
 import { stopScreenshots } from './screenshots.js';
 import { stopScreencasts } from './screencast.js';
@@ -28,27 +30,41 @@ try {
   process.exit(1);
 }
 
-const health = await checkBrowserFleetHealth().catch((error) => ({ error }));
-// Local mode talks to the container CLI (podman or docker, per CONTAINER_RUNTIME);
-// external mode talks to BROWSERFLEET_URL.
-const browserProvider = config.browserFleetUrl || `${containers.runtime} (${config.containerImage})`;
+// Local mode runs QEMU VMs; external mode talks to BROWSERFLEET_URL.
+if (!config.browserFleetUrl) {
+  // The step logs the failure itself.
+  await setupQemu().catch(() => process.exit(1));
+}
+const accel = config.browserFleetUrl ? null : await vms.getAccel();
 consola.info(
   config.browserFleetUrl
     ? `Browser provider: external browserfleet (${config.browserFleetUrl})`
-    : `Browser provider: ${containers.runtime}`,
+    : `Browser provider: qemu (${accel})`,
   { 'event.domain': 'browserfleet' }
 );
-if (health.error) {
-  consola.error('Browser provider health check failed; server will start without browser provisioning', {
-    'event.domain': 'browserfleet',
-    'error.type': String(health.error),
-    'server.address': browserProvider
-  });
-} else {
-  consola.log('Browser provider health check passed', {
-    'event.domain': 'browserfleet',
-    'server.address': browserProvider
-  });
+if (accel === 'tcg') {
+  consola.warn('QEMU has no KVM or HVF here, so browser VMs run under slow emulation', { 'event.domain': 'qemu' });
+}
+if (config.browserFleetUrl) {
+  const health = await checkBrowserFleetHealth().catch((error) => ({ error }));
+  if (health.error) {
+    consola.error('Browser provider health check failed; server will start without browser provisioning', {
+      'event.domain': 'browserfleet',
+      'error.type': String(health.error),
+      'server.address': config.browserFleetUrl
+    });
+  } else {
+    consola.log('Browser provider health check passed', {
+      'event.domain': 'browserfleet',
+      'server.address': config.browserFleetUrl
+    });
+  }
+}
+
+// Building the image takes minutes, so the server does not wait for it. An
+// external fleet has its own VMs.
+if (!config.browserFleetUrl) {
+  void bootstrapVm();
 }
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, () => {

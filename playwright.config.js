@@ -1,22 +1,20 @@
-import { mkdtempSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 // One e2e run covers both provisioning paths:
-// - the `mock` project points the app at a stand-in fleet (no containers), held
+// - the `mock` project points the app at a stand-in fleet (no VMs), held
 //   back on purpose so browsers.spec.js can prove the launch route returns
 //   before provisioning finishes;
-// - the `podman`/`docker` projects run the app in its default local mode and
-//   launch real Chrome containers, skipping themselves where that runtime is
-//   missing or cannot run containers.
+// - the `qemu` project runs the app in its default local mode and launches real
+//   Chromium VMs, skipping itself where QEMU or the VM image is missing.
 
 const MOCK_BROWSERFLEET_PORT = 8991;
 const MOCK_BROWSERFLEET_URL = `http://127.0.0.1:${MOCK_BROWSERFLEET_PORT}`;
 const MOCK_BROWSERFLEET_DELAY_MS = 1500;
 
 const MOCK_APP_PORT = 3000;
-const CONTAINER_RUNTIMES = ['podman', 'docker'];
 
 // Fresh PGlite dir per app instance; a caller-provided PGLITE_DATA_DIR wins and
 // gets a per-instance suffix. Only dirs we created are cleaned up.
@@ -33,20 +31,47 @@ const appServer = ({ port, dataDir, env }) => ({
   timeout: 30000
 });
 
-const mockDataDir = dataDirFor('mock');
-const containerServers = CONTAINER_RUNTIMES.map((runtime, index) => ({
-  runtime,
-  port: MOCK_APP_PORT + 1 + index,
-  dataDir: dataDirFor(runtime)
-}));
+// Its own VM data dir, so the tests see only the VMs this run started. It
+// shares the image builds of the usual one through hard links, so it needs
+// the same filesystem, and saves only its own snapshot. Without builds, the
+// VM tests skip themselves.
+const listDir = (dir) => {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+};
+const vmDataDirFor = () => {
+  const usual = process.env.VM_DATA_DIR || join(import.meta.dirname, '.data', 'vm');
+  mkdirSync(join(import.meta.dirname, '.data'), { recursive: true });
+  const dir = mkdtempSync(join(import.meta.dirname, '.data', 'e2e-vm-'));
+  for (const build of listDir(join(usual, 'images'))) {
+    if (build.isDirectory() && !build.name.startsWith('.')) {
+      mkdirSync(join(dir, 'images', build.name), { recursive: true });
+      for (const file of readdirSync(join(usual, 'images', build.name))) {
+        linkSync(join(usual, 'images', build.name, file), join(dir, 'images', build.name, file));
+      }
+    }
+  }
+  return dir;
+};
 
-process.env.E2E_PGLITE_DIRS = JSON.stringify(
-  providedDataDir ? [] : [mockDataDir, ...containerServers.map((server) => server.dataDir)]
-);
+const mockDataDir = dataDirFor('mock');
+const vmServer = {
+  port: MOCK_APP_PORT + 1,
+  dataDir: dataDirFor('qemu'),
+  // Workers load this config again, so they must reuse the dir, not make a
+  // new one.
+  vmDataDir: process.env.E2E_VM_DATA_DIR || vmDataDirFor()
+};
+
+process.env.E2E_PGLITE_DIRS = JSON.stringify(providedDataDir ? [] : [mockDataDir, vmServer.dataDir]);
+process.env.E2E_VM_DATA_DIR = vmServer.vmDataDir;
 
 export default defineConfig({
   testDir: './tests/e2e',
-  // Real containers are heavy and the sign-in helper takes the newest nonce per
+  // Real VMs are heavy and the sign-in helper takes the newest nonce per
   // address, so run one test at a time.
   fullyParallel: false,
   workers: 1,
@@ -71,16 +96,11 @@ export default defineConfig({
       timeout: 10000
     },
     appServer({ port: MOCK_APP_PORT, dataDir: mockDataDir, env: { BROWSERFLEET_URL: MOCK_BROWSERFLEET_URL } }),
-    ...containerServers.map((server) =>
-      appServer({
-        port: server.port,
-        dataDir: server.dataDir,
-        env: {
-          CONTAINER_RUNTIME: server.runtime,
-          ...(process.env.CONTAINER_IMAGE ? { CONTAINER_IMAGE: process.env.CONTAINER_IMAGE } : {})
-        }
-      })
-    )
+    appServer({
+      port: vmServer.port,
+      dataDir: vmServer.dataDir,
+      env: { VM_DATA_DIR: vmServer.vmDataDir }
+    })
   ],
   projects: [
     {
@@ -88,14 +108,12 @@ export default defineConfig({
       testDir: './tests/e2e',
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${MOCK_APP_PORT}` }
     },
-    ...containerServers.map((server) => ({
-      name: server.runtime,
-      testDir: './tests/e2e-container',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: `http://localhost:${server.port}`,
-        containerRuntime: server.runtime
-      }
-    }))
+    {
+      name: 'qemu',
+      testDir: './tests/e2e-vm',
+      // A cold VM boot is slower than a container start, more so without KVM.
+      timeout: 180000,
+      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${vmServer.port}` }
+    }
   ]
 });

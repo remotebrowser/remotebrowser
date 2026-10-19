@@ -1,0 +1,3 @@
+# Domains to take out of denylist.txt, one per line. This matters most when
+# the denylist comes from a large public blocklist that blocks too much.
+cdn4dd.com

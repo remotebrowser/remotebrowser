@@ -1,10 +1,9 @@
 import { config } from './config.js';
-import { containers, isWellFormedBrowserId } from './container.js';
+import { vms, isWellFormedBrowserId } from './vm/index.js';
 
-// The fleet facade. By default it drives the in-process container manager
-// (src/container.js, podman or docker); when BROWSERFLEET_URL is set it
-// delegates to an external podman-fleet server instead, which is useful for
-// remote fleets and tests.
+// The fleet facade. By default it drives the in-process QEMU VM manager
+// (src/vm/); when BROWSERFLEET_URL is set it delegates to an external fleet
+// server instead, which is useful for remote fleets and tests.
 
 // An external fleet request that does not answer this soon is treated as dead.
 const FLEET_TIMEOUT = 10000;
@@ -42,7 +41,7 @@ const startBrowserOnFleet = async () => {
 
 const startBrowserLocally = async () => {
   try {
-    const { browserId } = await containers.launchBrowser();
+    const { browserId } = await vms.launchBrowser();
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }
@@ -53,12 +52,17 @@ const startBrowserLocally = async () => {
 };
 
 /**
- * Starts a browser, either on an external fleet server or in a local container.
+ * Starts a browser, either on an external fleet server or in a local VM.
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
 const startBrowser = async () => (config.browserFleetUrl ? startBrowserOnFleet() : startBrowserLocally());
 
-const checkFleetHealth = async () => {
+/**
+ * Checks the external fleet once at startup. Local QEMU needs no probe: the
+ * server builds the VM image itself, and launch errors are reported per browser.
+ * @returns {Promise<{data?: {healthy: true}, error?: string}>}
+ */
+const checkBrowserFleetHealth = async () => {
   /** @type {Response} */
   let response;
   try {
@@ -73,23 +77,6 @@ const checkFleetHealth = async () => {
   }
   return { data: { healthy: true } };
 };
-
-const checkLocalHealth = async () => {
-  try {
-    await containers.health();
-    return { data: { healthy: true } };
-  } catch (error) {
-    return { error: errorMessage(error) };
-  }
-};
-
-/**
- * Checks that a browser can be provisioned once at startup, before the server
- * binds a port. A broken fleet is fatal here, not later: every browser record
- * written after startup would just sit unprovisioned.
- * @returns {Promise<{data?: {healthy: true}, error?: string}>}
- */
-const checkBrowserFleetHealth = async () => (config.browserFleetUrl ? checkFleetHealth() : checkLocalHealth());
 
 const browserExistsOnFleet = async ({ browserId }) => {
   /** @type {Response} */
@@ -112,7 +99,7 @@ const browserExistsOnFleet = async ({ browserId }) => {
 
 const browserExistsLocally = async ({ browserId }) => {
   try {
-    return { data: await containers.browserIsRunning(browserId) };
+    return { data: await vms.browserIsRunning(browserId) };
   } catch (error) {
     return { error: errorMessage(error) };
   }
@@ -153,10 +140,10 @@ const stopBrowserOnFleet = async ({ browserId }) => {
 const stopBrowserLocally = async ({ browserId }) => {
   try {
     // A browser that is already gone is the caller's goal already being true.
-    if (!(await containers.browserExists(browserId))) {
+    if (!(await vms.browserExists(browserId))) {
       return { data: true };
     }
-    await containers.stopBrowser(browserId);
+    await vms.stopBrowser(browserId);
     return { data: true };
   } catch (error) {
     return { error: errorMessage(error) };
@@ -164,7 +151,7 @@ const stopBrowserLocally = async ({ browserId }) => {
 };
 
 /**
- * Stops a browser, removing its container. Called when a collaborator
+ * Stops a browser, removing its VM. Called when a collaborator
  * terminates it. Already stopped or never started is success: no browser is
  * left running either way.
  * @param {{browserId: string}} params
@@ -179,6 +166,57 @@ const stopBrowser = async ({ browserId }) => {
     return { error: 'INVALID_BROWSER_ID' };
   }
   return config.browserFleetUrl ? stopBrowserOnFleet({ browserId }) : stopBrowserLocally({ browserId });
+};
+
+// The external fleet API has no suspend or resume, so only local VMs offer them.
+const canSuspendBrowsers = () => !config.browserFleetUrl;
+
+const checkSuspendable = (browserId) => {
+  if (!canSuspendBrowsers()) {
+    return 'NOT_SUPPORTED';
+  }
+  if (!isWellFormedBrowserId(browserId)) {
+    return 'INVALID_BROWSER_ID';
+  }
+  return null;
+};
+
+/**
+ * Suspends a browser: its VM saves its memory to disk and stops, which frees
+ * that memory. A failed suspend leaves the browser running.
+ * @param {{browserId: string}} params
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const suspendBrowser = async ({ browserId }) => {
+  const invalid = checkSuspendable(browserId);
+  if (invalid) {
+    return { error: invalid };
+  }
+  try {
+    await vms.suspendBrowser(browserId);
+    return { data: true };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
+/**
+ * Resumes a suspended browser where it was. A failed resume keeps it
+ * suspended, so it can be tried again.
+ * @param {{browserId: string}} params
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const resumeBrowser = async ({ browserId }) => {
+  const invalid = checkSuspendable(browserId);
+  if (invalid) {
+    return { error: invalid };
+  }
+  try {
+    await vms.resumeBrowser(browserId);
+    return { data: true };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
 };
 
 // Only http/https map to a websocket scheme; anything else is a misconfiguration.
@@ -205,8 +243,8 @@ const browserCdpUrlOnFleet = ({ browserId, origin }) => {
 
 /**
  * Builds the CDP websocket URL for a browser. For an external fleet this is the
- * fleet's bridge URL; locally it is discovered from the container's CDP
- * endpoint, which needs the container to be up, so this is async. Returns null
+ * fleet's bridge URL; locally it is discovered from the VM's CDP
+ * endpoint, which needs the VM to be up, so this is async. Returns null
  * when no URL can be resolved.
  * @param {{browserId: string, origin?: string}} params
  * @returns {Promise<string | null>}
@@ -219,10 +257,20 @@ const browserCdpUrl = async ({ browserId, origin = config.browserFleetUrl }) => 
     return browserCdpUrlOnFleet({ browserId, origin });
   }
   try {
-    return await containers.resolveCdpUrl(browserId);
+    return await vms.resolveCdpUrl(browserId);
   } catch {
     return null;
   }
 };
 
-export { isWellFormedBrowserId, startBrowser, checkBrowserFleetHealth, browserExists, browserCdpUrl, stopBrowser };
+export {
+  isWellFormedBrowserId,
+  startBrowser,
+  checkBrowserFleetHealth,
+  browserExists,
+  browserCdpUrl,
+  stopBrowser,
+  canSuspendBrowsers,
+  suspendBrowser,
+  resumeBrowser
+};

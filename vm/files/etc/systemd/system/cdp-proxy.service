@@ -1,0 +1,13 @@
+[Unit]
+Description=Expose the browser's CDP port to the host
+# The browser binds CDP to 127.0.0.1 only, but QEMU forwards the host port to the
+# guest's own address.
+After=chromium.service
+
+[Service]
+DynamicUser=yes
+ExecStart=/usr/bin/socat TCP-LISTEN:9222,fork,reuseaddr TCP:127.0.0.1:9221
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Start the browser once the host sets the clock
+# Chromium does not start at boot. Every VM starts from a snapshot of a booted
+# guest, and a browser that was already running in it would keep the
+# snapshot's random number state, the same in every VM. So it starts after a
+# VM starts from the snapshot. The host then always sets the clock, which
+# stopped when the snapshot was saved; that clock change starts it here,
+# with the right time and with randomness of its own. Setting the clock again,
+# e.g. after a resume, finds it running and does nothing.
+
+[Timer]
+OnClockChange=yes
+Unit=chromium.service
+
+[Install]
+WantedBy=timers.target

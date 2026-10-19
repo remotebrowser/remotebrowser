@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { consola } from 'consola/basic';
 import { parseSecrets } from './secret.js';
+import { socketPathsFit } from './vm/layout.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -83,22 +84,26 @@ const buildConfig = (env) => {
     errors.push('DATABASE_URL must be a postgres connection string, e.g. postgres://user:password@host:5432/dbname');
   }
 
-  // Optional external fleet origin. When unset, the app manages its own Chrome
-  // containers via the container CLI (src/container.js). Trailing slashes are
-  // stripped so src/fleet.js never appends a doubled API path.
+  // Optional external fleet origin. When unset, the app runs its own Chromium
+  // VMs with QEMU (src/vm/). Trailing slashes are stripped so src/fleet.js
+  // never appends a doubled API path.
   const BROWSERFLEET_URL = (env.BROWSERFLEET_URL || '').replace(/\/+$/, '');
 
-  // In-process container management. CONTAINER_RUNTIME forces podman or docker;
-  // unset auto-detects (podman first).
-  // CONTAINER_IMAGE is the Chrome image to run.
-  // For a remote Podman socket, CONTAINER_HOST is the value podman itself
-  // reads (it also needs --remote); Docker reads DOCKER_HOST instead.
-  const CONTAINER_IMAGE = env.CONTAINER_IMAGE || 'ghcr.io/remotebrowser/chrome-live';
-  const CONTAINER_HOST = env.CONTAINER_HOST || '';
-  const SUPPORTED_CONTAINER_RUNTIMES = ['podman', 'docker'];
-  const CONTAINER_RUNTIME = (env.CONTAINER_RUNTIME || '').toLowerCase();
-  if (CONTAINER_RUNTIME && !SUPPORTED_CONTAINER_RUNTIMES.includes(CONTAINER_RUNTIME)) {
-    errors.push(`CONTAINER_RUNTIME must be one of ${SUPPORTED_CONTAINER_RUNTIMES.join(', ')}, or unset to auto-detect`);
+  // In-process QEMU VMs. VM_DATA_DIR holds the image builds, the snapshot,
+  // and each VM's disk and pidfile (src/vm/layout.js), so it must survive an
+  // app restart.
+  const VM_DATA_DIR = path.resolve(env.VM_DATA_DIR || path.join(__dirname, '..', '.data', 'vm'));
+  if (!socketPathsFit(VM_DATA_DIR)) {
+    errors.push(`VM_DATA_DIR is too long for the VM's sockets: ${VM_DATA_DIR}`);
+  }
+  // Chromium needs well over QEMU's 128M default.
+  const VM_MEMORY = env.VM_MEMORY || '2G';
+  if (!/^[1-9][0-9]*[MG]$/.test(VM_MEMORY)) {
+    errors.push('VM_MEMORY must be a size in M or G, e.g. 2G');
+  }
+  const vmCpus = env.VM_CPUS ? Number(env.VM_CPUS) : 2;
+  if (!Number.isInteger(vmCpus) || vmCpus < 1) {
+    errors.push('VM_CPUS must be a positive integer, e.g. 2');
   }
 
   // Reverse proxies in front of the app, e.g. nginx, a load balancer, or a CDN.
@@ -149,9 +154,9 @@ const buildConfig = (env) => {
     sessionTtlSeconds,
     sessionIdleTtlSeconds,
     browserFleetUrl,
-    containerImage: CONTAINER_IMAGE,
-    containerHost: CONTAINER_HOST,
-    containerRuntime: CONTAINER_RUNTIME,
+    vmDataDir: VM_DATA_DIR,
+    vmMemory: VM_MEMORY,
+    vmCpus,
     pgliteDataDir,
     databaseUrl,
     databaseSsl,
