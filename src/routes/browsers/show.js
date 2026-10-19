@@ -82,12 +82,17 @@ const renderBrowser = async (c, { error = null } = {}) => {
     browserUrl: `/browsers/${result.data.publicId}`,
     // ?t= freshens each <img> URL so browsers don't skip re-fetching.
     screenshotCacheBust: Math.floor(Date.now() / 1000),
+    // Only htmx asks with this header, so JavaScript is on and the previews
+    // can stream; the first load keeps static screenshots for no-JS visitors.
+    live: c.req.header('HX-Request') === 'true',
     playwrightJavascriptExample: isConnectable ? playwrightJavascriptDisplaySource() : null
   });
 };
 
 const handleShow = async (c) => {
   const html = await renderBrowser(c);
+  // The previews differ for htmx requests, so caches must keep both.
+  c.header('Vary', 'HX-Request');
   return html ? c.html(html) : c.text('Not found', 404);
 };
 

@@ -7,11 +7,18 @@
   // bitmap until the new one is ready, so this stashes the outgoing
   // screenshot nodes right before a swap and splices them back in - with
   // the freshly-swapped-in src - right after.
+  //
+  // Live previews get the same treatment: the outgoing <canvas> goes back in
+  // so its screencast keeps running. A new canvas for a page that showed a
+  // static screenshot starts with that screenshot instead of a blank box.
   let outgoingScreenshots = new Map();
 
   document.body.addEventListener('htmx:beforeSwap', (event) => {
     outgoingScreenshots = new Map(
-      [...event.detail.target.querySelectorAll('img[id^="screenshot-"]')].map((img) => [img.id, img])
+      [...event.detail.target.querySelectorAll('img[id^="screenshot-"], canvas[id^="screencast-"]')].map((node) => [
+        node.id,
+        node
+      ])
     );
   });
 
@@ -21,6 +28,17 @@
       if (outgoing) {
         outgoing.src = img.src;
         img.replaceWith(outgoing);
+      }
+    }
+    for (const canvas of event.detail.elt.querySelectorAll('canvas[id^="screencast-"]')) {
+      const outgoing = outgoingScreenshots.get(canvas.id);
+      const poster = outgoingScreenshots.get(canvas.id.replace('screencast-', 'screenshot-'));
+      if (outgoing) {
+        canvas.replaceWith(outgoing);
+      } else if (poster?.complete && poster.naturalWidth > 0) {
+        canvas.width = poster.naturalWidth;
+        canvas.height = poster.naturalHeight;
+        canvas.getContext('2d').drawImage(poster, 0, 0);
       }
     }
     outgoingScreenshots.clear();

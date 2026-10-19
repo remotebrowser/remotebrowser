@@ -48,12 +48,17 @@ const renderPages = async (c) => {
     scriptNonce: c.get('secureHeadersNonce'),
     // Appended as a query param to every screenshot <img> src, to vary the URL
     // per poll.
-    screenshotCacheBust: Math.floor(Date.now() / 1000)
+    screenshotCacheBust: Math.floor(Date.now() / 1000),
+    // Only htmx asks with this header, so JavaScript is on and the previews
+    // can stream; the first load keeps static screenshots for no-JS visitors.
+    live: c.req.header('HX-Request') === 'true'
   });
 };
 
 const handleIndex = async (c) => {
   const html = await renderPages(c);
+  // The previews differ for htmx requests, so caches must keep both.
+  c.header('Vary', 'HX-Request');
   return html ? c.html(html) : c.text('Not found', 404);
 };
 

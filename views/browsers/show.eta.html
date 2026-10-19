@@ -2,6 +2,7 @@
 <%~ include('/partials/breadcrumbs', it) %>
 <script src="/htmx.min.js"></script>
 <%~ include('/partials/screenshot-refresh', it) %> <%~ include('/partials/code-copy', it) %>
+<script src="/screencast.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
   // The status line polls itself; when the status it shows changes, refresh the
   // connection panel and the page previews.
@@ -95,15 +96,27 @@
         <% } %>
       </div>
     </div>
+    <% /* Swaps in the live version once JS runs. It has no "load", or each swap would load again. */ %>
     <div
       class="browser-preview"
       hx-get="<%= it.browserUrl %>"
-      hx-trigger="every 4s"
+      hx-trigger="<%= it.live ? 'every 4s' : 'load, every 4s' %>"
       hx-select=".browser-preview"
       hx-swap="outerHTML"
     >
       <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
       <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
+        <% if (it.live) { %>
+        <canvas
+          class="browser-screenshot"
+          id="screencast-<%= page.pageId %>"
+          width="1280"
+          height="720"
+          role="img"
+          aria-label="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
+          data-frame-url="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/frame"
+        ></canvas>
+        <% } else { %>
         <img
           class="browser-screenshot"
           id="screenshot-<%= page.pageId %>"
@@ -111,6 +124,7 @@
           alt="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
           decoding="async"
         />
+        <% } %>
       </a>
       <% }) %> <% } %>
     </div>

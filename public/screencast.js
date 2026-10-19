@@ -1,19 +1,10 @@
 // A separate file, because the page's CSP rejects an inline script that htmx swaps in.
 (() => {
-  const canvas = document.querySelector('#page-live-view canvas');
-  if (!canvas) {
+  // htmx may run this file again when it swaps in a fragment that loads it.
+  if (window.screencastStarted) {
     return;
   }
-  const context = canvas.getContext('2d');
-  // Read on each poll: the playground points it at whichever page its script drives.
-  let frameUrl = canvas.dataset.frameUrl;
-  // Lets the server skip frames we already drew.
-  let seq = 0;
-  let frameRequest = null;
-
-  // Switching pages must not wait for the old page's long poll to finish.
-  const frameUrlObserver = new MutationObserver(() => frameRequest?.abort());
-  frameUrlObserver.observe(canvas, { attributes: true, attributeFilter: ['data-frame-url'] });
+  window.screencastStarted = true;
 
   const MAX_PIXEL_RATIO = 2;
 
@@ -22,22 +13,34 @@
 
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const draw = async (blob, expectedUrl) => {
-    const bitmap = await createImageBitmap(blob);
-    if (canvas.dataset.frameUrl !== expectedUrl) {
-      bitmap.close();
-      return false;
-    }
-    if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-    }
-    context.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    return true;
-  };
+  // Each canvas streams one page, so a browser with several pages shows them all live.
+  const stream = async (canvas) => {
+    const context = canvas.getContext('2d');
+    // Read on each poll: the playground points it at whichever page its script drives.
+    let frameUrl = canvas.dataset.frameUrl;
+    // Lets the server skip frames we already drew.
+    let seq = 0;
+    let frameRequest = null;
 
-  const run = async () => {
+    // Switching pages must not wait for the old page's long poll to finish.
+    const frameUrlObserver = new MutationObserver(() => frameRequest?.abort());
+    frameUrlObserver.observe(canvas, { attributes: true, attributeFilter: ['data-frame-url'] });
+
+    const draw = async (blob, expectedUrl) => {
+      const bitmap = await createImageBitmap(blob);
+      if (canvas.dataset.frameUrl !== expectedUrl) {
+        bitmap.close();
+        return false;
+      }
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+      }
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return true;
+    };
+
     // A later htmx swap can remove the canvas.
     while (canvas.isConnected) {
       // Lets the server stop the screencast when nobody sees it.
@@ -82,5 +85,19 @@
     frameUrlObserver.disconnect();
   };
 
-  void run();
+  const streaming = new WeakSet();
+
+  const startAll = () => {
+    for (const canvas of document.querySelectorAll('canvas[data-frame-url]')) {
+      // A swap may put back a canvas that is already streaming.
+      if (!streaming.has(canvas) && canvas.isConnected) {
+        streaming.add(canvas);
+        void stream(canvas).finally(() => streaming.delete(canvas));
+      }
+    }
+  };
+
+  // htmx adds canvases later, for example when a browser opens a new page.
+  new MutationObserver(startAll).observe(document.body, { childList: true, subtree: true });
+  startAll();
 })();
