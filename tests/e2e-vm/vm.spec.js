@@ -121,7 +121,7 @@ const terminateBrowser = async (page, publicId, name) => {
   await page.goto(`/browsers/${publicId}/terminate`);
   await page.locator('#name').fill(name);
   await page.getByRole('button', { name: 'Terminate' }).click();
-  await expect(page).toHaveURL('/browsers');
+  await expect(page.getByText(`${name} is terminated`)).toBeVisible({ timeout: 60000 });
 };
 
 test.describe('real QEMU VMs', () => {
@@ -254,6 +254,8 @@ test.describe('real QEMU VMs', () => {
       await expect(page).toHaveURL(`/browsers/${publicId}/suspend`);
       await expect(page.getByText('cannot be undone')).toHaveCount(0);
       await page.getByRole('button', { name: 'Suspend' }).click();
+      await expect(page.getByText('Suspending...')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Suspend' })).toBeHidden();
       // Saving the VM's memory takes a while.
       await expect(page).toHaveURL(`/browsers/${publicId}`, { timeout: 120000 });
       await expect(page.locator('#browser-status')).toContainText('suspended');
@@ -265,6 +267,9 @@ test.describe('real QEMU VMs', () => {
     expect(hasSavedState()).toBe(true);
 
     await page.getByRole('button', { name: 'Resume' }).click();
+    await expect(page.getByText('Resuming...')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Resume' })).toBeHidden();
+    await expect(page).toHaveURL(`/browsers/${publicId}`, { timeout: 60000 });
     await expect(page.locator('#browser-status')).toContainText('running', { timeout: 60000 });
     await expect(page.locator('#browser-connection-info')).toContainText('Copy instructions');
     await expect(page.locator(`a.page-preview-link[href="${pageHref}"]`)).toBeVisible({ timeout: 60000 });

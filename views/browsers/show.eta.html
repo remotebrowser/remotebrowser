@@ -1,7 +1,8 @@
 <% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName }) %> <%~ include('/partials/topnav', it) %>
 <%~ include('/partials/breadcrumbs', it) %>
 <script src="/htmx.min.js"></script>
-<%~ include('/partials/screenshot-refresh', it) %> <%~ include('/partials/code-copy', it) %>
+<%~ include('/partials/htmx-form-errors', it) %> <%~ include('/partials/screenshot-refresh', it) %> <%~
+include('/partials/code-copy', it) %>
 <script src="/screencast.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
   // The status line polls itself; when the status it shows changes, refresh the
@@ -82,16 +83,27 @@
         <p>Connection details will appear here once the browser is ready.</p>
         <% } %> <% /* Inside the refreshed block, so the buttons follow the status. */ %> <% if (it.canTerminate &&
         (it.isConnectable || it.browser.status === 'suspended')) { %>
-        <div class="browser-actions">
+        <div class="browser-actions busy-on-request">
           <% if (it.canSuspend && it.isConnectable) { %>
           <a href="/browsers/<%= it.browser.publicId %>/suspend" class="btn-secondary">Suspend</a>
           <% } %> <% if (it.canSuspend && it.browser.status === 'suspended') { %>
-          <form method="post" action="/browsers/<%= it.browser.publicId %>/resume">
+          <form
+            method="post"
+            action="/browsers/<%= it.browser.publicId %>/resume"
+            hx-post="/browsers/<%= it.browser.publicId %>/resume"
+            hx-target="main"
+            hx-select="main"
+            hx-swap="outerHTML"
+            hx-indicator="closest .browser-actions"
+          >
             <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
             <button type="submit" class="btn-primary">Resume</button>
           </form>
           <% } %>
           <a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a>
+          <% if (it.canSuspend && it.browser.status === 'suspended') { %>
+          <p class="busy-message" role="status">Resuming...</p>
+          <% } %>
         </div>
         <% } %>
       </div>

@@ -93,10 +93,14 @@ const makeBrowser = async (workspaceId, { status = 'running', creatorId = userId
   return { publicId, statusNow };
 };
 
-const post = (app, path, workspaceId, { csrf = csrfToken() } = {}) =>
+const post = (app, path, workspaceId, { csrf = csrfToken(), htmx = false } = {}) =>
   app.request(path, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', 'cookie': cookie() },
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': cookie(),
+      ...(htmx && { 'hx-request': 'true' })
+    },
     body: new URLSearchParams({ workspace: workspaceId, csrf }).toString()
   });
 
@@ -112,6 +116,9 @@ test('GET /browsers/:browserId/suspend asks to confirm, without the warning that
   assert.match(body, new RegExp(`action="/browsers/${publicId}/suspend"`));
   assert.match(body, new RegExp(`name="workspace" value="${workspaceId}"`));
   assert.match(body, /<button type="submit" class="btn-primary">Suspend</);
+  assert.match(body, new RegExp(`hx-post="/browsers/${publicId}/suspend"`));
+  assert.match(body, /class="busy-message" role="status">Suspending\.\.\.</);
+  assert.match(body, /<script nonce="test-nonce-value">/);
   assert.match(body, new RegExp(`href="/browsers/${publicId}" class="btn-secondary">Cancel`));
 });
 
@@ -131,6 +138,16 @@ test('POST /browsers/:browserId/suspend suspends the VM and marks the browser su
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), `/browsers/${publicId}`);
   assert.deepEqual(calls, [{ name: 'suspendBrowser', args: 'Qabc12345' }]);
+  assert.equal(await statusNow(), 'suspended');
+});
+
+test('POST /browsers/:browserId/suspend from htmx redirects to the browser page', async () => {
+  const workspaceId = await makeUser();
+  const { publicId, statusNow } = await makeBrowser(workspaceId);
+  fakeVms();
+  const res = await post(setupApp(), `/browsers/${publicId}/suspend`, workspaceId, { htmx: true });
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get('hx-redirect'), `/browsers/${publicId}`);
   assert.equal(await statusNow(), 'suspended');
 });
 
@@ -169,6 +186,16 @@ test('POST /browsers/:browserId/resume resumes the VM, marks it running, and wat
   // The monitor asks for the CDP URL, which may have moved to a new port.
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(names(calls), ['resumeBrowser', 'resolveCdpUrl', 'browserIsRunning']);
+});
+
+test('POST /browsers/:browserId/resume from htmx redirects to the browser page', async () => {
+  const workspaceId = await makeUser();
+  const { publicId, statusNow } = await makeBrowser(workspaceId, { status: 'suspended' });
+  fakeVms();
+  const res = await post(setupApp(), `/browsers/${publicId}/resume`, workspaceId, { htmx: true });
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get('hx-redirect'), `/browsers/${publicId}`);
+  assert.equal(await statusNow(), 'running');
 });
 
 test('a failed resume keeps the browser suspended and shows the error on its page', async () => {
@@ -250,8 +277,10 @@ test("a suspended browser's page says so, and offers Resume and Terminate", asyn
   const body = await (await setupApp().request(`/browsers/${publicId}`, { headers: { cookie: cookie() } })).text();
   assert.match(body, /<strong>Status:<\/strong> suspended/);
   assert.match(body, /This browser is suspended/);
-  assert.match(body, new RegExp(`<form method="post" action="/browsers/${publicId}/resume">`));
+  assert.match(body, new RegExp(`action="/browsers/${publicId}/resume"`));
   assert.match(body, /<button type="submit" class="btn-primary">Resume</);
+  assert.match(body, new RegExp(`hx-post="/browsers/${publicId}/resume"`));
+  assert.match(body, /class="busy-message" role="status">Resuming\.\.\.</);
   assert.match(body, new RegExp(`href="/browsers/${publicId}/terminate" class="btn-danger">Terminate`));
   assert.doesNotMatch(body, />Suspend</);
   // No connection details while it cannot be reached.

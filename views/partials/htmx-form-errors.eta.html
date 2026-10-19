@@ -1,0 +1,13 @@
+<script nonce="<%= it.scriptNonce %>">
+  // htmx swaps only 2xx answers, but a failed form post answers with its page
+  // and the error, so show that too. Plain-text answers (404, 403) have no page
+  // to swap in, and polling GETs keep the default.
+  document.body.addEventListener('htmx:beforeSwap', (event) => {
+    const { xhr, requestConfig } = event.detail;
+    const isPage = (xhr.getResponseHeader('content-type') || '').startsWith('text/html');
+    if (requestConfig.verb === 'post' && xhr.status >= 400 && xhr.status < 500 && isPage) {
+      event.detail.shouldSwap = true;
+      event.detail.isError = false;
+    }
+  });
+</script>

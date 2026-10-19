@@ -1,5 +1,7 @@
 <% layout('/layout', { title: 'Remote Browser - Suspend browser' }) %> <%~ include('/partials/topnav', it) %> <%~
 include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<%~ include('/partials/htmx-form-errors', it) %>
 <main>
   <article>
     <% if (it.error) { %>
@@ -9,8 +11,17 @@ include('/partials/breadcrumbs', it) %>
       Suspending <strong><%= it.browser.browserName %></strong> saves it and stops it, which frees the memory it uses.
       While it is suspended, it cannot be reached. Resume it later to continue with its pages as they were.
     </p>
-    <form method="post" action="/browsers/<%= it.browser.publicId %>/suspend" class="page-form">
+    <form
+      method="post"
+      action="/browsers/<%= it.browser.publicId %>/suspend"
+      class="page-form busy-on-request"
+      hx-post="/browsers/<%= it.browser.publicId %>/suspend"
+      hx-target="main"
+      hx-select="main"
+      hx-swap="outerHTML"
+    >
       <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <p class="busy-message" role="status">Suspending...</p>
       <div class="form-actions">
         <button type="submit" class="btn-primary">Suspend</button>
         <a href="/browsers/<%= it.browser.publicId %>" class="btn-secondary">Cancel</a>

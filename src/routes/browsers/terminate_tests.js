@@ -126,13 +126,14 @@ const postTerminate = (
   app,
   workspaceId,
   publicId,
-  { name, csrfId = 'a'.repeat(32), workspace = workspaceId, activeWorkspaceId = undefined }
+  { name, csrfId = 'a'.repeat(32), workspace = workspaceId, activeWorkspaceId = undefined, htmx = false }
 ) =>
   app.request(`/browsers/${publicId}/terminate`, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${cookieFor(activeWorkspaceId)}; csrf_id=${csrfId}`
+      'cookie': `session=${cookieFor(activeWorkspaceId)}; csrf_id=${csrfId}`,
+      ...(htmx && { 'hx-request': 'true' })
     },
     body: new URLSearchParams({ name, workspace, csrf: makeCsrfToken(csrfId) }).toString()
   });
@@ -164,6 +165,8 @@ test('GET /browsers/:browserId/terminate warns that termination is permanent and
   // Enabled in markup (works without JS); disabled only by nonce'd script.
   assert.doesNotMatch(body, /id="terminate-button"[^>]*disabled/);
   assert.match(body, /data-confirm-name="calm-otter"/);
+  assert.match(body, new RegExp(`hx-post="/browsers/${publicId}/terminate"`));
+  assert.match(body, /class="busy-message" role="status">Terminating\.\.\.</);
   assert.match(body, /<script nonce="test-nonce-value">[\s\S]*terminateButton\.disabled[\s\S]*<\/script>/);
   // calm-otter > Browsers > calm-otter... breadcrumb continues the browsers trail.
   assert.match(body, /href="\/browsers">Browsers/);
@@ -245,6 +248,24 @@ test('POST /browsers/:browserId/terminate stops the fleet browser, revokes the h
     assert.equal(fetched.data, null, 'the instance record must be deleted');
     const resolved = await browserIdForHandle({ handle });
     assert.equal(resolved.data, null, 'the public handle must be revoked');
+  } finally {
+    restore();
+  }
+});
+
+test('POST /browsers/:browserId/terminate from htmx answers with the result page', async () => {
+  const workspaceId = await makeUser();
+  const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
+  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  try {
+    const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter', htmx: true });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /<strong>calm-otter<\/strong> is terminated/);
+    assert.doesNotMatch(body, /Back to browsers/);
+    assert.doesNotMatch(body, /hx-post=/);
+    const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+    assert.equal(fetched.data, null);
   } finally {
     restore();
   }
