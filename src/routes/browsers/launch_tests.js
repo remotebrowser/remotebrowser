@@ -325,6 +325,34 @@ test("GET /browsers/launch renders the form in the visitor's own workspace", asy
   assert.match(body, new RegExp(`name="workspace" value="${workspaceId}"`));
 });
 
+test('GET /browsers/launch has no proxy field when an external fleet runs the browsers', async () => {
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  assert.doesNotMatch(await res.text(), /name="proxy"/);
+});
+
+test('POST /browsers/launch refuses a proxy when an external fleet runs the browsers', async () => {
+  const workspaceId = await makeUser();
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      useProxy: 'on',
+      proxy: 'http://proxy.example.com:8080',
+      workspace: workspaceId,
+      csrf: makeCsrfToken(csrfId)
+    }).toString()
+  });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /cannot set a proxy/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
 test('GET /browsers/launch redirects to / and clears a stale active workspace', async () => {
   await makeUser();
   const app = setupApp();

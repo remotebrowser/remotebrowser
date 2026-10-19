@@ -1,0 +1,9 @@
+[Unit]
+Description=Apply the upstream proxy that the host sets
+# A restart, not a reload: it also ends the browser's open connections, which
+# would keep the old route. Chromium requires tinyproxy, and without
+# ignore-dependencies, the restart would restart the browser too.
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart --job-mode=ignore-dependencies tinyproxy.service

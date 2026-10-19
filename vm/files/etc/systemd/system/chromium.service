@@ -3,9 +3,9 @@ Description=Chromium
 # Not at boot: chromium-start.timer starts it. See there for why.
 # Without the firewall, the browser could reach the host's loopback, so it
 # must not start when nftables fails. All its traffic goes through tinyproxy,
-# so it needs that too.
+# so it needs that too, with the upstream proxy that the host may set at launch.
 Requires=xvnc.service nftables.service tinyproxy.service
-After=xvnc.service nftables.service tinyproxy.service network.target
+After=xvnc.service nftables.service tinyproxy.service tinyproxy-upstream.service network.target
 
 [Service]
 User=browser

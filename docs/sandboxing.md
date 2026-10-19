@@ -40,7 +40,7 @@ The VM is isolated in these ways:
 - QEMU has only the devices it needs (`-nodefaults`). On Linux, it also runs under its seccomp sandbox (`-sandbox on`). QEMU on macOS has no seccomp, so there the VM boundary is the main protection.
 - The QEMU guest agent accepts only the commands that set the clock.
 - Only the CDP and VNC ports are forwarded, and only to `127.0.0.1` on the host. The VNC port has no password, so do not expose it beyond the host's loopback.
-- A firewall in the VM blocks `10.0.2.2`, so a browser cannot reach services on the host's loopback, such as the app or its database. IPv6 is off for the same reason. The VM can still reach other hosts on the network; to limit that, use a host firewall or an [upstream proxy](proxy.md#change-the-proxy).
+- A firewall in the VM blocks `10.0.2.2`, so a browser cannot reach services on the host's loopback, such as the app or its database. IPv6 is off for the same reason. The VM can still reach other hosts on the network; to limit that, use a host firewall or an [upstream proxy](proxy.md).
 
 ## Lifecycle
 

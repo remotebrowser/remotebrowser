@@ -15,7 +15,9 @@ const {
   isWellFormedBrowserId,
   canSuspendBrowsers,
   suspendBrowser,
-  resumeBrowser
+  resumeBrowser,
+  setBrowserProxy,
+  clearBrowserProxy
 } = await import('./fleet.js');
 
 // A fake VM client that records calls and can be told to fail. Swapped in
@@ -46,6 +48,38 @@ test('startBrowser launches a local VM and returns its id', async () => {
   setVmClient(client);
   assert.deepEqual(await startBrowser(), { data: { browserId: 'Pabc12345' } });
   assert.equal(calls[0].name, 'launchBrowser');
+});
+
+test('startBrowser passes the upstream proxy to the VM launch', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  await startBrowser({ proxy: 'http://proxy.example.com:8080' });
+  assert.deepEqual(calls[0], { name: 'launchBrowser', args: { proxy: 'http://proxy.example.com:8080' } });
+});
+
+test('setBrowserProxy and clearBrowserProxy drive the local VM, and report a failure or a malformed id', async () => {
+  const calls = [];
+  setVmClient(
+    fakeVms({
+      setProxy: async (browserId, proxy) => {
+        calls.push(['setProxy', browserId, proxy]);
+        if (proxy === 'bad') throw new Error('The proxy URL is not a valid URL');
+      },
+      clearProxy: async (browserId) => {
+        calls.push(['clearProxy', browserId]);
+      }
+    }).client
+  );
+  assert.deepEqual(await setBrowserProxy('Pabc12345', 'http://proxy.example.com:8080'), { data: true });
+  assert.deepEqual(await setBrowserProxy('Pabc12345', 'bad'), { error: 'The proxy URL is not a valid URL' });
+  assert.deepEqual(await clearBrowserProxy('Pabc12345'), { data: true });
+  assert.deepEqual(await setBrowserProxy('../etc', 'http://proxy.example.com:8080'), { error: 'INVALID_BROWSER_ID' });
+  assert.deepEqual(await clearBrowserProxy('../etc'), { error: 'INVALID_BROWSER_ID' });
+  assert.deepEqual(calls, [
+    ['setProxy', 'Pabc12345', 'http://proxy.example.com:8080'],
+    ['setProxy', 'Pabc12345', 'bad'],
+    ['clearProxy', 'Pabc12345']
+  ]);
 });
 
 test('startBrowser reports a failed VM launch', async () => {

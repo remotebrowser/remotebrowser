@@ -1,0 +1,3 @@
+# tinyproxy-config builds this config from /etc/tinyproxy/tinyproxy.conf and
+# the upstream proxy that the host sets.
+FLAGS="-c /run/tinyproxy.conf"

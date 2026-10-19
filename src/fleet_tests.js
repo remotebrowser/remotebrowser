@@ -17,7 +17,9 @@ const {
   stopBrowser,
   canSuspendBrowsers,
   suspendBrowser,
-  resumeBrowser
+  resumeBrowser,
+  setBrowserProxy,
+  clearBrowserProxy
 } = await import('./fleet.js');
 const { setVmClient, createVmClient } = await import('./vm/index.js');
 
@@ -327,12 +329,18 @@ test('isWellFormedBrowserId rejects empty, over-long, and non-string input', () 
   }
 });
 
-test('an external fleet cannot suspend or resume browsers', async () => {
+test('an external fleet cannot suspend or resume browsers, or set their proxy', async () => {
   const { calls, restore } = stubFetch(() => new Response(null, { status: 204 }));
   try {
     assert.equal(canSuspendBrowsers(), false);
     assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
     assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { error: 'NOT_SUPPORTED' });
+    assert.deepEqual(await setBrowserProxy('Pabc12345', 'http://proxy.example.com:8080'), {
+      error: 'NOT_SUPPORTED'
+    });
+    assert.deepEqual(await clearBrowserProxy('Pabc12345'), { error: 'NOT_SUPPORTED' });
+    // Launching with a proxy would silently go out directly.
+    assert.deepEqual(await startBrowser({ proxy: 'http://proxy.example.com:8080' }), { error: 'NOT_SUPPORTED' });
   } finally {
     restore();
   }

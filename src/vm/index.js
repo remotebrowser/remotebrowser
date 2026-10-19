@@ -15,6 +15,7 @@ import { createVmClient } from './client.js';
 //   state.js    browser ids and the per-VM state dir
 //   cdp.js      the guest's CDP websocket URL
 //   suspend.js  suspend and resume
+//   proxy.js    the browser's upstream proxy
 //   client.js   the VM client that ties these together
 
 // Reassignable so tests (and future callers) can swap the client; importers read
@@ -26,6 +27,7 @@ const setVmClient = (client) => {
 
 export { createVmClient } from './client.js';
 export { buildQemuArgs, detectAccel, hostArch, imageFiles } from './qemu.js';
+export { normalizeProxyUrl } from './proxy.js';
 export { openQmp } from './qmp.js';
 export { isWellFormedBrowserId } from './state.js';
 export { setVmClient, vms };
