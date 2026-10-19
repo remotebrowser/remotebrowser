@@ -1,6 +1,8 @@
 # Remote Browser
 
-Remote Browser is a [self-hosted](https://remotebrowser.ai/self-hosting) sandbox browser system for your team. Each user can provision one or multiple [isolated browsers](https://remotebrowser.ai/isolation) as needed.
+Remote Browser lets your team launch multiple secure, [isolated browser sessions](https://remotebrowser.ai/isolation) per user.
+
+It's free and open source: [self-host](https://remotebrowser.ai/self-hosting) in your home lab or deploy to enterprise on-premises for complete data privacy and control.
 
 For more detailed documentation, visit [remotebrowser.ai](https://remotebrowser.ai).
 
