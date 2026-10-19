@@ -2,14 +2,16 @@
 
 The playground lets you try a script against a running browser, without setting anything up on your own machine. To open it, go to a running browser's page and follow the **playground** link.
 
-On the left, you write a script and press **Run** (or Ctrl+Enter, ⌘+Enter on a Mac). On the right, you watch the browser do it. The script's `console` output, its return value, any errors, and any screenshots it takes appear under **Output**. **Stop** ends the script at once.
+On the left, you write a script and press **Run** (or Ctrl+Enter, ⌘+Enter on a Mac). On the right, you watch the browser do it. Click the live view to open that page on its own. The script's `console` output, its return value, any errors, and any screenshots it takes appear in a box below the live view once the script ends, with how long it took. While the script runs, the **Run** button turns into **Stop**, which ends the script at once.
+
+On a phone or a tablet in portrait, the live view and the output come first, and the script is below them.
 
 ## Writing a script
 
 A script is the body of an async function, so you can use `await` at the top level. These names are ready to use:
 
 - `page`: the browser's first open tab
-- `console`: `log`, `info`, `warn`, and `error` print to **Output**
+- `console`: `log`, `info`, `warn`, and `error` print to the output
 
 The page object is a small helper API inspired by [Playwright](https://playwright.dev):
 
@@ -17,7 +19,7 @@ The page object is a small helper API inspired by [Playwright](https://playwrigh
 - Actions: `page.click`, `page.fill`, `page.press`
 - Reading: `page.evaluate`, `page.$eval`, `page.$$eval`, `page.textContent`, `page.innerText`
 - Waiting: `page.waitForSelector`, `page.waitForTimeout`
-- Screenshots: `page.screenshot()` shows the image under **Output**
+- Screenshots: `page.screenshot()` shows the image in the output
 
 Selectors are CSS selectors. For anything else, `page.cdp(method, params)` sends a raw [CDP](https://chromedevtools.github.io/devtools-protocol) command to the tab.
 

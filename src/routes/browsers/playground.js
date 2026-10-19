@@ -76,12 +76,17 @@ const renderPlayground = async (c) => {
   const isRunning = browser.status === 'running' && Boolean(browser.browserHandle);
   const pagesUrl = `/browsers/${browser.publicId}/pages`;
   let frameUrl = null;
+  let pageUrl = null;
   if (isRunning && browser.internalBrowserId) {
     const listed = await listBrowserPages({ browserId: browser.internalBrowserId });
     if (listed.error) {
       consola.error('listBrowserPages failed:', listed.error);
     } else if (listed.data.length > 0) {
-      frameUrl = `${pagesUrl}/${listed.data[0].targetId}/frame`;
+      const pageId = listed.data[0].targetId;
+      frameUrl = `${pagesUrl}/${pageId}/frame`;
+      // The live view links to the page's own view, like the previews on the
+      // browser page.
+      pageUrl = `${pagesUrl}/${pageId}`;
     }
   }
   return eta.render('browsers/playground', {
@@ -97,8 +102,8 @@ const renderPlayground = async (c) => {
     cdpUrl: isRunning ? cdpUrlFor(c, browser.browserHandle) : null,
     pagesUrl,
     frameUrl,
-    templates: PLAYGROUND_TEMPLATES,
-    bodyClass: 'wide'
+    pageUrl,
+    templates: PLAYGROUND_TEMPLATES
   });
 };
 
