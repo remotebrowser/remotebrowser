@@ -14,7 +14,7 @@
 // $VM_DATA_DIR/snapshot, as for the app.
 import { consola } from 'consola/basic';
 import { LOG_ATTRIBUTES, qemu } from '../../src/vm/step.js';
-import { config } from '../../src/config.js';
+import { vmConfig } from '../../src/vm/config.js';
 import { vmLayout } from '../../src/vm/layout.js';
 import { scriptRunDir, startFromSnapshot } from '../../src/vm/local.js';
 
@@ -22,7 +22,7 @@ const port = (value, fallback) => (value ? Number(value) : fallback);
 
 try {
   const { code, suspended } = await startFromSnapshot({
-    snapshotDir: vmLayout(config.vmDataDir).snapshot,
+    snapshotDir: vmLayout(vmConfig.vmDataDir).snapshot,
     runDir: scriptRunDir(),
     cdpPort: port(process.env.CDP_PORT, 9222),
     vncPort: port(process.env.VNC_PORT, 5900)

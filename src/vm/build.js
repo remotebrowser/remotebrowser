@@ -1,5 +1,5 @@
 import { consola } from 'consola/basic';
-import { config } from '../config.js';
+import { vmConfig } from './config.js';
 import { buildImage, imageStatus, pruneImages } from './image.js';
 import { vmLayout } from './layout.js';
 import { hostArch } from './qemu.js';
@@ -11,10 +11,10 @@ import { LOG_ATTRIBUTES, qemu, step } from './step.js';
 // when the one there is missing or out of date. Each step is skipped when its
 // result is up to date, so calling this again is cheap.
 const buildVm = async ({
-  dataDir = config.vmDataDir,
+  dataDir = vmConfig.vmDataDir,
   runDir = process.env.RUN_DIR,
-  memory = config.vmMemory,
-  cpus = config.vmCpus,
+  memory = vmConfig.vmMemory,
+  cpus = vmConfig.vmCpus,
   arch = hostArch()
 } = {}) => {
   const { images, snapshot } = vmLayout(dataDir);
