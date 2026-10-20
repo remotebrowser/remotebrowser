@@ -90,6 +90,7 @@ const encodeFrame = async (frame, width = 0) => {
   }
   let pending = frame.encoded.get(width);
   if (!pending) {
+    const startedAt = performance.now();
     const image = sharp(frame.data);
     // Enlarging would only blur the frame, so never scale past the source width.
     // Nearest neighbour is the cheapest kernel; fastShrinkOnLoad must be off for it to apply to JPEG.
@@ -99,7 +100,17 @@ const encodeFrame = async (frame, width = 0) => {
         : image
     )
       .webp({ quality: WEBP_QUALITY })
-      .toBuffer();
+      .toBuffer()
+      .then((buffer) => {
+        consola.debug('SCREENCAST frame resized', {
+          'event.domain': 'screencast',
+          'frame.format': 'webp',
+          'frame.width': width,
+          'frame.size': buffer.length,
+          'frame.duration_ms': Math.round(performance.now() - startedAt)
+        });
+        return buffer;
+      });
     frame.encoded.set(width, pending);
   }
   return pending;
@@ -114,6 +125,11 @@ const publishFrame = (entry, data) => {
 };
 
 const startScreencast = async (entry, { browserId, pageId, cdpUrlFor }) => {
+  consola.log('SCREENCAST preparing the CDP session', {
+    'event.domain': 'screencast',
+    'rb.browser_id': browserId,
+    'browser.page_id': pageId
+  });
   const url = await cdpUrlFor({ browserId });
   if (!url) {
     return { error: 'CDP_URL_UNAVAILABLE' };
