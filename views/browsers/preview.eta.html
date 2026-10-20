@@ -1,0 +1,37 @@
+<% /* The first page load shows static screenshots, then "load" swaps in the live version. The live version keeps
+polling for opened and closed pages; screencast.js streams any new canvas, and screenshot-refresh keeps the running
+ones. A terminated browser has no pages and never comes back, so its empty preview stops polling. */ %> <% if
+(it.browser.status === 'terminated') { %>
+<div class="browser-preview"></div>
+<% } else { %>
+<div
+  class="browser-preview"
+  hx-get="<%= it.previewUrl %>"
+  hx-trigger="<%= it.live ? 'every 3s' : 'load, every 3s' %>"
+  hx-swap="outerHTML"
+>
+  <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
+  <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
+    <% if (it.live) { %>
+    <canvas
+      class="browser-screenshot"
+      id="screencast-<%= page.pageId %>"
+      width="1280"
+      height="720"
+      role="img"
+      aria-label="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
+      data-frame-url="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/frame"
+    ></canvas>
+    <% } else { %>
+    <img
+      class="browser-screenshot"
+      id="screenshot-<%= page.pageId %>"
+      src="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/view?t=<%= it.screenshotCacheBust %>"
+      alt="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
+      decoding="async"
+    />
+    <% } %>
+  </a>
+  <% }) %> <% } %>
+</div>
+<% } %>

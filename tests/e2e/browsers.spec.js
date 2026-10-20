@@ -174,11 +174,12 @@ test("the instruction block survives the page's 3s poll instead of being recreat
     el.dataset.e2eIdentity = 'original';
   });
 
-  // The status line hx-gets this same URL every 3s; waiting for the next
+  // The status line hx-gets its own endpoint every 3s; waiting for the next
   // matching response (rather than a fixed sleep) proves an actual poll
   // round-trip happened before asserting on its effect.
   await page.waitForResponse(
-    (response) => response.request().method() === 'GET' && response.url().endsWith(`/browsers/${browserInstanceId}`)
+    (response) =>
+      response.request().method() === 'GET' && response.url().includes(`/browsers/${browserInstanceId}/status?`)
   );
 
   await expect(instruction).toHaveAttribute('data-e2e-identity', 'original');
