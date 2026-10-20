@@ -1,10 +1,10 @@
 # Playground
 
+![Playground](playground.jpg){: style="width: 499px; max-width: 100%; height: auto; border: 1px solid darkgray" }
+
 The playground lets you try a script against a running browser, without setting anything up on your own machine. To open it, go to a running browser's page and follow the **playground** link.
 
-On the left, you write a script and press **Run** (or Ctrl+Enter, ⌘+Enter on a Mac). On the right, you watch the browser do it. Click the live view to open that page on its own. The script's `console` output, its return value, any errors, and any screenshots it takes appear in a box below the live view once the script ends, with how long it took. While the script runs, the **Run** button turns into **Stop**, which ends the script at once.
-
-On a phone or a tablet in portrait, the live view and the output come first, and the script is below them.
+Write a script and press **Run** (or Ctrl+Enter, ⌘+Enter on a Mac) to watch the browser carry it out. Click the live view to open that page on its own. The script's `console` output, its return value, any errors, and any screenshots it takes appear in an output box once the script ends, with how long it took. While the script runs, the **Run** button turns into **Stop**, which ends the script at once.
 
 ## Writing a script
 
