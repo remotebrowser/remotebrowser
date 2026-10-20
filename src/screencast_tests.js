@@ -24,7 +24,7 @@ const waitUntil = async (condition, timeoutMs = 2000) => {
 };
 
 // Records commands and lets a test push events.
-const startBrowser = ({ pages = ['page1'] } = {}) =>
+const startBrowser = ({ pages = ['page1'], ignore = [] } = {}) =>
   new Promise((resolve) => {
     const calls = [];
     const sockets = [];
@@ -34,6 +34,9 @@ const startBrowser = ({ pages = ['page1'] } = {}) =>
       socket.on('message', (raw) => {
         const { id, method, params, sessionId } = JSON.parse(raw.toString());
         calls.push({ method, params, sessionId });
+        if (ignore.includes(method)) {
+          return;
+        }
         const results = {
           'Target.getTargets': { targetInfos: pages.map((targetId) => ({ targetId, type: 'page' })) },
           'Target.attachToTarget': { sessionId: 'session1' },
@@ -81,6 +84,20 @@ test('nextFrame seeds a JPEG frame and starts a screencast on the page', async (
     const start = browser.calls.find((call) => call.method === 'Page.startScreencast');
     assert.deepEqual(start.params, { ...SCREENCAST_OPTIONS });
     assert.equal(start.sessionId, 'session1');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('nextFrame shows the screencast frame when Chrome drops the seed screenshot', async () => {
+  // Like a page that commits a navigation: the screenshot never answers.
+  const browser = await startBrowser({ ignore: ['Page.captureScreenshot'] });
+  try {
+    const pending = nextFrame({ browserId: 'br-1', pageId: 'page1', cdpUrlFor: browser.cdpUrlFor });
+    await waitUntil(() => browser.calls.some((call) => call.method === 'Page.startScreencast'));
+    browser.emit('Page.screencastFrame', { data: NEXT.toString('base64'), sessionId: 9, metadata: {} });
+    const result = await pending;
+    assert.deepEqual(result.data.data, NEXT);
   } finally {
     await browser.close();
   }

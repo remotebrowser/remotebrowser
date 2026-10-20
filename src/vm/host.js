@@ -78,16 +78,28 @@ const commandLine = async (pid) => {
   return code === 0 ? stdout : null;
 };
 
-// A pid alone can be reused after the VM is gone, so also check that the
-// process is the QEMU that owns this state dir.
-const isAlive = async (pid, marker) => {
+const pidExists = (pid) => {
   try {
     process.kill(pid, 0);
+    return true;
   } catch (error) {
     return /** @type {NodeJS.ErrnoException} */ (error).code === 'EPERM';
   }
+};
+
+// A pid alone can be reused after the VM is gone, so also check that the
+// process is the QEMU that owns this state dir.
+const isAlive = async (pid, marker) => {
+  if (!pidExists(pid)) {
+    return false;
+  }
   const command = await commandLine(pid);
-  return command === null || command.includes(marker);
+  // An exited QEMU may be reaped while its command line is read, and then the
+  // read fails. Treating that as alive made a stop send SIGKILL to a gone pid.
+  if (command === null) {
+    return pidExists(pid);
+  }
+  return command.includes(marker);
 };
 
 const kill = (pid, signal) => process.kill(pid, signal);

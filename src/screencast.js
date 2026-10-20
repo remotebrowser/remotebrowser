@@ -184,14 +184,23 @@ const startScreencast = async (entry, { browserId, pageId, cdpUrlFor }) => {
     };
     session.socket.on('message', onMessage);
     // A still page may never repaint, so the first viewer needs this frame.
-    const seed = await session.send(
-      'Page.captureScreenshot',
-      { format: SCREENCAST_OPTIONS.format, quality: SCREENCAST_OPTIONS.quality },
-      sessionId
-    );
-    if (!entry.frame) {
-      publishFrame(entry, Buffer.from(seed.data, 'base64'));
-    }
+    // Not awaited: Chrome never answers a screenshot asked for while the page
+    // commits a navigation, e.g. the first site a new browser opens. That page
+    // then paints, and the screencast sends the frame instead.
+    session
+      .send(
+        'Page.captureScreenshot',
+        { format: SCREENCAST_OPTIONS.format, quality: SCREENCAST_OPTIONS.quality },
+        sessionId
+      )
+      .then(
+        (seed) => {
+          if (!entry.frame && !entry.closed) {
+            publishFrame(entry, Buffer.from(seed.data, 'base64'));
+          }
+        },
+        () => {}
+      );
     await session.send('Page.startScreencast', SCREENCAST_OPTIONS, sessionId);
     entry.streaming = true;
     return { ok: true };
