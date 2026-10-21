@@ -5,21 +5,15 @@
 include('/partials/code-copy', it) %>
 <script src="/screencast.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
-  // The status line polls itself; when the status it shows changes, refresh the
-  // connection panel and the page previews.
-  document.addEventListener('DOMContentLoaded', () => {
-    const refresh = (selector) =>
-      htmx.ajax('GET', window.location.pathname, { target: selector, select: selector, swap: 'outerHTML' });
-    let previousStatus = document.querySelector('#browser-status').textContent;
-    setInterval(() => {
-      const status = document.querySelector('#browser-status').textContent;
-      if (status === previousStatus) {
-        return;
-      }
-      previousStatus = status;
-      refresh('#browser-connection-info');
-      refresh('.browser-preview');
-    }, 3000);
+  // The status line polls itself, and its endpoint fires this event when the
+  // status changes. The connection panel and the page previews follow it.
+  document.body.addEventListener('browser-status-changed', () => {
+    htmx.ajax('GET', window.location.pathname, {
+      target: '#browser-connection-info',
+      select: '#browser-connection-info',
+      swap: 'outerHTML'
+    });
+    htmx.ajax('GET', '<%= it.previewUrl %>', { target: '.browser-preview', swap: 'outerHTML' });
   });
 </script>
 <main>
@@ -27,16 +21,7 @@ include('/partials/code-copy', it) %>
     <div class="browser-main">
       <% if (it.error) { %>
       <div role="alert" class="danger"><%= it.error %></div>
-      <% } %>
-      <p
-        id="browser-status"
-        hx-get="<%= it.browserUrl %>"
-        hx-trigger="every 3s"
-        hx-select="#browser-status"
-        hx-swap="outerHTML"
-      >
-        <strong>Status:</strong> <%= it.browser.status %>
-      </p>
+      <% } %> <%~ include('/browsers/status', it) %>
       <div id="browser-connection-info">
         <% if (it.isConnectable) { %>
         <p>
@@ -108,37 +93,6 @@ include('/partials/code-copy', it) %>
         <% } %>
       </div>
     </div>
-    <% /* Swaps in the live version once JS runs. It has no "load", or each swap would load again. */ %>
-    <div
-      class="browser-preview"
-      hx-get="<%= it.browserUrl %>"
-      hx-trigger="<%= it.live ? 'every 4s' : 'load, every 4s' %>"
-      hx-select=".browser-preview"
-      hx-swap="outerHTML"
-    >
-      <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
-      <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
-        <% if (it.live) { %>
-        <canvas
-          class="browser-screenshot"
-          id="screencast-<%= page.pageId %>"
-          width="1280"
-          height="720"
-          role="img"
-          aria-label="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
-          data-frame-url="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/frame"
-        ></canvas>
-        <% } else { %>
-        <img
-          class="browser-screenshot"
-          id="screenshot-<%= page.pageId %>"
-          src="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/view?t=<%= it.screenshotCacheBust %>"
-          alt="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
-          decoding="async"
-        />
-        <% } %>
-      </a>
-      <% }) %> <% } %>
-    </div>
+    <%~ include('/browsers/preview', it) %>
   </article>
 </main>

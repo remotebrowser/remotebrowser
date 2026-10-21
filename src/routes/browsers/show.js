@@ -20,51 +20,61 @@ export const routes = new Hono();
 // Same origin over websocket; http:/https: becomes ws:/wss:.
 export const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
 
+const findBrowser = async (c) => {
+  const user = c.get('user');
+  const workspace = c.get('workspace');
+  const result = await getBrowserInstanceByPublicId({
+    workspaceId: workspace.id,
+    publicId: c.req.param('browserId'),
+    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+  });
+  return result.error ? null : result.data;
+};
+
+// null for not-ready, unreachable, stopped; reverts preview too.
+const listPreviewPages = async (browser) => {
+  if (browser.status !== 'running' || !browser.internalBrowserId) {
+    return null;
+  }
+  const listed = await listBrowserPages({ browserId: browser.internalBrowserId });
+  if (listed.error) {
+    consola.error('listBrowserPages failed:', listed.error);
+    return null;
+  }
+  // Page-level data needed: pageId/url/title per page, not just count.
+  return listed.data.map((page) => ({ pageId: page.targetId, url: page.url, title: page.title }));
+};
+
 // `error` reports a failed action on this page, such as a resume.
 const renderBrowser = async (c, { error = null } = {}) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
-  const publicId = c.req.param('browserId');
-  const result = await getBrowserInstanceByPublicId({
-    workspaceId: workspace.id,
-    publicId,
-    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
-  });
-  if (result.error || !result.data) {
+  const browser = await findBrowser(c);
+  if (!browser) {
     return null;
   }
   // Handle presence isn't enough; status gates connection info.
-  const isRunning = result.data.status === 'running';
-  const handle = isRunning ? result.data.browserHandle : null;
+  const isRunning = browser.status === 'running';
+  const handle = isRunning ? browser.browserHandle : null;
   const cdpUrl = handle ? cdpUrlFor(c, handle) : null;
   const isConnectable = Boolean(cdpUrl);
   // No masked URL reaches the visible blocks: the code sample masks the whole
   // CDP URL on screen (see code-sample.js), so only fullInstruction - the Copy
   // payload - carries the real one.
   const fullInstruction = cdpUrl ? fullInstructionSource(cdpUrl, handle) : null;
-  // null for not-ready, unreachable, stopped; reverts preview too.
-  let pages = null;
-  if (isRunning && result.data.internalBrowserId) {
-    const listed = await listBrowserPages({ browserId: result.data.internalBrowserId });
-    if (listed.error) {
-      consola.error('listBrowserPages failed:', listed.error);
-    } else {
-      // Page-level data needed: pageId/url/title per page, not just count.
-      pages = listed.data.map((page) => ({ pageId: page.targetId, url: page.url, title: page.title }));
-    }
-  }
+  const pages = await listPreviewPages(browser);
   return eta.render('browsers/show', {
     email: user.email,
     csrfToken: createCsrfToken(c),
     workspace,
     workspaces: await loadWorkspaceSwitcherItems(c),
-    breadcrumbs: buildBrowsersBreadcrumbs(workspace, result.data.browserName),
-    browser: result.data,
+    breadcrumbs: buildBrowsersBreadcrumbs(workspace, browser.browserName),
+    browser,
     error,
     // Only the creator (or an Admin/Owner) sees the Terminate, Suspend, and
     // Resume controls.
-    canTerminate: canTerminateBrowser(result.data, workspace, user),
-    canSuspend: canTerminateBrowser(result.data, workspace, user) && canSuspendBrowsers(),
+    canTerminate: canTerminateBrowser(browser, workspace, user),
+    canSuspend: canTerminateBrowser(browser, workspace, user) && canSuspendBrowsers(),
     // Gates the code sample and the preview column; the URL itself never
     // reaches the view.
     isConnectable,
@@ -77,9 +87,10 @@ const renderBrowser = async (c, { error = null } = {}) => {
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // GET /browsers/:browserId/pages (src/routes/browsers/pages/index.js).
-    pagesUrl: `/browsers/${result.data.publicId}/pages`,
+    pagesUrl: `/browsers/${browser.publicId}/pages`,
     // Public id, not the row's numeric key.
-    browserUrl: `/browsers/${result.data.publicId}`,
+    previewUrl: `/browsers/${browser.publicId}/preview`,
+    statusUrl: `/browsers/${browser.publicId}/status`,
     // ?t= freshens each <img> URL so browsers don't skip re-fetching.
     screenshotCacheBust: Math.floor(Date.now() / 1000),
     // Only htmx asks with this header, so JavaScript is on and the previews
@@ -97,5 +108,37 @@ const handleShow = async (c) => {
 };
 
 routes.get('/:browserId', requireUser, requireWorkspaceRole('User'), handleShow);
+
+// Polled every few seconds to pick up opened and closed pages, so it skips the
+// rest of the browser page. Only htmx asks for it, so the previews always stream.
+routes.get('/:browserId/preview', requireUser, requireWorkspaceRole('User'), async (c) => {
+  const browser = await findBrowser(c);
+  if (!browser) {
+    return c.text('Not found', 404);
+  }
+  return c.html(
+    eta.render('browsers/preview', {
+      browser,
+      isConnectable: browser.status === 'running' && Boolean(browser.browserHandle),
+      pages: await listPreviewPages(browser),
+      previewUrl: `/browsers/${browser.publicId}/preview`,
+      live: true
+    })
+  );
+});
+
+// Polled by the status line, so it skips the CDP call and the rest of the page.
+routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), async (c) => {
+  const browser = await findBrowser(c);
+  if (!browser) {
+    return c.text('Not found', 404);
+  }
+  const shown = c.req.query('shown');
+  if (shown && shown !== browser.status) {
+    // htmx fires it on the page, which then refreshes the parts that depend on the status.
+    c.header('HX-Trigger', 'browser-status-changed');
+  }
+  return c.html(eta.render('browsers/status', { browser, statusUrl: `/browsers/${browser.publicId}/status` }));
+});
 
 export { renderBrowser };
