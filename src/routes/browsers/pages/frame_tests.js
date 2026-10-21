@@ -197,3 +197,21 @@ test('GET frame resizes the frame to the w query parameter', async () => {
   const larger = await app.request(`/browsers/${browserPublicId}/pages/page1/frame?w=1600`, { headers: { cookie } });
   assert.equal((await sharp(Buffer.from(await larger.arrayBuffer())).metadata()).width, 800);
 });
+
+test('GET frame scales the w query parameter by the device pixel ratio', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID });
+  seedScreencast();
+  const app = setupApp();
+  const cookie = `session=${makeSessionCookie()}`;
+  const frameWidth = async (query) => {
+    const res = await app.request(`/browsers/${browserPublicId}/pages/page1/frame?${query}`, { headers: { cookie } });
+    assert.equal(res.status, 200);
+    return (await sharp(Buffer.from(await res.arrayBuffer())).metadata()).width;
+  };
+  assert.equal(await frameWidth('w=200&dpr=2'), 400);
+  // The ratio stops at 2, so a 3x display does not ask for a larger frame.
+  assert.equal(await frameWidth('w=200&dpr=3'), 400);
+  // A missing or invalid ratio keeps the frame at CSS pixels.
+  assert.equal(await frameWidth('w=200&dpr=nope'), 200);
+});

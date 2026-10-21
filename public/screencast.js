@@ -6,8 +6,6 @@
   }
   window.screencastStarted = true;
 
-  const MAX_PIXEL_RATIO = 2;
-
   // Caps the rate at 4 fps even if the browser repaints faster than 60 Hz.
   const MIN_FRAME_GAP = 250;
 
@@ -61,8 +59,8 @@
       const controller = new AbortController();
       frameRequest = controller;
       try {
-        const width = Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
-        const response = await fetch(`${requestedUrl}?after=${seq}&w=${width}`, {
+        const width = canvas.clientWidth;
+        const response = await fetch(`${requestedUrl}?after=${seq}&w=${width}&dpr=${window.devicePixelRatio}`, {
           cache: 'no-store',
           signal: controller.signal
         });
