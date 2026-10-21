@@ -304,7 +304,7 @@ footer {
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-top: 2px solid #fff;
   border-radius: 50%;
-  animation: spinner-spin 1.2s infinite linear;
+  animation: spinner-spin 1.2s infinite cubic-bezier(0.785, 0.135, 0.15, 0.86);
   vertical-align: -0.15em;
 }
 
@@ -531,7 +531,7 @@ a.btn-secondary {
   border: 2px solid var(--fill);
   border-top-color: var(--text);
   border-radius: 50%;
-  animation: spinner-spin 1.2s infinite linear;
+  animation: spinner-spin 1.2s infinite cubic-bezier(0.785, 0.135, 0.15, 0.86);
   vertical-align: -0.15em;
 }
 
