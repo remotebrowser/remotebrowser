@@ -7,7 +7,9 @@ include('/partials/breadcrumbs', it) %>
     <% if (it.error) { %>
     <div role="alert" class="danger"><%= it.error %></div>
     <% } %> <% if (it.terminated) { %>
-    <p role="status"><strong><%= it.browser.browserName %></strong> is terminated.</p>
+    <p id="browser-terminated" role="status" data-redirect-url="/browsers" data-idle-ms="15000">
+      <strong><%= it.browser.browserName %></strong> is terminated.
+    </p>
     <% } else { %>
     <p><strong>This is permanent and cannot be undone.</strong></p>
     <p>
@@ -57,4 +59,26 @@ include('/partials/breadcrumbs', it) %>
   syncTerminateButton();
   document.addEventListener('input', syncTerminateButton);
   document.body.addEventListener('htmx:afterSwap', syncTerminateButton);
+  // Go back to the list after 15 idle seconds, rearmed on each htmx swap.
+  let idleTimer = null;
+  const armIdleRedirect = () => {
+    const notice = document.getElementById('browser-terminated');
+    clearTimeout(idleTimer);
+    idleTimer = null;
+    if (!notice) {
+      return;
+    }
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      if (document.getElementById('browser-terminated')) {
+        window.location.assign(notice.dataset.redirectUrl);
+      }
+    }, Number(notice.dataset.idleMs));
+  };
+  // Any of these means the visitor is still around, so wait a full period again.
+  ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'].forEach((event) =>
+    document.addEventListener(event, armIdleRedirect, { passive: true })
+  );
+  document.body.addEventListener('htmx:afterSwap', armIdleRedirect);
+  armIdleRedirect();
 </script>

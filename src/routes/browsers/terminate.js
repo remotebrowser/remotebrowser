@@ -17,6 +17,11 @@ import { formString } from '../../form.js';
 
 export const routes = new Hono();
 
+// Terminating is instant, so keep the spinner up at least this long.
+const MIN_TERMINATE_FEEDBACK = 3000;
+
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+
 // Shared with suspend.js, which loads the browser the same way.
 const loadBrowser = async (c) => {
   const user = c.get('user');
@@ -63,6 +68,7 @@ routes.post(
   requireWorkspaceRole('User'),
   requireSubmittedWorkspace,
   async (c) => {
+    const startedAt = Date.now();
     const body = await c.req.parseBody();
     const browser = await loadBrowser(c);
     if (!browser) {
@@ -116,10 +122,14 @@ routes.post(
     });
     // htmx swaps in the page it gets, so it gets the result; a plain form follows the redirect.
     if (c.req.header('HX-Request') === 'true') {
+      const remaining = MIN_TERMINATE_FEEDBACK - (Date.now() - startedAt);
+      if (remaining > 0) {
+        await wait(remaining);
+      }
       return c.html(await renderTerminate(c, { browser, terminated: true }));
     }
     return c.redirect('/browsers', 303);
   }
 );
 
-export { loadBrowser };
+export { loadBrowser, MIN_TERMINATE_FEEDBACK };
