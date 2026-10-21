@@ -47,7 +47,7 @@ docker run --rm -it \
   --device /dev/kvm \
   --group-add "$(stat -c '%g' /dev/kvm)" \
   -v "$PWD/.data/vm:/app/.data/vm" \
-  ghcr.io/remotebrowser/remotebrowser vm/scripts/build.js
+  ghcr.io/remotebrowser/remotebrowser vm/build-image.sh
 ```
 
 Then start the server without the socket. Give it the same KVM access, user, and VM directory as the build, so it finds the image and the snapshot.
