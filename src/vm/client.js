@@ -2,7 +2,7 @@ import { constants as fsConstants } from 'node:fs';
 import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
-import { config } from '../config.js';
+import { vmConfig } from './config.js';
 import { generateShortId } from '../id.js';
 import { fetchWebSocketDebuggerUrl, rewriteWsUrl } from './cdp.js';
 import * as host from './host.js';
@@ -30,9 +30,9 @@ const SUSPEND_TIMEOUT_MS = 120000;
 const createVmClient = ({
   arch = hostArch(),
   accel,
-  dataDir = config.vmDataDir,
-  memory = config.vmMemory,
-  cpus = config.vmCpus,
+  dataDir = vmConfig.vmDataDir,
+  memory = vmConfig.vmMemory,
+  cpus = vmConfig.vmCpus,
   start = host.start,
   portOpen = host.portOpen,
   freePort = host.freePort,

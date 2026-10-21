@@ -280,43 +280,6 @@ describe('browserFleetUrl', () => {
   });
 });
 
-describe('QEMU VMs', () => {
-  const readVm = (env) => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        '-e',
-        "const c = require('./config').config; process.stdout.write(JSON.stringify([c.vmDataDir, c.vmMemory, c.vmCpus]))"
-      ],
-      { cwd: __dirname, env: { ...process.env, ...BASE_ENV, ...env } }
-    );
-    assert.equal(result.status, 0);
-    return JSON.parse(result.stdout.toString());
-  };
-
-  test('defaults to a data dir at .data/vm, 2G and 2 CPUs', () => {
-    const [dataDir, memory, cpus] = readVm({ VM_DATA_DIR: '', VM_MEMORY: '', VM_CPUS: '' });
-    assert.match(dataDir, /[/\\]\.data[/\\]vm$/);
-    assert.equal(memory, '2G');
-    assert.equal(cpus, 2);
-  });
-
-  test('honors VM_DATA_DIR, VM_MEMORY, and VM_CPUS when set', () => {
-    assert.deepEqual(readVm({ VM_DATA_DIR: '/srv/vm', VM_MEMORY: '4096M', VM_CPUS: '4' }), ['/srv/vm', '4096M', 4]);
-  });
-
-  test('refuses a VM_DATA_DIR too long for the VM sockets', () => {
-    const result = runConfig({ VM_DATA_DIR: `/srv/${'x'.repeat(80)}` });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr.toString(), /VM_DATA_DIR is too long for the VM's sockets/);
-  });
-
-  test('refuses a malformed VM_MEMORY or VM_CPUS', () => {
-    assert.match(runConfig({ VM_MEMORY: '2 GB' }).stderr.toString(), /VM_MEMORY must be a size/);
-    assert.match(runConfig({ VM_CPUS: '0' }).stderr.toString(), /VM_CPUS must be a positive integer/);
-  });
-});
-
 describe('databaseUrl', () => {
   const readDatabase = (env) => {
     const result = spawnSync(

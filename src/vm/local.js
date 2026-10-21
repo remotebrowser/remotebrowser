@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
-import { config } from '../config.js';
+import { vmConfig } from './config.js';
 import * as host from './host.js';
 import { compressSuspendedState, hasSuspendedState, loadableSuspendedState, removeSuspendedState } from './compress.js';
 import { checkImage } from './image.js';
@@ -30,7 +30,7 @@ import { LOG_ATTRIBUTES, qemu } from './step.js';
 //                     compressed to suspended.state.zst (compress.js)
 
 // Where the scripts in vm/scripts keep the VM, unless RUN_DIR says otherwise.
-const scriptRunDir = () => process.env.RUN_DIR || vmLayout(config.vmDataDir).run;
+const scriptRunDir = () => process.env.RUN_DIR || vmLayout(vmConfig.vmDataDir).run;
 
 // Saving or loading a few GB of memory takes a while on a busy host.
 const STATE_TIMEOUT_MS = 120000;

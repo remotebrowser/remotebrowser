@@ -47,11 +47,8 @@ docker run --rm -it \
   --device /dev/kvm \
   --group-add "$(stat -c '%g' /dev/kvm)" \
   -v "$PWD/.data/vm:/app/.data/vm" \
-  -e NODE_ENV=development \
   ghcr.io/remotebrowser/remotebrowser vm/scripts/build.js
 ```
-
-`NODE_ENV=development` only skips the check of the production settings above, which this step does not use.
 
 Then start the server without the socket. Give it the same KVM access, user, and VM directory as the build, so it finds the image and the snapshot.
 
