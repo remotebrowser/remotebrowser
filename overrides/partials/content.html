@@ -1,0 +1,15 @@
+{#-
+  Override of Zensical's bundled content partial.
+  Adds `hide: [title]` front matter, so a page can skip the h1 that is
+  generated from its nav title.
+-#}
+{% include "partials/actions.html" %}
+{% set hide_title = page.meta and page.meta.hide and "title" in page.meta.hide %}
+{% if "<h1" not in page.content and not hide_title %}
+  <h1 id="__skip">{{ page.title | d(config.site_name, true)}}</h1>
+{% endif %}
+{{ page.content }}
+{% include "partials/tags.html" %}
+{% include "partials/source-file.html" %}
+{% include "partials/feedback.html" %}
+{% include "partials/comments.html" %}
