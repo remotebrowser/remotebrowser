@@ -12,7 +12,7 @@ import {
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { absoluteOrigin } from '../../origin.js';
 import { listBrowserPages } from '../../cdp.js';
-import { canSuspendBrowsers } from '../../fleet.js';
+import { canSuspendBrowsers, listSuspendedPreviews } from '../../fleet.js';
 import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
 
 export const routes = new Hono();
@@ -45,6 +45,33 @@ const listPreviewPages = async (browser) => {
   return listed.data.map((page) => ({ pageId: page.targetId, url: page.url, title: page.title }));
 };
 
+// The pages a suspended browser had, each with a picture saved at suspend
+// time; none otherwise.
+const listSuspendedPages = async (browser) =>
+  browser.status === 'suspended' && browser.internalBrowserId
+    ? listSuspendedPreviews({ browserId: browser.internalBrowserId })
+    : [];
+
+// What the status bar (views/browsers/status-bar.eta.html) needs, so any page
+// about one browser can show its status and the controls that act on it.
+export const statusBarData = (c, browser) => {
+  const user = c.get('user');
+  const workspace = c.get('workspace');
+  // Only the creator (or an Admin/Owner) sees the Terminate, Suspend, and
+  // Resume controls.
+  const canTerminate = canTerminateBrowser(browser, workspace, user);
+  return {
+    browser,
+    workspace,
+    csrfToken: createCsrfToken(c),
+    canTerminate,
+    canSuspend: canTerminate && canSuspendBrowsers(),
+    // Handle presence isn't enough; status gates the controls too.
+    isConnectable: browser.status === 'running' && Boolean(browser.browserHandle),
+    statusUrl: `/browsers/${browser.publicId}/status`
+  };
+};
+
 // `error` reports a failed action on this page, such as a resume.
 const renderBrowser = async (c, { error = null } = {}) => {
   const user = c.get('user');
@@ -64,17 +91,11 @@ const renderBrowser = async (c, { error = null } = {}) => {
   const fullInstruction = cdpUrl ? fullInstructionSource(cdpUrl, handle) : null;
   const pages = await listPreviewPages(browser);
   return eta.render('browsers/show', {
+    ...statusBarData(c, browser),
     email: user.email,
-    csrfToken: createCsrfToken(c),
-    workspace,
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, browser.browserName),
-    browser,
     error,
-    // Only the creator (or an Admin/Owner) sees the Terminate, Suspend, and
-    // Resume controls.
-    canTerminate: canTerminateBrowser(browser, workspace, user),
-    canSuspend: canTerminateBrowser(browser, workspace, user) && canSuspendBrowsers(),
     // Gates the code sample and the preview column; the URL itself never
     // reaches the view.
     isConnectable,
@@ -84,13 +105,11 @@ const renderBrowser = async (c, { error = null } = {}) => {
     // itself is playwrightJavascriptExample below.
     instructionPreamble: isConnectable ? INSTRUCTION_PREAMBLE : null,
     pages,
+    suspendedPages: await listSuspendedPages(browser),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // GET /browsers/:browserId/pages (src/routes/browsers/pages/index.js).
     pagesUrl: `/browsers/${browser.publicId}/pages`,
-    // Public id, not the row's numeric key.
-    previewUrl: `/browsers/${browser.publicId}/preview`,
-    statusUrl: `/browsers/${browser.publicId}/status`,
     // ?t= freshens each <img> URL so browsers don't skip re-fetching.
     screenshotCacheBust: Math.floor(Date.now() / 1000),
     // Only htmx asks with this header, so JavaScript is on and the previews
@@ -109,36 +128,38 @@ const handleShow = async (c) => {
 
 routes.get('/:browserId', requireUser, requireWorkspaceRole('User'), handleShow);
 
-// Polled every few seconds to pick up opened and closed pages, so it skips the
-// rest of the browser page. Only htmx asks for it, so the previews always stream.
-routes.get('/:browserId/preview', requireUser, requireWorkspaceRole('User'), async (c) => {
-  const browser = await findBrowser(c);
-  if (!browser) {
-    return c.text('Not found', 404);
-  }
-  return c.html(
-    eta.render('browsers/preview', {
-      browser,
-      isConnectable: browser.status === 'running' && Boolean(browser.browserHandle),
-      pages: await listPreviewPages(browser),
-      previewUrl: `/browsers/${browser.publicId}/preview`,
-      live: true
-    })
-  );
-});
-
-// Polled by the status line, so it skips the CDP call and the rest of the page.
+// The one poll on a browser's page, so it skips the rest of the page. It always
+// answers with the status line. With ?preview=1 it also brings the previews,
+// picking up opened and closed pages, and when the status has changed, the
+// controls that act on it; the status line swaps both out of band, by id
+// (status.eta.html). Only htmx asks for it, so the
+// previews always stream.
 routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), async (c) => {
   const browser = await findBrowser(c);
   if (!browser) {
     return c.text('Not found', 404);
   }
+  const withPreview = c.req.query('preview') === '1';
+  // The browser page asks for the previews, and it has Resume in its details
+  // column; the playground does not, so it keeps the controls in its status bar.
+  const data = { ...statusBarData(c, browser), suspendedControls: !withPreview };
+  let html = eta.render('browsers/status', { ...data, withPreview, live: true });
+  if (withPreview) {
+    html += eta.render('browsers/preview', {
+      ...data,
+      pages: await listPreviewPages(browser),
+      suspendedPages: await listSuspendedPages(browser),
+      live: true
+    });
+  }
   const shown = c.req.query('shown');
   if (shown && shown !== browser.status) {
-    // htmx fires it on the page, which then refreshes the parts that depend on the status.
+    html += eta.render('browsers/actions', data);
+    // htmx fires it on the page, which then refreshes the other parts that
+    // depend on the status.
     c.header('HX-Trigger', 'browser-status-changed');
   }
-  return c.html(eta.render('browsers/status', { browser, statusUrl: `/browsers/${browser.publicId}/status` }));
+  return c.html(html);
 });
 
 export { renderBrowser };

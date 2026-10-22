@@ -10,6 +10,7 @@ import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
+import { readSuspendedPreviewImage, readSuspendedPreviewList } from './previews.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -333,6 +334,13 @@ const createVmClient = ({
     zstd
   });
 
+  // The pages a suspended browser had, with a picture of each (previews.js).
+  const listSuspendedPreviews = async (browserId) =>
+    isWellFormedBrowserId(browserId) ? readSuspendedPreviewList(vmDir(browserId)) : [];
+
+  const readSuspendedPreview = async (browserId, pageId) =>
+    isWellFormedBrowserId(browserId) ? readSuspendedPreviewImage(vmDir(browserId), pageId) : null;
+
   // The guest needs a moment to boot before /json/version answers, so the
   // lookup is retried; the last failure is what surfaces.
   const resolveCdpUrl = async (browserId) => {
@@ -370,6 +378,8 @@ const createVmClient = ({
     stopBrowser,
     suspendBrowser,
     resumeBrowser,
+    listSuspendedPreviews,
+    readSuspendedPreview,
     setProxy,
     clearProxy,
     resolveCdpUrl

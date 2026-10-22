@@ -23,6 +23,7 @@ const { createVmClient } = await import('./client.js');
 const { hostArch } = await import('./qemu.js');
 const { MACHINE_VERSION } = await import('./qemu.js');
 const { fileStamp } = await import('./snapshot.js');
+const { writeSuspendedPreviews } = await import('./previews.js');
 const { consola } = await import('consola/basic');
 
 // Stands in for spawning QEMU. `fails(argv)` returns a log line for a QEMU
@@ -223,8 +224,14 @@ test('suspendBrowser pauses the VM, saves its state, and quits QEMU', async () =
     }
   });
   const vm = client({ dataDir, connectQmp, isAlive: async () => alive });
-  await vm.suspendBrowser('Qabc12345');
+  const previews = [{ pageId: 'page0', title: 'First', url: 'https://example.com/', data: Buffer.from('png') }];
+  await vm.suspendBrowser('Qabc12345', { previews });
   assert.deepEqual(names(commands), ['stop', 'migrate', 'query-migrate', 'quit']);
+  // The page pictures stay with the suspended VM, to show until it resumes.
+  assert.deepEqual(await vm.listSuspendedPreviews('Qabc12345'), [
+    { pageId: 'page0', title: 'First', url: 'https://example.com/' }
+  ]);
+  assert.equal((await vm.readSuspendedPreview('Qabc12345', 'page0')).toString(), 'png');
   assert.equal(saved, path.join(dir, 'suspended.state.part'));
   // Only the complete file counts; then it is compressed, and the original
   // goes.
@@ -260,7 +267,9 @@ test('a failed save leaves the VM running and no state file', async () => {
   const dir = fakeVmDir(dataDir, 'Qabc12345');
   const { commands, connectQmp } = fakeQmp({ 'query-migrate': { status: 'failed' } });
   const vm = client({ dataDir, connectQmp, isAlive: async () => true });
-  await assert.rejects(vm.suspendBrowser('Qabc12345'), /saving the VM state failed/);
+  const previews = [{ pageId: 'page0', title: 'First', url: 'https://example.com/', data: Buffer.from('png') }];
+  await assert.rejects(vm.suspendBrowser('Qabc12345', { previews }), /saving the VM state failed/);
+  assert.deepEqual(await vm.listSuspendedPreviews('Qabc12345'), [], 'no pictures of a browser that still runs');
   assert.deepEqual(names(commands), ['stop', 'migrate', 'query-migrate', 'migrate_cancel', 'cont']);
   assert.equal(existsSync(path.join(dir, 'suspended.state')), false);
   assert.equal(await vm.browserIsSuspended('Qabc12345'), false);
@@ -305,7 +314,10 @@ test('resumeBrowser starts the same machine from its state, on its old ports, an
     cpus: 1
   });
 
+  await writeSuspendedPreviews(dir, [{ pageId: 'page0', title: '', url: '', data: Buffer.from('png') }]);
   assert.deepEqual(await vm.resumeBrowser('Qabc12345'), { browserId: 'Qabc12345' });
+  // The pages are live again, so their old pictures go.
+  assert.deepEqual(await vm.listSuspendedPreviews('Qabc12345'), []);
 
   const args = starts[0];
   assert.equal(valueAfter(args, '-incoming'), `file:${path.join(dir, 'suspended.state')}`);

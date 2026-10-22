@@ -13,10 +13,23 @@ import {
 import { transitionBrowserInstanceStatus } from '../../models/browsers.js';
 import { canSuspendBrowsers, suspendBrowser, resumeBrowser } from '../../fleet.js';
 import { browserMonitors } from '../../browser.js';
+import { captureAllPages } from '../../screenshots.js';
 import { loadBrowser } from './terminate.js';
 import { renderBrowser } from './show.js';
 
 export const routes = new Hono();
+
+// The pictures of the pages are only nice to have, so a slow page never holds
+// up a suspend for longer than this.
+const PREVIEW_CAPTURE_TIMEOUT = 5000;
+
+// A picture of each page while the browser still runs, to show while it is
+// suspended; none if they take too long.
+const capturePreviews = (browserId) =>
+  Promise.race([
+    captureAllPages(browserId).catch(() => []),
+    new Promise((resolve) => setTimeout(() => resolve([]), PREVIEW_CAPTURE_TIMEOUT).unref())
+  ]);
 
 // Browsers being suspended or resumed in this process. Both take seconds, and a
 // second request for the same VM meanwhile would fight over its QEMU.
@@ -94,9 +107,10 @@ routes.post('/:browserId/suspend', requireUser, requireWorkspaceRole('User'), re
   const { browserInstanceId, internalBrowserId } = browser;
   busy.add(internalBrowserId);
   try {
+    const previews = await capturePreviews(internalBrowserId);
     // The monitor would take the VM going away for a crash, and mark the browser as failed.
     await browserMonitors.stopBrowserMonitor({ internalBrowserId });
-    const suspended = await suspendBrowser({ browserId: internalBrowserId });
+    const suspended = await suspendBrowser({ browserId: internalBrowserId, previews });
     if (suspended.error) {
       consola.error('suspendBrowser failed:', suspended.error);
       // A failed suspend leaves the VM running, so watch it again.

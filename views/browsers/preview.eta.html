@@ -1,15 +1,7 @@
-<% /* The first page load shows static screenshots, then "load" swaps in the live version. The live version keeps
-polling for opened and closed pages; screencast.js streams any new canvas, and screenshot-refresh keeps the running
-ones. A terminated browser has no pages and never comes back, so its empty preview stops polling. */ %> <% if
-(it.browser.status === 'terminated') { %>
-<div class="browser-preview"></div>
-<% } else { %>
-<div
-  class="browser-preview"
-  hx-get="<%= it.previewUrl %>"
-  hx-trigger="<%= it.live ? 'every 3s' : 'load, every 3s' %>"
-  hx-swap="outerHTML"
->
+<% /* The first page load shows static screenshots; the status line's poll then brings the live version and keeps it up
+to date out of band (see status.eta.html), picking up opened and closed pages. screencast.js streams any new canvas, and
+screenshot-refresh keeps the running ones. */ %>
+<div id="browser-preview" class="browser-preview">
   <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
   <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
     <% if (it.live) { %>
@@ -32,6 +24,24 @@ ones. A terminated browser has no pages and never comes back, so its empty previ
     />
     <% } %>
   </a>
-  <% }) %> <% } %>
+  <% }) %> <% } else if (it.browser.status === 'suspended') { %> <% /* What comes back on resume: each page as it was
+  when suspended, or a paused box when there is no picture. Same ids as the screenshots, so a poll keeps the same
+  <img />
+  instead of loading it again. */ %> <% if (it.suspendedPages && it.suspendedPages.length > 0) { %> <%
+  it.suspendedPages.forEach(function(page) { %>
+  <figure class="browser-suspended-preview">
+    <img
+      class="browser-screenshot"
+      id="screenshot-<%= page.pageId %>"
+      src="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/suspended"
+      alt="<%= page.title || page.url || 'A page' %> in <%= it.browser.browserName %>, as it was when suspended"
+      decoding="async"
+    />
+    <figcaption class="browser-suspended-label">Suspended</figcaption>
+  </figure>
+  <% }) %> <% } else { %>
+  <div class="browser-preview-placeholder browser-preview-paused">
+    <span class="browser-suspended-label">Suspended</span>
+  </div>
+  <% } %> <% } %>
 </div>
-<% } %>

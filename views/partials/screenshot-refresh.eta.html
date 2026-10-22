@@ -11,26 +11,29 @@
   // Live previews get the same treatment: the outgoing <canvas> goes back in
   // so its screencast keeps running. A new canvas for a page that showed a
   // static screenshot starts with that screenshot instead of a blank box.
+  //
+  // The previews arrive out of band with the status line's poll, and htmx
+  // fires separate events for that kind of swap, so both kinds are handled.
+  // One answer fires the after-swap events once for each element it swapped,
+  // so the stash stays until the next swap replaces it, rather than being
+  // cleared by the first event.
   let outgoingScreenshots = new Map();
 
-  document.body.addEventListener('htmx:beforeSwap', (event) => {
+  const stashScreenshots = (target) => {
     outgoingScreenshots = new Map(
-      [...event.detail.target.querySelectorAll('img[id^="screenshot-"], canvas[id^="screencast-"]')].map((node) => [
-        node.id,
-        node
-      ])
+      [...target.querySelectorAll('img[id^="screenshot-"], canvas[id^="screencast-"]')].map((node) => [node.id, node])
     );
-  });
+  };
 
-  document.body.addEventListener('htmx:afterSwap', (event) => {
-    for (const img of event.detail.elt.querySelectorAll('img[id^="screenshot-"]')) {
+  const restoreScreenshots = (swapped) => {
+    for (const img of swapped.querySelectorAll('img[id^="screenshot-"]')) {
       const outgoing = outgoingScreenshots.get(img.id);
       if (outgoing) {
         outgoing.src = img.src;
         img.replaceWith(outgoing);
       }
     }
-    for (const canvas of event.detail.elt.querySelectorAll('canvas[id^="screencast-"]')) {
+    for (const canvas of swapped.querySelectorAll('canvas[id^="screencast-"]')) {
       const outgoing = outgoingScreenshots.get(canvas.id);
       const poster = outgoingScreenshots.get(canvas.id.replace('screencast-', 'screenshot-'));
       if (outgoing) {
@@ -41,6 +44,11 @@
         canvas.getContext('2d').drawImage(poster, 0, 0);
       }
     }
-    outgoingScreenshots.clear();
-  });
+  };
+
+  document.body.addEventListener('htmx:beforeSwap', (event) => stashScreenshots(event.detail.target));
+  document.body.addEventListener('htmx:afterSwap', (event) => restoreScreenshots(event.detail.elt));
+  document.body.addEventListener('htmx:oobBeforeSwap', (event) => stashScreenshots(event.detail.target));
+  // Fired on each element the swap put in place.
+  document.body.addEventListener('htmx:oobAfterSwap', (event) => restoreScreenshots(event.target));
 </script>

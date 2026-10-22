@@ -1,0 +1,60 @@
+<% /* The instruction is long, so it starts collapsed. Without JavaScript the toggle stays hidden and the instruction
+stays open, so the page still works. With "disabled", a copy for a browser that cannot run now, which show.eta.html dims
+and makes inert: it has no instruction, which would carry the private CDP URL. */ %>
+<section
+  id="coding-panel"
+  class="browser-panel<%= it.disabled ? '' : ' instruction-block' %>"
+  data-copy-value="<%= it.disabled ? '' : it.fullInstruction %>"
+>
+  <p>
+    To use this browser from
+    <a href="https://code.claude.com" target="_blank" rel="noopener">Claude Code</a> or any similar coding assistant,
+    copy the following instruction and paste it there. This will let the coding assistant remotely control the browser
+    using <a href="https://chromedevtools.github.io/devtools-protocol" target="_blank" rel="noopener">CDP</a> (Chrome
+    DevTools Protocol).
+  </p>
+  <% /* Only the name on show can be clicked, focused, or read; the others are hidden, not just faded. */ %>
+  <p class="assistant-ticker">
+    Compatible with
+    <span class="assistant-ticker-names"
+      ><a href="https://cursor.com" target="_blank" rel="noopener">Cursor</a
+      ><a href="https://code.claude.com" target="_blank" rel="noopener">Claude Code</a
+      ><a href="https://chatgpt.com/codex/" target="_blank" rel="noopener">Codex</a
+      ><a href="https://opencode.ai" target="_blank" rel="noopener">OpenCode</a
+      ><a href="https://cline.bot" target="_blank" rel="noopener">Cline</a
+      ><a href="https://commandcode.ai" target="_blank" rel="noopener">Command Code</a></span
+    >
+  </p>
+  <% if (!it.disabled) { %>
+  <div id="instruction-content" class="instruction-content">
+    <p>
+      🔒 Note that the instruction includes a private CDP URL. Anyone can control the browser with that CDP URL, so
+      <strong>do not</strong> share this instruction.
+    </p>
+    <div class="instruction-box">
+      <p class="instruction-preamble"><%= it.instructionPreamble %></p>
+      <pre id="instruction-block-playwright-js"><span class="visually-hidden">```js
+</span><code><%= it.playwrightJavascriptExample %></code><span class="visually-hidden">
+```</span></pre>
+    </div>
+  </div>
+  <% } %>
+  <div class="browser-panel-footer">
+    <% if (it.disabled) { %>
+    <button type="button" class="btn-secondary instruction-toggle" disabled>
+      <span class="instruction-toggle-label">Show instructions</span>
+    </button>
+    <button type="button" class="btn-primary" disabled>Copy instructions</button>
+    <% } else { %>
+    <button
+      type="button"
+      class="btn-secondary instruction-toggle hidden"
+      aria-expanded="false"
+      aria-controls="instruction-content"
+    >
+      <span class="instruction-toggle-label">Show instructions</span>
+    </button>
+    <button type="button" class="btn-primary code-copy-button hidden">Copy instructions</button>
+    <% } %>
+  </div>
+</section>
