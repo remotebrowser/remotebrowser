@@ -2,17 +2,18 @@
 to date out of band (see status.eta.html), picking up opened and closed pages. screencast.js streams any new canvas, and
 screenshot-refresh keeps the running ones. */ %>
 <div id="browser-preview" class="browser-preview">
-  <% if (it.isConnectable && it.pages !== null) { %> <% it.pages.forEach(function(page) { %>
+  <% if (it.isConnectable && it.pages && it.pages.length > 0) { %> <% it.pages.forEach(function(page) { %>
   <a class="page-preview-link" href="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>">
     <% if (it.live) { %>
     <canvas
       class="browser-screenshot"
       id="screencast-<%= page.pageId %>"
-      width="1280"
-      height="720"
+      width="1920"
+      height="972"
       role="img"
       aria-label="Live view of <%= page.title || page.url || 'a page' %> in <%= it.browser.browserName %>"
       data-frame-url="/browsers/<%= it.browser.publicId %>/pages/<%= page.pageId %>/frame"
+      data-awaiting-frame
     ></canvas>
     <% } else { %>
     <img
@@ -43,5 +44,9 @@ screenshot-refresh keeps the running ones. */ %>
   <div class="browser-preview-placeholder browser-preview-paused">
     <span class="browser-suspended-label">Suspended</span>
   </div>
-  <% } %> <% } %>
+  <% } %> <% } else if (it.browser.status === 'starting' || it.isConnectable) { %> <% /* No page to show yet, so a box
+  of the same shape stands in for the first one. A browser that just started running may not list its first page yet. */
+  %>
+  <div class="browser-preview-placeholder browser-preview-starting" role="img" aria-label="Starting"></div>
+  <% } %>
 </div>

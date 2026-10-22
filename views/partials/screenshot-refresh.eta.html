@@ -42,6 +42,7 @@
         canvas.width = poster.naturalWidth;
         canvas.height = poster.naturalHeight;
         canvas.getContext('2d').drawImage(poster, 0, 0);
+        delete canvas.dataset.awaitingFrame;
       }
     }
   };
