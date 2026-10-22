@@ -713,3 +713,47 @@ test('a resume that cannot decompress the state keeps it, and starts no QEMU', a
   assert.equal(starts.length, 0);
   assert.equal(existsSync(path.join(dir, 'suspended.state.zst')), true);
 });
+
+test('saveScreenshot keeps the newest frame of each page in the VM dir, and never makes a dir for a stopped browser', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  const vm = client({ dataDir });
+  // A frame that comes while one is written replaces any frame still waiting.
+  await Promise.all(
+    ['one', 'two', 'three'].map((frame) => vm.saveScreenshot('Qabc12345', 'PAGE1', Buffer.from(frame)))
+  );
+  await vm.saveScreenshot('Qabc12345', 'PAGE2', Buffer.from('other'));
+  assert.equal(readFileSync(path.join(dir, 'screenshot-PAGE1.jpg'), 'utf8'), 'three');
+  assert.equal(readFileSync(path.join(dir, 'screenshot-PAGE2.jpg'), 'utf8'), 'other');
+  assert.equal(existsSync(path.join(dir, 'screenshot-PAGE1.jpg.part')), false);
+
+  // A page id is only ever a file name, never a path.
+  for (const pageId of ['../escape', 'a/b', '']) {
+    await vm.saveScreenshot('Qabc12345', pageId, Buffer.from('bad'));
+  }
+  assert.deepEqual(
+    readdirSync(dir)
+      .filter((name) => name.startsWith('screenshot'))
+      .sort(),
+    ['screenshot-PAGE1.jpg', 'screenshot-PAGE2.jpg']
+  );
+
+  await vm.saveScreenshot('Qdef12345', 'PAGE1', Buffer.from('gone'));
+  assert.equal(existsSync(path.join(dataDir, 'machines', 'Qdef12345')), false);
+  await vm.saveScreenshot('../etc', 'PAGE1', Buffer.from('bad'));
+  assert.deepEqual(readdirSync(path.join(dataDir, 'machines')), ['Qabc12345']);
+});
+
+test('readSavedScreenshot reads back the frame of a page with when it was saved, and refuses an unsafe id', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const vm = client({ dataDir });
+  await vm.saveScreenshot('Qabc12345', 'PAGE1', Buffer.from('frame'));
+  const saved = await vm.readSavedScreenshot('Qabc12345', 'PAGE1');
+  assert.equal(saved.data.toString(), 'frame');
+  // The file time, which can be a little off from the clock in either direction.
+  assert.ok(Math.abs(saved.timestamp - Date.now()) < 5000);
+  assert.equal(await vm.readSavedScreenshot('Qabc12345', 'PAGE2'), null);
+  assert.equal(await vm.readSavedScreenshot('Qabc12345', '../qemu.pid'), null);
+  assert.equal(await vm.readSavedScreenshot('../etc', 'PAGE1'), null);
+});

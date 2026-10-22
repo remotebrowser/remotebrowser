@@ -1,5 +1,11 @@
 import { consola } from 'consola/basic';
-import { browserCdpUrl } from './fleet.js';
+import {
+  browserCdpUrl,
+  canSaveBrowserScreenshots,
+  readAnyBrowserScreenshot,
+  readBrowserScreenshot,
+  saveBrowserScreenshot
+} from './fleet.js';
 import { listBrowserPages } from './cdp.js';
 import { createScreenshotPool } from './workers/screenshot.js';
 
@@ -39,6 +45,9 @@ const capturePage = async (browserId, pageId, url) => {
     data: shot.data,
     timestamp: Date.now()
   });
+  if (canSaveBrowserScreenshots()) {
+    void saveBrowserScreenshot({ browserId, pageId, jpeg: shot.data });
+  }
   return { ok: true };
 };
 
@@ -90,9 +99,32 @@ const resolveFirstPage = (browserId) => {
     .finally(() => cache.resolving.delete(browserId));
 };
 
-// Serve the cached frame; a missing or stale one also queues a fresh capture.
-// No pageId means the first page, which stays unknown until the background lookup finds it.
-const getScreenshot = (browserId, pageId = '') => {
+// A frame saved on disk outlives the app, so after a restart a page has a
+// picture before its first capture. It keeps the file's time, so a stale one
+// is refreshed as usual.
+const readSavedFrame = async (browserId, pageId) => {
+  if (!canSaveBrowserScreenshots()) {
+    return null;
+  }
+  const saved = await readBrowserScreenshot({ browserId, pageId });
+  if (!saved) {
+    return null;
+  }
+  const key = screenshotKey({ browserId, pageId });
+  // A capture may have landed during the read, and it is newer.
+  const current = cache.screenshots.get(key);
+  if (current) {
+    return current;
+  }
+  const frame = { browserId, pageId, data: saved.data, timestamp: saved.timestamp };
+  cache.screenshots.set(key, frame);
+  return frame;
+};
+
+// Serve the cached frame, else the one saved on disk; a missing or stale one
+// also queues a fresh capture. No pageId means the first page, which stays
+// unknown until the background lookup finds it.
+const getScreenshot = async (browserId, pageId = '') => {
   if (!pageId) {
     // Re-check each read so the thumbnail follows the first tab when it changes.
     resolveFirstPage(browserId);
@@ -104,12 +136,33 @@ const getScreenshot = (browserId, pageId = '') => {
   const cached = cache.screenshots.get(screenshotKey({ browserId, pageId }));
   if (!cached) {
     void requestScreenshot(browserId, pageId);
-    return null;
+    return readSavedFrame(browserId, pageId);
   }
   if (Date.now() - cached.timestamp > SCREENSHOT_MAX_AGE) {
     void requestScreenshot(browserId, pageId);
   }
   return cached;
+};
+
+// A suspended VM cannot list its pages or be captured, so this never queues a
+// capture. It serves the first page's frame from memory, often the last live
+// one, else any picture saved in the VM dir, which is then kept in memory
+// under its page, as the first page.
+const getSuspendedScreenshot = async (browserId) => {
+  const pageId = cache.firstPages.get(browserId);
+  const cached = pageId ? cache.screenshots.get(screenshotKey({ browserId, pageId })) : undefined;
+  if (cached) {
+    return cached;
+  }
+  const saved = await readAnyBrowserScreenshot({ browserId });
+  if (!saved) {
+    return null;
+  }
+  const key = screenshotKey({ browserId, pageId: saved.pageId });
+  const frame = cache.screenshots.get(key) ?? { browserId, ...saved };
+  cache.screenshots.set(key, frame);
+  cache.firstPages.set(browserId, saved.pageId);
+  return frame;
 };
 
 // A fresh frame of every open page, in tab order, e.g. to keep a picture of a
@@ -149,4 +202,12 @@ const stopScreenshots = async () => {
   cache.firstPages.clear();
 };
 
-export { getScreenshot, requestScreenshot, captureAllPages, stopScreenshots, cleanupScreenshots, cache };
+export {
+  getScreenshot,
+  getSuspendedScreenshot,
+  requestScreenshot,
+  captureAllPages,
+  stopScreenshots,
+  cleanupScreenshots,
+  cache
+};

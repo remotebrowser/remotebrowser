@@ -772,10 +772,11 @@ describe('listBrowserPages', () => {
 });
 
 describe('capturePageScreenshot', () => {
-  const PNG_BYTES = Buffer.from('not a real png, just something to round-trip', 'utf8');
+  const JPEG_BYTES = Buffer.from('not a real jpeg, just something to round-trip', 'utf8');
 
-  test('attaches to the target matching pageId and returns its screenshot as a Buffer', async () => {
+  test('attaches to the target matching pageId and returns its JPEG screenshot as a Buffer', async () => {
     const attachedTo = [];
+    const formats = [];
     const stub = await startCdpStub({
       'Target.getTargets': () => ({
         targetInfos: [
@@ -787,7 +788,10 @@ describe('capturePageScreenshot', () => {
         attachedTo.push(params.targetId);
         return { sessionId: 'session1' };
       },
-      'Page.captureScreenshot': () => ({ data: PNG_BYTES.toString('base64') })
+      'Page.captureScreenshot': (params) => {
+        formats.push(params.format);
+        return { data: JPEG_BYTES.toString('base64') };
+      }
     });
     try {
       const result = await capturePageScreenshot({
@@ -796,8 +800,9 @@ describe('capturePageScreenshot', () => {
         cdpUrlFor: cdpUrlForPort(stub.port)
       });
       assert.equal(result.error, undefined);
-      assert.deepEqual(result.data, PNG_BYTES);
+      assert.deepEqual(result.data, JPEG_BYTES);
       assert.deepEqual(attachedTo, ['page2']);
+      assert.deepEqual(formats, ['jpeg']);
     } finally {
       await stub.close();
     }

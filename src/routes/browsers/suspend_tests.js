@@ -178,7 +178,7 @@ test('POST /browsers/:browserId/suspend keeps a picture of each page, taken befo
   screenshotCache.pool = {
     capture: async ({ pageId }) => {
       order.push(`capture ${pageId}`);
-      return pageId === 'page2' ? { error: 'NO_SUCH_PAGE' } : { data: Buffer.from(`png of ${pageId}`) };
+      return pageId === 'page2' ? { error: 'NO_SUCH_PAGE' } : { data: Buffer.from(`jpeg of ${pageId}`) };
     },
     close: async () => {}
   };
@@ -189,8 +189,8 @@ test('POST /browsers/:browserId/suspend keeps a picture of each page, taken befo
   assert.deepEqual(
     saved.map(({ pageId, title, url, data }) => ({ pageId, title, url, data: data.toString() })),
     [
-      { pageId: 'page0', title: 'First', url: 'https://example.com/0', data: 'png of page0' },
-      { pageId: 'page1', title: 'Second', url: 'https://example.com/1', data: 'png of page1' }
+      { pageId: 'page0', title: 'First', url: 'https://example.com/0', data: 'jpeg of page0' },
+      { pageId: 'page1', title: 'Second', url: 'https://example.com/1', data: 'jpeg of page1' }
     ]
   );
 });
@@ -372,7 +372,7 @@ test("a suspended browser's page shows each page as it was when suspended", asyn
       { pageId: 'page0', title: 'First', url: 'https://example.com/0' },
       { pageId: 'page1', title: '', url: 'https://example.com/1' }
     ],
-    readSuspendedPreview: async (browserId, pageId) => (pageId === 'page0' ? Buffer.from('png of page0') : null)
+    readSuspendedPreview: async (browserId, pageId) => (pageId === 'page0' ? Buffer.from('jpeg of page0') : null)
   });
   const app = setupApp();
   for (const path of [`/browsers/${publicId}`, `/browsers/${publicId}/status?shown=suspended&preview=1`]) {
@@ -392,8 +392,8 @@ test("a suspended browser's page shows each page as it was when suspended", asyn
   }
   const image = await app.request(`/browsers/${publicId}/pages/page0/suspended`, { headers: { cookie: cookie() } });
   assert.equal(image.status, 200);
-  assert.equal(image.headers.get('content-type'), 'image/png');
-  assert.equal(await image.text(), 'png of page0');
+  assert.equal(image.headers.get('content-type'), 'image/jpeg');
+  assert.equal(await image.text(), 'jpeg of page0');
   const missing = await app.request(`/browsers/${publicId}/pages/page1/suspended`, { headers: { cookie: cookie() } });
   assert.equal(missing.status, 404);
 });
@@ -408,4 +408,43 @@ test('the playground of a suspended browser keeps Resume in its status bar', asy
   // It has no panel of its own for Resume, unlike the browser page.
   const actions = body.match(/<div id="browser-actions"[\s\S]*?<\/form>/)[0];
   assert.match(actions, new RegExp(`hx-post="/browsers/${publicId}/resume"`));
+});
+
+test("a suspended browser's thumbnail is a picture saved in its VM dir, never a capture", async () => {
+  const workspaceId = await makeUser();
+  const { publicId } = await makeBrowser(workspaceId, { status: 'suspended' });
+  screenshotCache.screenshots = new Map();
+  screenshotCache.firstPages = new Map();
+  const calls = fakeVms({
+    readAnySavedScreenshot: async (browserId) => {
+      calls.push({ name: 'readAnySavedScreenshot', args: browserId });
+      return { pageId: 'page0', data: Buffer.from('saved jpeg'), timestamp: 1000 };
+    }
+  });
+  const app = setupApp();
+  for (let read = 0; read < 2; read += 1) {
+    const image = await app.request(`/browsers/${publicId}/view`, { headers: { cookie: cookie() } });
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get('content-type'), 'image/jpeg');
+    assert.equal(await image.text(), 'saved jpeg');
+  }
+  assert.equal(names(calls).filter((name) => name === 'readAnySavedScreenshot').length, 1, 'then kept in memory');
+  assert.equal(screenshotCache.screenshots.get('Qabc12345:page0').data.toString(), 'saved jpeg');
+  assert.ok(!names(calls).includes('resolveCdpUrl'), 'a suspended VM is never dialed');
+
+  // The last live frame of the first page, still in memory, needs no disk.
+  screenshotCache.screenshots.set('Qabc12345:page0', {
+    browserId: 'Qabc12345',
+    pageId: 'page0',
+    data: Buffer.from('live jpeg'),
+    timestamp: Date.now()
+  });
+  const live = await app.request(`/browsers/${publicId}/view`, { headers: { cookie: cookie() } });
+  assert.equal(await live.text(), 'live jpeg');
+
+  screenshotCache.screenshots = new Map();
+  screenshotCache.firstPages = new Map();
+  fakeVms({ readAnySavedScreenshot: async () => null });
+  const none = await app.request(`/browsers/${publicId}/view`, { headers: { cookie: cookie() } });
+  assert.equal(none.headers.get('content-type'), 'image/png', 'the placeholder');
 });

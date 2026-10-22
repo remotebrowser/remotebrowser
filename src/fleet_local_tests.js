@@ -17,7 +17,9 @@ const {
   suspendBrowser,
   resumeBrowser,
   setBrowserProxy,
-  clearBrowserProxy
+  clearBrowserProxy,
+  canSaveBrowserScreenshots,
+  saveBrowserScreenshot
 } = await import('./fleet.js');
 
 // A fake VM client that records calls and can be told to fail. Swapped in
@@ -223,4 +225,22 @@ test('suspendBrowser and resumeBrowser report a failure, and refuse a malformed 
   assert.deepEqual(await suspendBrowser({ browserId: '../etc' }), { error: 'INVALID_BROWSER_ID' });
   assert.deepEqual(await resumeBrowser({ browserId: '' }), { error: 'INVALID_BROWSER_ID' });
   assert.equal(calls.length, 0);
+});
+
+test('saveBrowserScreenshot hands the frame to the local VM and ignores a failure or a malformed id', async () => {
+  const jpeg = Buffer.from('jpeg');
+  const { calls, client } = fakeVms({ saveScreenshot: async (...args) => void calls.push(args) });
+  setVmClient(client);
+  assert.equal(canSaveBrowserScreenshots(), true);
+  await saveBrowserScreenshot({ browserId: 'Pabc12345', pageId: 'page1', jpeg });
+  await saveBrowserScreenshot({ browserId: '../etc', pageId: 'page1', jpeg });
+  assert.deepEqual(calls, [['Pabc12345', 'page1', jpeg]]);
+  setVmClient(
+    fakeVms({
+      saveScreenshot: async () => {
+        throw new Error('disk full');
+      }
+    }).client
+  );
+  await saveBrowserScreenshot({ browserId: 'Pabc12345', pageId: 'page1', jpeg });
 });

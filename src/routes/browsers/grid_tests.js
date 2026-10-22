@@ -8,7 +8,8 @@ const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./grid.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { ensurePersonalWorkspace } = await import('../../models/workspaces.js');
-const { launchBrowserInstance } = await import('../../models/browsers.js');
+const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } =
+  await import('../../models/browsers.js');
 const { closeDatabase } = await import('../../db/database.js');
 
 test.afterEach(async () => closeDatabase());
@@ -48,4 +49,51 @@ test('GET /browsers/grid renders each browser as a card with its name', async ()
   const body = await res.text();
   assert.match(body, /class="browser-grid"/);
   assert.match(body, /class="browser-grid-name" title="calm-otter">calm-otter</);
+});
+
+test('GET /browsers/grid shows a thumbnail for a running or suspended browser, not a starting one', async () => {
+  const created = await findOrCreateUser({ email: 'user@example.com' });
+  const workspace = await ensurePersonalWorkspace({
+    userId: created.data.id,
+    email: 'user@example.com',
+    personalWorkspaceId: null
+  });
+  const workspaceId = workspace.data.workspaceId;
+  const launch = async (browserName, status) => {
+    const launched = await launchBrowserInstance({ workspaceId, userId: created.data.id, browserName });
+    const { browserInstanceId, publicId } = launched.data;
+    if (status) {
+      await recordProvisionedBrowser({
+        workspaceId,
+        browserInstanceId,
+        internalBrowserId: `Q${publicId.slice(-8)}`,
+        userId: created.data.id
+      });
+      await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: status });
+    }
+    return publicId;
+  };
+  const running = await launch('calm-otter', 'running');
+  const suspended = await launch('sleepy-otter', 'suspended');
+  const starting = await launch('new-otter', null);
+  const cookie = createSessionCookie({
+    publicId: created.data.publicId,
+    email: 'user@example.com',
+    issuedAt: Date.now()
+  });
+  const body = await (await setupApp().request('/browsers/grid', { headers: { cookie: `session=${cookie}` } })).text();
+  assert.match(body, new RegExp(`id="screenshot-${running}"`));
+  // Dimmed with the pause label instead of the status text.
+  assert.match(
+    body,
+    new RegExp(
+      `<figure class="browser-suspended-preview">\\s*<img\\s+class="browser-screenshot"\\s+id="screenshot-${suspended}"[^>]*>\\s*<figcaption class="browser-suspended-label">Suspended</figcaption>`
+    )
+  );
+  assert.doesNotMatch(body, /class="browser-grid-status">suspended</);
+  assert.doesNotMatch(
+    body,
+    new RegExp(`<figure class="browser-suspended-preview">\\s*<img[^>]*id="screenshot-${running}"`)
+  );
+  assert.doesNotMatch(body, new RegExp(`id="screenshot-${starting}"`));
 });

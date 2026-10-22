@@ -351,7 +351,10 @@ const withCdpSession = async (url) => {
   return { socket, send };
 };
 
-/** Captures a PNG screenshot of one page target over CDP; an unknown pageId is a caller-facing miss, not a protocol error. @param {{browserId: string, pageId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: Buffer, error?: string}>} */
+// The same quality as the screencast frames (SCREENCAST_OPTIONS in screencast.js).
+const SCREENSHOT_QUALITY = 60;
+
+/** Captures a JPEG screenshot of one page target over CDP; an unknown pageId is a caller-facing miss, not a protocol error. @param {{browserId: string, pageId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: Buffer, error?: string}>} */
 const capturePageScreenshot = async ({ browserId, pageId, cdpUrlFor = browserCdpUrl }) => {
   const url = await cdpUrlFor({ browserId });
   if (!url) {
@@ -373,7 +376,11 @@ const capturePageScreenshot = async ({ browserId, pageId, cdpUrlFor = browserCdp
       return { error: 'NO_SUCH_PAGE' };
     }
     const { sessionId } = await session.send('Target.attachToTarget', { targetId: page.targetId, flatten: true });
-    const { data } = await session.send('Page.captureScreenshot', { format: 'png' }, sessionId);
+    const { data } = await session.send(
+      'Page.captureScreenshot',
+      { format: 'jpeg', quality: SCREENSHOT_QUALITY },
+      sessionId
+    );
     return { data: Buffer.from(data, 'base64') };
   } catch (error) {
     consola.error('CDP command failed while capturing a page screenshot', {

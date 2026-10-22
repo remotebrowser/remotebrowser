@@ -11,12 +11,15 @@ import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
 
 export const routes = new Hono();
 
-// Only a running browser has pages to show.
+// A running browser shows its first page; a suspended one, a picture saved
+// before it was suspended.
+const THUMBNAIL_STATUSES = new Set(['running', 'suspended']);
+
 const summarizeBrowserInstance = (instance) => ({
   publicId: instance.publicId,
   browserName: instance.browserName,
   status: instance.status,
-  hasThumbnail: instance.status === 'running' && Boolean(instance.internalBrowserId)
+  hasThumbnail: THUMBNAIL_STATUSES.has(instance.status) && Boolean(instance.internalBrowserId)
 });
 
 const renderGrid = async (c) => {

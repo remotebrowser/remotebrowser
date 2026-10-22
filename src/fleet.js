@@ -195,6 +195,7 @@ const stopBrowser = async ({ browserId }) => {
 // The external fleet API has no suspend, resume, or proxy, so only local VMs offer them.
 const canSuspendBrowsers = () => !config.browserFleetUrl;
 const canSetBrowserProxy = canSuspendBrowsers;
+const canSaveBrowserScreenshots = canSuspendBrowsers;
 
 const checkLocalVm = (browserId) => {
   if (!canSuspendBrowsers()) {
@@ -264,7 +265,7 @@ const listSuspendedPreviews = async ({ browserId }) => {
 };
 
 /**
- * The saved picture of one page of a suspended browser, as a PNG, or null.
+ * The saved picture of one page of a suspended browser, as a JPEG, or null.
  * @param {{browserId: string, pageId: string}} params
  * @returns {Promise<Buffer | null>}
  */
@@ -274,6 +275,56 @@ const readSuspendedPreview = async ({ browserId, pageId }) => {
   }
   try {
     return await vms.readSuspendedPreview(browserId, pageId);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Saves the latest frame of a page of a local VM in its dir.
+ * @param {{browserId: string, pageId: string, jpeg: Buffer}} params
+ * @returns {Promise<void>}
+ */
+const saveBrowserScreenshot = async ({ browserId, pageId, jpeg }) => {
+  if (checkLocalVm(browserId)) {
+    return;
+  }
+  try {
+    await vms.saveScreenshot(browserId, pageId, jpeg);
+  } catch {
+    // Nothing depends on the file.
+  }
+};
+
+/**
+ * The frame of a page of a local VM saved by saveBrowserScreenshot, or null.
+ * @param {{browserId: string, pageId: string}} params
+ * @returns {Promise<{data: Buffer, timestamp: number} | null>}
+ */
+const readBrowserScreenshot = async ({ browserId, pageId }) => {
+  if (checkLocalVm(browserId)) {
+    return null;
+  }
+  try {
+    return await vms.readSavedScreenshot(browserId, pageId);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Any saved picture of a local VM, for when its pages cannot be listed, e.g.
+ * while it is suspended, with its page and when it was taken. Null when there
+ * is none, or no local VMs.
+ * @param {{browserId: string}} params
+ * @returns {Promise<{pageId: string, data: Buffer, timestamp: number} | null>}
+ */
+const readAnyBrowserScreenshot = async ({ browserId }) => {
+  if (checkLocalVm(browserId)) {
+    return null;
+  }
+  try {
+    return await vms.readAnySavedScreenshot(browserId);
   } catch {
     return null;
   }
@@ -367,6 +418,10 @@ export {
   resumeBrowser,
   listSuspendedPreviews,
   readSuspendedPreview,
+  canSaveBrowserScreenshots,
+  saveBrowserScreenshot,
+  readBrowserScreenshot,
+  readAnyBrowserScreenshot,
   setBrowserProxy,
   clearBrowserProxy
 };

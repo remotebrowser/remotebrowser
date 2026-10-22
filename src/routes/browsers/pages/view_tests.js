@@ -7,7 +7,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 // origin; the injected fake pool ignores the URL, so nothing is dialed.
 process.env.BROWSERFLEET_URL = 'http://fleet.test';
 
-const FAKE_PNG = Buffer.from('not a real png, just something to round-trip', 'utf8');
+const FAKE_JPEG = Buffer.from('not a real jpeg, just something to round-trip', 'utf8');
 const BROWSER_ID = 'br-1';
 
 const { createSessionCookie } = await import('../../../auth/session.js');
@@ -25,7 +25,7 @@ test.afterEach(async () => closeDatabase());
 // picks, so no worker thread or CDP dial runs.
 let captureResult;
 const resetScreenshots = () => {
-  captureResult = { data: FAKE_PNG };
+  captureResult = { data: FAKE_JPEG };
   cache.screenshots = new Map();
   cache.inFlight = new Map();
   cache.pool = {
@@ -124,13 +124,13 @@ test('GET /browsers/:browserId/pages/:pageId/view answers 503 while the browser 
   assert.equal(res.status, 503);
 });
 
-test('GET /browsers/:browserId/pages/:pageId/view returns the cached PNG of that page', async () => {
+test('GET /browsers/:browserId/pages/:pageId/view returns the cached JPEG of that page', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: BROWSER_ID, status: 'running' });
   cache.screenshots.set(`${BROWSER_ID}:page1`, {
     browserId: BROWSER_ID,
     pageId: 'page1',
-    data: FAKE_PNG,
+    data: FAKE_JPEG,
     timestamp: Date.now()
   });
 
@@ -140,11 +140,11 @@ test('GET /browsers/:browserId/pages/:pageId/view returns the cached PNG of that
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('content-type'), 'image/png');
+  assert.equal(res.headers.get('content-type'), 'image/jpeg');
   assert.equal(res.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
   assert.equal(res.headers.get('pragma'), 'no-cache');
   assert.equal(res.headers.get('expires'), '0');
-  assert.deepEqual(Buffer.from(await res.arrayBuffer()), FAKE_PNG);
+  assert.deepEqual(Buffer.from(await res.arrayBuffer()), FAKE_JPEG);
 });
 
 test('GET /browsers/:browserId/pages/:pageId/view serves a transparent placeholder while the cache warms', async () => {
@@ -160,7 +160,7 @@ test('GET /browsers/:browserId/pages/:pageId/view serves a transparent placehold
   assert.equal(res.headers.get('content-type'), 'image/png');
   const body = Buffer.from(await res.arrayBuffer());
   assert.ok(isPng(body), 'the placeholder must be a PNG');
-  assert.notDeepEqual(body, FAKE_PNG, 'a miss must not serve the page frame');
+  assert.notDeepEqual(body, FAKE_JPEG, 'a miss must not serve the page frame');
 });
 
 test('GET /browsers/:browserId/pages/:pageId/view queues a capture on a miss so the next request hits the cache', async () => {
@@ -178,7 +178,7 @@ test('GET /browsers/:browserId/pages/:pageId/view queues a capture on a miss so 
   const second = await app.request(`/browsers/${browserPublicId}/pages/page1/view`, {
     headers: { cookie: `session=${cookie}` }
   });
-  assert.deepEqual(Buffer.from(await second.arrayBuffer()), FAKE_PNG);
+  assert.deepEqual(Buffer.from(await second.arrayBuffer()), FAKE_JPEG);
 });
 
 // A successful capture proves reachability; it also feeds nextBrowserStatus.

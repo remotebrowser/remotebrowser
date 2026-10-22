@@ -3,7 +3,7 @@ import { consola } from 'consola/basic';
 import { requireUser } from '../../../middleware/auth.js';
 import { requireWorkspaceRole } from '../../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, updateBrowserInstanceStatus } from '../../../models/browsers.js';
-import { getScreenshot, requestScreenshot } from '../../../screenshots.js';
+import { getScreenshot, getSuspendedScreenshot, requestScreenshot } from '../../../screenshots.js';
 import { nextBrowserStatus } from '../../../browser.js';
 import { readSuspendedPreview } from '../../../fleet.js';
 
@@ -32,7 +32,7 @@ const reportOpportunisticStatus = ({ workspaceId, browserInstanceId, currentStat
 };
 
 // A 1x1 transparent PNG served while the cache warms; the next poll swaps in
-// the real frame.
+// the real frame. PNG, not JPEG: JPEG has no transparency.
 const TRANSPARENT_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64'
@@ -56,9 +56,10 @@ routes.get('/:browserId/pages/:pageId/view', requireUser, requireWorkspaceRole('
     return c.text('The browser is still starting.', 503);
   }
   const browserId = instance.data.internalBrowserId;
-  // Read the in-memory frame; a miss queues a capture and answers with a
-  // placeholder, so the request never waits on a CDP dial.
-  const frame = getScreenshot(browserId, pageId);
+  // Read the in-memory frame, else the one saved on disk; a miss queues a
+  // capture and answers with a placeholder, so the request never waits on a
+  // CDP dial.
+  const frame = await getScreenshot(browserId, pageId);
   if (!frame) {
     void requestScreenshot(browserId, pageId).then((screenshotResult) =>
       reportOpportunisticStatus({
@@ -74,7 +75,9 @@ routes.get('/:browserId/pages/:pageId/view', requireUser, requireWorkspaceRole('
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
   // body() needs plain-ArrayBuffer-backed Uint8Array; copy the Buffer.
-  return c.body(new Uint8Array(frame ? frame.data : TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
+  return frame
+    ? c.body(new Uint8Array(frame.data), 200, { 'Content-Type': 'image/jpeg' })
+    : c.body(new Uint8Array(TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
 });
 
 // The picture of a page saved when its browser was suspended. It goes away
@@ -98,7 +101,7 @@ routes.get('/:browserId/pages/:pageId/suspended', requireUser, requireWorkspaceR
     return c.text('Not found', 404);
   }
   c.header('Cache-Control', 'no-store');
-  return c.body(new Uint8Array(image), 200, { 'Content-Type': 'image/png' });
+  return c.body(new Uint8Array(image), 200, { 'Content-Type': 'image/jpeg' });
 });
 
 // The first page's frame, for thumbnails that only know the browser.
@@ -116,9 +119,14 @@ routes.get('/:browserId/view', requireUser, requireWorkspaceRole('User'), async 
   if (!instance.data.internalBrowserId) {
     return c.text('The browser is still starting.', 503);
   }
-  const frame = getScreenshot(instance.data.internalBrowserId);
+  const browserId = instance.data.internalBrowserId;
+  // A suspended VM cannot list its pages, so it is never captured.
+  const frame =
+    instance.data.status === 'suspended' ? await getSuspendedScreenshot(browserId) : await getScreenshot(browserId);
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
-  return c.body(new Uint8Array(frame ? frame.data : TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
+  return frame
+    ? c.body(new Uint8Array(frame.data), 200, { 'Content-Type': 'image/jpeg' })
+    : c.body(new Uint8Array(TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
 });
