@@ -1,12 +1,16 @@
-<% /* "shown" tells the server which status this page has, so it can announce a change. A terminated browser never
-changes again, so it stops polling. */ %> <% if (it.browser.status === 'terminated') { %>
+<% /* The one poll for the whole sidebar. "shown" tells the server which status this page has, so it can announce a
+change and send new controls, which swap out of band by id. With "preview", the answer also brings the previews, swapped
+the same way, so they need no poll of their own; the first page load asks at once to swap its static screenshots for the
+live ones. A terminated browser never changes again, so it stops polling. */ %> <% if (it.browser.status ===
+'terminated') { %>
 <p id="browser-status"><strong>Status:</strong> <%= it.browser.status %></p>
 <% } else { %>
 <p
   id="browser-status"
-  hx-get="<%= it.statusUrl %>?shown=<%= it.browser.status %>"
-  hx-trigger="every 3s"
+  hx-get="<%= it.statusUrl %>?shown=<%= it.browser.status %><%= it.withPreview ? '&preview=1' : '' %>"
+  hx-trigger="<%= it.withPreview && !it.live ? 'load, every 3s' : 'every 3s' %>"
   hx-swap="outerHTML"
+  hx-select-oob="#browser-preview, #browser-actions"
 >
   <strong>Status:</strong> <%= it.browser.status %>
 </p>

@@ -5,6 +5,7 @@ import { requireWorkspaceRole } from '../../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, updateBrowserInstanceStatus } from '../../../models/browsers.js';
 import { getScreenshot, requestScreenshot } from '../../../screenshots.js';
 import { nextBrowserStatus } from '../../../browser.js';
+import { readSuspendedPreview } from '../../../fleet.js';
 
 export const routes = new Hono();
 
@@ -74,6 +75,30 @@ routes.get('/:browserId/pages/:pageId/view', requireUser, requireWorkspaceRole('
   c.header('Expires', '0');
   // body() needs plain-ArrayBuffer-backed Uint8Array; copy the Buffer.
   return c.body(new Uint8Array(frame ? frame.data : TRANSPARENT_PNG), 200, { 'Content-Type': 'image/png' });
+});
+
+// The picture of a page saved when its browser was suspended. It goes away
+// once the browser resumes.
+routes.get('/:browserId/pages/:pageId/suspended', requireUser, requireWorkspaceRole('User'), async (c) => {
+  const user = c.get('user');
+  const workspace = c.get('workspace');
+  const instance = await getBrowserInstanceByPublicId({
+    workspaceId: workspace.id,
+    publicId: c.req.param('browserId'),
+    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+  });
+  if (instance.error || !instance.data?.internalBrowserId) {
+    return c.text('Not found', 404);
+  }
+  const image = await readSuspendedPreview({
+    browserId: instance.data.internalBrowserId,
+    pageId: c.req.param('pageId')
+  });
+  if (!image) {
+    return c.text('Not found', 404);
+  }
+  c.header('Cache-Control', 'no-store');
+  return c.body(new Uint8Array(image), 200, { 'Content-Type': 'image/png' });
 });
 
 // The first page's frame, for thumbnails that only know the browser.

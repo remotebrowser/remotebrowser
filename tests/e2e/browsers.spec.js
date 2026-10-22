@@ -6,6 +6,7 @@ const OWNER_EMAIL = 'e2e-browser-owner@example.com';
 const COPY_BUTTON_OWNER_EMAIL = 'e2e-browser-copy-owner@example.com';
 const NO_JS_COPY_BUTTON_OWNER_EMAIL = 'e2e-browser-no-js-copy-owner@example.com';
 const INSTRUCTION_IDENTITY_OWNER_EMAIL = 'e2e-browser-instruction-identity-owner@example.com';
+const SIDEBAR_OWNER_EMAIL = 'e2e-browser-sidebar-owner@example.com';
 
 const requestSignInLink = async (page, email) => {
   await page.goto('/signin');
@@ -60,6 +61,46 @@ test('launching a browser answers right away, then records the id the browserfle
   // were recorded once the mock server answered; the status poll refreshes the
   // panel.
   await expect(connectionInfo.locator('.instruction-block')).toBeVisible({ timeout: 15000 });
+});
+
+// The status line and the controls that act on it share one row at the top of
+// the sidebar, with the previews below. The controls only exist while the
+// browser is running, so their appearance also proves a status change
+// refreshed the sidebar, not just the connection panel.
+test('the sidebar shows the status and the controls on one row, above the previews', async ({ page }) => {
+  // The two-column layout, where the sidebar is the narrow column, starts at
+  // this width.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, SIDEBAR_OWNER_EMAIL);
+  await expect(page).toHaveURL('/');
+
+  await page.goto('/browsers/launch');
+  await page.locator('#name').fill('e2e-sidebar-otter');
+  await page.getByRole('button', { name: 'Launch' }).click();
+  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+
+  const sidebar = page.locator('#browser-sidebar');
+  await expect(sidebar.locator('#browser-status')).toContainText('Status:');
+  await expect(sidebar.locator('.browser-preview')).toHaveCount(1);
+  // Still starting, so no controls anywhere yet.
+  await expect(page.locator('#browser-connection-info')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Terminate' })).toHaveCount(0);
+
+  // Provisioning lands, the status poll flips the page to running, and the
+  // controls show up in the sidebar - the connection panel never has them.
+  const terminate = sidebar.getByRole('link', { name: 'Terminate' });
+  await expect(terminate).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#browser-connection-info').getByRole('link', { name: 'Terminate' })).toHaveCount(0);
+
+  // One row: the status and the controls' boxes overlap vertically, and the
+  // previews sit below both.
+  const statusBox = await sidebar.locator('#browser-status').boundingBox();
+  const controlsBox = await terminate.boundingBox();
+  const previewBox = await sidebar.locator('.browser-preview').boundingBox();
+  expect(statusBox.y).toBeLessThan(controlsBox.y + controlsBox.height);
+  expect(controlsBox.y).toBeLessThan(statusBox.y + statusBox.height);
+  const controlsBottom = Math.max(statusBox.y + statusBox.height, controlsBox.y + controlsBox.height);
+  expect(previewBox.y).toBeGreaterThan(controlsBottom);
 });
 
 // The code sample has its own Copy button; clicking it should put the full
@@ -117,6 +158,23 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   // proves the reveal actually happened, not just that .click() below
   // would otherwise wait on it.
   await expect(copyButtons.first()).toBeVisible();
+
+  // The instruction starts collapsed; the toggle opens and closes it.
+  const toggle = page.locator('.instruction-toggle');
+  const instruction = page.locator('#instruction-block-playwright-js');
+  await expect(instruction).toBeHidden();
+  await toggle.click();
+  await expect(instruction).toBeVisible();
+  await expect(toggle).toHaveText('Hide instructions');
+  await toggle.click();
+  await expect(instruction).toBeHidden();
+  await expect(toggle).toHaveText('Show instructions');
+  // The choice is kept in localStorage, so a rebuilt panel (or a reload)
+  // comes back the way the visitor left it.
+  await toggle.click();
+  await page.reload();
+  await expect(instruction).toBeVisible();
+  await expect(toggle).toHaveText('Hide instructions');
 
   // The displayed code hides the whole CDP URL, so the visible text differs
   // from what Copy should put on the clipboard. The full JS source, with the
@@ -217,6 +275,9 @@ test('the Copy button stays hidden without JavaScript, even once the browser is 
       // no-JS visitor never sees a Copy button that couldn't do anything.
       await expect(button).toBeHidden();
     }
+    // With no toggle to open it, the instruction stays visible.
+    await expect(page.locator('.instruction-toggle')).toBeHidden();
+    await expect(page.locator('#instruction-block-playwright-js')).toBeVisible();
   } finally {
     await context.close();
   }

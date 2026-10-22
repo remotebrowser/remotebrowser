@@ -5,15 +5,53 @@
 include('/partials/code-copy', it) %>
 <script src="/screencast.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
-  // The status line polls itself, and its endpoint fires this event when the
-  // status changes. The connection panel and the page previews follow it.
+  // The status line's poll keeps the whole sidebar up to date, and its
+  // endpoint fires this event when the status changes. The connection panel
+  // depends on the status too, so it follows.
   document.body.addEventListener('browser-status-changed', () => {
     htmx.ajax('GET', window.location.pathname, {
       target: '#browser-connection-info',
       select: '#browser-connection-info',
       swap: 'outerHTML'
     });
-    htmx.ajax('GET', '<%= it.previewUrl %>', { target: '.browser-preview', swap: 'outerHTML' });
+  });
+
+  // The toggle starts hidden so a visitor with no JavaScript sees the
+  // instruction open; revealing it collapses the instruction (see style.css).
+  // A refreshed panel brings the toggle back hidden and collapsed, so reveal
+  // it again with the state the visitor last chose. Storage can be blocked,
+  // e.g. in a private window, so it falls back to collapsed.
+  const INSTRUCTION_EXPANDED_KEY = 'instructionExpanded';
+  const setInstructionExpanded = (button, expanded) => {
+    button.setAttribute('aria-expanded', String(expanded));
+    button.querySelector('.instruction-toggle-label').textContent = expanded
+      ? 'Hide instructions'
+      : 'Show instructions';
+  };
+  const revealInstructionToggles = () => {
+    let expanded = false;
+    try {
+      expanded = localStorage.getItem(INSTRUCTION_EXPANDED_KEY) === 'true';
+    } catch {}
+    document.querySelectorAll('.instruction-toggle.hidden').forEach((button) => {
+      setInstructionExpanded(button, expanded);
+      button.classList.remove('hidden');
+    });
+  };
+  document.addEventListener('DOMContentLoaded', revealInstructionToggles);
+  document.body.addEventListener('htmx:afterSwap', revealInstructionToggles);
+
+  // Delegated from body, which is never swapped, so it survives a refresh.
+  document.body.addEventListener('click', (event) => {
+    const button = event.target.closest('.instruction-toggle');
+    if (!button) {
+      return;
+    }
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    setInstructionExpanded(button, expanded);
+    try {
+      localStorage.setItem(INSTRUCTION_EXPANDED_KEY, String(expanded));
+    } catch {}
   });
 </script>
 <main>
@@ -21,41 +59,10 @@ include('/partials/code-copy', it) %>
     <div class="browser-main">
       <% if (it.error) { %>
       <div role="alert" class="danger"><%= it.error %></div>
-      <% } %> <%~ include('/browsers/status', it) %>
+      <% } %>
       <div id="browser-connection-info">
-        <% if (it.isConnectable) { %>
-        <p>
-          To use this browser from
-          <a href="https://code.claude.com" target="_blank" rel="noopener">Claude Code</a>,
-          <a href="https://chatgpt.com/codex/" target="_blank" rel="noopener">Codex</a>,
-          <a href="https://cline.bot" target="_blank" rel="noopener">Cline</a>,
-          <a href="https://opencode.ai" target="_blank" rel="noopener">OpenCode</a>,
-          <a href="https://cursor.com" target="_blank" rel="noopener">Cursor</a>, or any similar coding assistant, copy
-          the following instruction and paste it there. This will let the coding assistant remotely control the browser
-          using
-          <a href="https://chromedevtools.github.io/devtools-protocol" target="_blank" rel="noopener">CDP</a> (Chrome
-          DevTools Protocol).
-        </p>
-        <p>
-          🔒 Note that the instruction includes a private CDP URL. Anyone can control the browser with that CDP URL, so
-          <strong>do not</strong> share this instruction.
-        </p>
-
-        <div class="instruction-block" data-copy-value="<%= it.fullInstruction %>">
-          <button type="button" class="btn-primary code-copy-button hidden">Copy instructions</button>
-          <div class="instruction-box">
-            <p class="instruction-preamble"><%= it.instructionPreamble %></p>
-            <pre id="instruction-block-playwright-js"><span class="visually-hidden">```js
-</span><code><%= it.playwrightJavascriptExample %></code><span class="visually-hidden">
-```</span></pre>
-          </div>
-        </div>
-        <p>
-          Or try it here first: the
-          <a href="/browsers/<%= it.browser.publicId %>/playground">playground</a> runs a script against this browser
-          and shows the result live.
-        </p>
-        <% } else if (it.browser.status === 'error') { %>
+        <% if (it.isConnectable) { %> <%~ include('/browsers/playground-panel', it) %> <%~
+        include('/browsers/coding-panel', it) %> <% } else if (it.browser.status === 'error') { %>
         <p>
           This browser is temporarily unreachable. It may come back on its own; if it doesn't, it will be marked as
           stopped soon.
@@ -63,36 +70,44 @@ include('/partials/code-copy', it) %>
         <% } else if (it.browser.status === 'terminated') { %>
         <p>This browser has been stopped and can no longer be reached.</p>
         <% } else if (it.browser.status === 'suspended') { %>
-        <p>This browser is suspended. Resume it to use it again, with its pages as they were.</p>
+        <section id="suspended-panel" class="browser-panel">
+          <% if (it.canSuspend) { %>
+          <div class="browser-panel-action busy-on-request">
+            <form
+              method="post"
+              action="/browsers/<%= it.browser.publicId %>/resume"
+              hx-post="/browsers/<%= it.browser.publicId %>/resume"
+              hx-target="main"
+              hx-select="main"
+              hx-swap="outerHTML"
+              hx-indicator="closest .busy-on-request"
+            >
+              <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+              <button type="submit" class="btn-primary">Resume</button>
+            </form>
+            <p class="busy-message" role="status">Resuming...</p>
+          </div>
+          <% } %>
+          <p>
+            This browser is suspended. Resume it to pick up where you left off. Until then, the playground and coding
+            assistant are unavailable.<% if (!it.canSuspend) { %> Only its creator or a workspace admin can resume it.<%
+            } %>
+          </p>
+        </section>
+        <% /* What comes back on resume, dimmed and out of reach until then. */ %>
+        <div class="browser-panels-disabled" inert>
+          <%~ include('/browsers/playground-panel', { ...it, disabled: true }) %> <%~ include('/browsers/coding-panel',
+          { ...it, disabled: true }) %>
+        </div>
         <% } else { %>
         <p>Connection details will appear here once the browser is ready.</p>
-        <% } %> <% /* Inside the refreshed block, so the buttons follow the status. */ %> <% if (it.canTerminate &&
-        (it.isConnectable || it.browser.status === 'suspended')) { %>
-        <div class="browser-actions busy-on-request">
-          <% if (it.canSuspend && it.isConnectable) { %>
-          <a href="/browsers/<%= it.browser.publicId %>/suspend" class="btn-secondary">Suspend</a>
-          <% } %> <% if (it.canSuspend && it.browser.status === 'suspended') { %>
-          <form
-            method="post"
-            action="/browsers/<%= it.browser.publicId %>/resume"
-            hx-post="/browsers/<%= it.browser.publicId %>/resume"
-            hx-target="main"
-            hx-select="main"
-            hx-swap="outerHTML"
-            hx-indicator="closest .browser-actions"
-          >
-            <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
-            <button type="submit" class="btn-primary">Resume</button>
-          </form>
-          <% } %>
-          <a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a>
-          <% if (it.canSuspend && it.browser.status === 'suspended') { %>
-          <p class="busy-message" role="status">Resuming...</p>
-          <% } %>
-        </div>
         <% } %>
       </div>
     </div>
-    <%~ include('/browsers/preview', it) %>
+    <% /* The status line, the controls that act on it, and the previews share the sidebar column, so the controls sit
+    next to what they act on. One poll of the status line keeps all of them up to date. */ %>
+    <div id="browser-sidebar" class="browser-sidebar">
+      <%~ include('/browsers/status-bar', { ...it, withPreview: true }) %> <%~ include('/browsers/preview', it) %>
+    </div>
   </article>
 </main>

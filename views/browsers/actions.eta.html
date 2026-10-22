@@ -1,0 +1,27 @@
+<% /* Always rendered, even with no controls, so a status change has a target to swap out of band (see the status route
+in src/routes/browsers/show.js). It swaps only then, so a poll never drops the focus or the Resuming spinner. A
+suspended browser shows none, unless the page asks with suspendedControls: the browser page has Resume in a panel of its
+own instead. */ %>
+<div id="browser-actions" class="browser-actions busy-on-request">
+  <% const suspended = it.browser.status === 'suspended' && it.suspendedControls; %> <% if (it.canTerminate &&
+  (it.isConnectable || suspended)) { %> <% if (it.canSuspend && it.isConnectable) { %>
+  <a href="/browsers/<%= it.browser.publicId %>/suspend" class="btn-secondary">Suspend</a>
+  <% } %> <% if (it.canSuspend && suspended) { %>
+  <form
+    method="post"
+    action="/browsers/<%= it.browser.publicId %>/resume"
+    hx-post="/browsers/<%= it.browser.publicId %>/resume"
+    hx-target="main"
+    hx-select="main"
+    hx-swap="outerHTML"
+    hx-indicator="closest .browser-actions"
+  >
+    <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+    <button type="submit" class="btn-primary">Resume</button>
+  </form>
+  <% } %>
+  <a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a>
+  <% if (it.canSuspend && suspended) { %>
+  <p class="busy-message" role="status">Resuming...</p>
+  <% } %> <% } %>
+</div>

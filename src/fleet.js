@@ -208,17 +208,19 @@ const checkLocalVm = (browserId) => {
 
 /**
  * Suspends a browser: its VM saves its memory to disk and stops, which frees
- * that memory. A failed suspend leaves the browser running.
- * @param {{browserId: string}} params
+ * that memory. A failed suspend leaves the browser running. `previews`, a
+ * picture of each page taken just before, are kept to show while it is
+ * suspended.
+ * @param {{browserId: string, previews?: {pageId: string, title: string, url: string, data: Buffer}[]}} params
  * @returns {Promise<{data?: true, error?: string}>}
  */
-const suspendBrowser = async ({ browserId }) => {
+const suspendBrowser = async ({ browserId, previews = [] }) => {
   const invalid = checkLocalVm(browserId);
   if (invalid) {
     return { error: invalid };
   }
   try {
-    await vms.suspendBrowser(browserId);
+    await vms.suspendBrowser(browserId, { previews });
     return { data: true };
   } catch (error) {
     return { error: errorMessage(error) };
@@ -241,6 +243,39 @@ const resumeBrowser = async ({ browserId }) => {
     return { data: true };
   } catch (error) {
     return { error: errorMessage(error) };
+  }
+};
+
+/**
+ * The pages a suspended browser had when it was suspended, each with a saved
+ * picture. None when there are no pictures, or no local VMs.
+ * @param {{browserId: string}} params
+ * @returns {Promise<{pageId: string, title: string, url: string}[]>}
+ */
+const listSuspendedPreviews = async ({ browserId }) => {
+  if (checkLocalVm(browserId)) {
+    return [];
+  }
+  try {
+    return await vms.listSuspendedPreviews(browserId);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * The saved picture of one page of a suspended browser, as a PNG, or null.
+ * @param {{browserId: string, pageId: string}} params
+ * @returns {Promise<Buffer | null>}
+ */
+const readSuspendedPreview = async ({ browserId, pageId }) => {
+  if (checkLocalVm(browserId)) {
+    return null;
+  }
+  try {
+    return await vms.readSuspendedPreview(browserId, pageId);
+  } catch {
+    return null;
   }
 };
 
@@ -330,6 +365,8 @@ export {
   canSetBrowserProxy,
   suspendBrowser,
   resumeBrowser,
+  listSuspendedPreviews,
+  readSuspendedPreview,
   setBrowserProxy,
   clearBrowserProxy
 };

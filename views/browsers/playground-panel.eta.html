@@ -1,0 +1,13 @@
+<% /* With "disabled", a copy for a browser that cannot run now, to show what comes back; show.eta.html dims it and
+makes it inert. */ %>
+<section id="playground-panel" class="browser-panel">
+  <% if (it.disabled) { %>
+  <span class="btn-primary browser-panel-action" aria-disabled="true">Open Playground</span>
+  <% } else { %>
+  <a href="/browsers/<%= it.browser.publicId %>/playground" class="btn-primary browser-panel-action">Open Playground</a>
+  <% } %>
+  <p>
+    Try this browser right now, with no setup. Pick a ready-made script to grab the headlines from a news site, fill in
+    and submit a search form, or read the title of any page, then run it and watch the result live.
+  </p>
+</section>

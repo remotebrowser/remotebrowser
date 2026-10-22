@@ -498,13 +498,14 @@ a.btn-secondary {
 }
 
 /* The Suspend, Resume, and Terminate controls on a browser's page; Resume is
-   a form, the others are links. */
+   a form, the others are links. The status bar lays them out on one row beside
+   the status line, so they carry no margin of their own. */
 .browser-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin: 1rem 0;
+  margin: 0;
 }
 .browser-actions form {
   margin: 0;
@@ -792,11 +793,12 @@ a.btn-secondary {
   margin: 0.25rem 0;
 }
 
-/* Two columns - details on the left, the live preview on the right - rather
-   than the preview floating alongside the text, so its width is a real
-   fraction of the page instead of a fixed pixel box wherever the text
-   happens to wrap around it. The golden ratio keeps the preview readable
-   without a 1:1 split. */
+/* Two columns - details on the left, and the sidebar with the status line, the
+   controls that act on it, and the live previews on the right - rather than
+   the preview floating alongside the text, so its width is a real fraction of
+   the page instead of a fixed pixel box wherever the text happens to wrap
+   around it. The golden ratio keeps the preview readable without a 1:1
+   split. */
 .browser-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
@@ -831,6 +833,24 @@ a.btn-secondary {
    to the side instead of letting pre's own overflow-x: auto scroll it. */
 .browser-layout > * {
   min-width: 0;
+}
+
+/* The status line and the controls that act on it share one row - the status on
+   the left, the buttons on the right - and wrap onto two rows once the column
+   is too narrow for both. */
+.browser-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
+/* The bar's own margin spaces it from the previews below, so the status line
+   drops the paragraph margins it would otherwise add on top. */
+.browser-status-bar > #browser-status {
+  margin: 0;
 }
 
 /* One <img> per open page, stacked top to bottom rather than side by side -
@@ -877,6 +897,55 @@ a.btn-secondary {
   box-shadow: 0 0 0 1px var(--border-strong);
 }
 
+/* A suspended browser's pages, as they were when suspended: dimmed, with a
+   label, so they do not pass for live. Not links, as the pages cannot be
+   opened until the browser resumes. */
+.browser-suspended-preview {
+  position: relative;
+  margin: 0;
+}
+
+.browser-suspended-preview .browser-screenshot {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.browser-suspended-preview .browser-suspended-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* No pictures were saved, so a box of the same shape stands in for them. */
+.browser-preview-paused {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.browser-suspended-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+/* A pause sign: two bars. */
+.browser-suspended-label::before {
+  content: '';
+  width: 0.55em;
+  height: 0.75em;
+  border-left: 0.18em solid currentColor;
+  border-right: 0.18em solid currentColor;
+}
+
 /* Wraps each preview <img> so the whole thumbnail is the link target, not
    just some text next to it. display: block because an anchor's default
    inline sizing would otherwise leave it only as wide as the image itself
@@ -886,13 +955,14 @@ a.btn-secondary {
   display: block;
 }
 
-/* One column on portrait tablets too, so the details are not squeezed. */
+/* One column on portrait tablets too, so the details are not squeezed. The
+   sidebar leads there, keeping the status line and its controls in view. */
 @media (max-width: 40rem), (orientation: portrait) {
   .browser-layout {
     grid-template-columns: 1fr;
   }
 
-  .browser-preview {
+  .browser-sidebar {
     order: -1;
   }
 }
@@ -1040,14 +1110,196 @@ pre {
   border-radius: 0.25rem;
 }
 
-.instruction-block {
-  display: flex;
-  flex-direction: column;
+/* The boxes in a browser's connection panel, stacked one under another. */
+.browser-panel {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  /* Holds a floated action inside the panel when the text is short. */
+  display: flow-root;
 }
 
-.code-copy-button {
-  align-self: flex-end;
-  margin-bottom: 0.5rem;
+/* The panels for what comes back once the browser runs again: dimmed and
+   grey, and inert in the markup, so they cannot be clicked or focused
+   meanwhile. */
+.browser-panels-disabled {
+  opacity: 0.5;
+  filter: grayscale(1);
+  user-select: none;
+}
+
+/* The grid's gap already spaces the last panel from what follows it. */
+.browser-panels-disabled:last-child > .browser-panel:last-child {
+  margin-bottom: 0;
+}
+
+/* The grid's gap already spaces the last panel from what follows it. */
+#browser-connection-info > .browser-panel:last-child {
+  margin-bottom: 0;
+}
+
+.browser-panel > :first-child {
+  margin-top: 0;
+}
+
+.browser-panel > :last-child {
+  margin-bottom: 0;
+}
+
+/* Floated into the top right corner, so the text wraps beside it and then
+   runs the full width of the panel underneath. */
+.browser-panel-action {
+  float: right;
+  margin: 0 0 0.25rem 1rem;
+}
+
+.browser-panel-action + p {
+  margin-top: 0;
+}
+
+.assistant-ticker {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* All the names share one grid cell, so the box is as wide as the longest
+   name and nothing shifts as they change. Each name takes its own 3s slot of
+   the 18s cycle. To add a name, add 3s to the cycle, add one more delay step,
+   and update the slot size in the keyframes below. */
+.assistant-ticker-names {
+  display: inline-grid;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.assistant-ticker-names > a {
+  grid-area: 1 / 1;
+  opacity: 0;
+  visibility: hidden;
+  animation: assistant-ticker 18s infinite both;
+}
+
+/* Holds the current name while the pointer or focus is on it, so it does not
+   change just as someone goes to click it. */
+.assistant-ticker:hover .assistant-ticker-names > a,
+.assistant-ticker:focus-within .assistant-ticker-names > a {
+  animation-play-state: paused;
+}
+
+.assistant-ticker-names > a:nth-child(2) {
+  animation-delay: 3s;
+}
+
+.assistant-ticker-names > a:nth-child(3) {
+  animation-delay: 6s;
+}
+
+.assistant-ticker-names > a:nth-child(4) {
+  animation-delay: 9s;
+}
+
+.assistant-ticker-names > a:nth-child(5) {
+  animation-delay: 12s;
+}
+
+.assistant-ticker-names > a:nth-child(6) {
+  animation-delay: 15s;
+}
+
+/* 16.7% of the cycle is one 3s slot; the fades take about 0.4s each. The
+   names share one spot, so a faded name is also hidden; otherwise the last
+   one would sit on top and catch every click. */
+@keyframes assistant-ticker {
+  0% {
+    opacity: 0;
+    visibility: hidden;
+  }
+  2.2%,
+  14.4% {
+    opacity: 1;
+    visibility: visible;
+  }
+  16.7%,
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* No fading; each name still takes its turn. */
+@media (prefers-reduced-motion: reduce) {
+  .assistant-ticker-names > a {
+    animation-timing-function: steps(1, end);
+  }
+}
+
+/* The toggle in the bottom left corner, Copy in the bottom right, even when
+   the toggle is hidden. They stay on one row on a narrow screen; a label wraps
+   inside its button instead of pushing Copy onto a row of its own. */
+.browser-panel-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* Drawn in CSS from aria-expanded, so the script only swaps the label and
+   the chevron always matches the state: down to open, up to close. */
+.instruction-toggle::after {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-left: 0.5em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.15em) rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.instruction-toggle[aria-expanded='true']::after {
+  transform: translateY(0.1em) rotate(-135deg);
+}
+
+/* A phone has no room for the label next to Copy, so only the chevron shows.
+   The label stays for screen readers, the same way .visually-hidden does. */
+@media (max-width: 40rem) {
+  .instruction-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .instruction-toggle::after {
+    margin: 0 0.25em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .instruction-toggle::after {
+    transition: none;
+  }
+}
+
+.browser-panel-footer .code-copy-button {
+  margin-left: auto;
+}
+
+/* Collapsed from the first paint, not only once script has run. A visitor
+   with no JavaScript has no toggle, so the instruction stays open for them. */
+@media (scripting: enabled) {
+  .instruction-block:has(.instruction-toggle[aria-expanded='false']) .instruction-content {
+    display: none;
+  }
 }
 
 .instruction-box {

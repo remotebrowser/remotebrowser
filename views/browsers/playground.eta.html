@@ -1,5 +1,14 @@
 <% layout('/layout', { title: 'Remote Browser - ' + it.browser.browserName + ' - Playground' }) %> <%~
 include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
+<script src="/htmx.min.js"></script>
+<%~ include('/partials/htmx-form-errors', it) %>
+<script nonce="<%= it.scriptNonce %>">
+  // The status line polls itself, and its endpoint fires this event when the
+  // status changes. Whether the editor can run at all depends on the status,
+  // so reload: the playground opens once the browser runs again, and closes
+  // once it stops.
+  document.body.addEventListener('browser-status-changed', () => window.location.reload());
+</script>
 <main>
   <% if (it.isRunning) { %>
   <article id="playground" class="browser-layout" data-cdp-url="<%= it.cdpUrl %>" data-pages-url="<%= it.pagesUrl %>">
@@ -28,34 +37,36 @@ include('/partials/topnav', it) %> <%~ include('/partials/breadcrumbs', it) %>
         Ctrl+Enter (⌘+Enter on a Mac) to run. The code runs in this tab and drives the browser over CDP.
       </p>
     </section>
-    <section class="playground-live browser-preview" aria-label="Live view and output">
-      <div id="page-live-view">
-        <% /* The whole live view links to the page's own view, as on the browser page. */ %>
-        <a class="page-preview-link" href="<%= it.pageUrl || it.pagesUrl %>">
-          <canvas
-            class="browser-screenshot"
-            width="1280"
-            height="720"
-            role="img"
-            aria-label="Live view of the page the script drives"
-            data-frame-url="<%= it.frameUrl || '' %>"
-          ></canvas>
-        </a>
-      </div>
-      <% /* Next to the live view, so a run's output and its effect show together. Hidden until a run ends. */ %>
-      <div id="playground-output-block" class="hidden">
-        <div id="playground-output" class="playground-output" aria-live="polite"></div>
-        <p id="playground-status" class="playground-status" role="status">Loading...</p>
-      </div>
-    </section>
+    <div class="playground-sidebar">
+      <%~ include('/browsers/status-bar', it) %>
+      <section class="playground-live browser-preview" aria-label="Live view and output">
+        <div id="page-live-view">
+          <% /* The whole live view links to the page's own view, as on the browser page. */ %>
+          <a class="page-preview-link" href="<%= it.pageUrl || it.pagesUrl %>">
+            <canvas
+              class="browser-screenshot"
+              width="1280"
+              height="720"
+              role="img"
+              aria-label="Live view of the page the script drives"
+              data-frame-url="<%= it.frameUrl || '' %>"
+            ></canvas>
+          </a>
+        </div>
+        <% /* Next to the live view, so a run's output and its effect show together. Hidden until a run ends. */ %>
+        <div id="playground-output-block" class="hidden">
+          <div id="playground-output" class="playground-output" aria-live="polite"></div>
+          <p id="playground-status" class="playground-status" role="status">Loading...</p>
+        </div>
+      </section>
+    </div>
   </article>
   <script src="/screencast.js"></script>
   <script src="/playground.js"></script>
   <% } else { %>
   <article>
-    <p id="playground-not-ready">
-      The playground opens once the browser is running. Its status is <strong><%= it.browser.status %></strong>.
-    </p>
+    <%~ include('/browsers/status-bar', it) %>
+    <p id="playground-not-ready">The playground opens once the browser is running.</p>
     <p><a href="/browsers/<%= it.browser.publicId %>">Back to <%= it.browser.browserName %></a></p>
   </article>
   <% } %>

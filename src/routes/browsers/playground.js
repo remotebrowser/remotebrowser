@@ -10,7 +10,7 @@ import {
 } from '../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { listBrowserPages } from '../../cdp.js';
-import { cdpUrlFor } from './show.js';
+import { cdpUrlFor, statusBarData } from './show.js';
 
 export const routes = new Hono();
 
@@ -90,6 +90,11 @@ const renderPlayground = async (c) => {
     }
   }
   return eta.render('browsers/playground', {
+    // The status line and its controls, as on the browser's own page.
+    ...statusBarData(c, browser),
+    // It has no panel for a suspended browser, so Resume and Terminate stay in
+    // the status bar.
+    suspendedControls: true,
     email: user.email,
     csrfToken: createCsrfToken(c),
     workspace,
@@ -103,7 +108,9 @@ const renderPlayground = async (c) => {
     pagesUrl,
     frameUrl,
     pageUrl,
-    templates: PLAYGROUND_TEMPLATES
+    templates: PLAYGROUND_TEMPLATES,
+    // Set by secureHeaders first; the inline script reads it back for CSP.
+    scriptNonce: c.get('secureHeadersNonce')
   });
 };
 

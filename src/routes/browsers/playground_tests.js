@@ -157,17 +157,29 @@ test('GET /browsers/:browserId/playground renders the editor and live view for a
     )
   );
   assert.match(body, /<script src="\/screencast\.js"><\/script>\s*<script src="\/playground\.js"><\/script>/);
-  // Same page width as the other pages, with the live view as the usual sidebar.
+  // Same page width as the other pages, with the live view as the usual sidebar,
+  // under the status line and its controls, as on the browser page.
   assert.match(body, /<body class="">/);
   assert.match(
     body,
-    /<section class="playground-live browser-preview" aria-label="Live view and output">\s*<div id="page-live-view">\s*<a class="page-preview-link"/
+    /<div class="playground-sidebar">\s*<div class="browser-status-bar">[\s\S]*?<\/div>\s*<section class="playground-live browser-preview" aria-label="Live view and output">\s*<div id="page-live-view">\s*<a class="page-preview-link"/
   );
+  // The status line polls without the previews: the playground has its own live view.
+  assert.match(
+    body,
+    new RegExp(
+      `id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running"[^>]*hx-trigger="every 3s"`
+    )
+  );
+  assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`));
+  assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
+  // A status change reloads, so the editor opens or closes with the browser.
+  assert.match(body, /'browser-status-changed', \(\) => window\.location\.reload\(\)/);
   // The output sits under the live view, in the same column, hidden until a run ends.
   // No heading: the status line under the box says how the run ended.
   assert.match(
     body,
-    /<\/canvas>\s*<\/a>\s*<\/div>\s*<div id="playground-output-block" class="hidden">\s*<div id="playground-output"[^>]*><\/div>\s*<p id="playground-status"[^>]*>[^<]*<\/p>\s*<\/div>\s*<\/section>\s*<\/article>/
+    /<\/canvas>\s*<\/a>\s*<\/div>\s*<div id="playground-output-block" class="hidden">\s*<div id="playground-output"[^>]*><\/div>\s*<p id="playground-status"[^>]*>[^<]*<\/p>\s*<\/div>\s*<\/section>\s*<\/div>\s*<\/article>/
   );
   assert.doesNotMatch(body, /<h2>Output<\/h2>/);
   assert.match(body, /aria-current="page">Playground/);
@@ -204,7 +216,10 @@ for (const status of ['starting', 'error', 'terminated']) {
     const res = await request(`/browsers/${browserPublicId}/playground`);
     assert.equal(res.status, 200);
     const body = await res.text();
-    assert.match(body, new RegExp(`id="playground-not-ready"[\\s\\S]*<strong>${status}</strong>`));
+    // The status line says why; it polls (until terminated), so the playground
+    // opens by itself once the browser runs.
+    assert.match(body, new RegExp(`<strong>Status:</strong>\\s*${status}`));
+    assert.match(body, /id="playground-not-ready"/);
     assert.doesNotMatch(body, /data-cdp-url/);
     assert.doesNotMatch(body, /\/cdp\//);
     assert.doesNotMatch(body, /playground\.js/);

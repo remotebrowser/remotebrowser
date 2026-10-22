@@ -64,7 +64,7 @@ When the server is ready, open `http://localhost:3000` in your browser.
 
 Sign in with any email address. This setup has no SMTP server, so it cannot email you the sign-in link. Instead, the server prints the link to its console. Open that link to continue.
 
-To try a simple automation, open the [Playground](playground.md) from the browser's page. It lets you run code against the live browser and see the result.
+To try a simple automation, click **Open Playground** on the browser's page to open the [Playground](playground.md). It lets you run code against the live browser and see the result.
 
 ![Playground](playground.jpg){: style="width: 499px; max-width: 100%; height: auto; border: 1px solid darkgray" }
 

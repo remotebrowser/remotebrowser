@@ -47,8 +47,8 @@ The VM is isolated in these ways:
 A new browser gets a directory `machines/<id>` in the data directory, which only the app's user can read. It holds the VM's overlay disk, which records only its changes to the image, plus the QEMU sockets, the forwarded ports, and two logs: `qemu.log` from QEMU and `console.log` from the guest.
 
 - **Running**: QEMU runs detached from the app, so browsers keep running across an app restart.
-- **Suspend**: QEMU saves the VM's memory to `suspended.state` and exits, which frees the memory. The app compresses the file with `zstd`, if the host has it.
-- **Resume**: the app starts QEMU again from the saved state, so the browser carries on with the same pages, and sets the guest clock again.
+- **Suspend**: QEMU saves the VM's memory to `suspended.state` and exits, which frees the memory. The app compresses the file with `zstd`, if the host has it. Just before, the app takes a screenshot of each open page and keeps them in `suspended-previews`, so the browser's page can show them while it is suspended.
+- **Resume**: the app starts QEMU again from the saved state, so the browser carries on with the same pages, and sets the guest clock again. It deletes the screenshots, as the pages are live again.
 - **Terminate**: the app stops QEMU and deletes the directory, so nothing of the session is left behind.
 
 Suspend and resume work only with local VMs, not with an external fleet (`BROWSERFLEET_URL`).

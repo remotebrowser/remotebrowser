@@ -11,7 +11,10 @@ const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./suspend.js');
 const { routes: showRoutes } = await import('./show.js');
+const { routes: playgroundRoutes } = await import('./playground.js');
+const { routes: viewRoutes } = await import('./pages/view.js');
 const { setVmClient } = await import('../../vm/index.js');
+const { cache: screenshotCache } = await import('../../screenshots.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { ensurePersonalWorkspace, createWorkspace, createCollaborator } = await import('../../models/workspaces.js');
 const {
@@ -33,6 +36,8 @@ const setupApp = () => {
   });
   app.route('/browsers', routes);
   app.route('/browsers', showRoutes);
+  app.route('/browsers', playgroundRoutes);
+  app.route('/browsers', viewRoutes);
   return app;
 };
 
@@ -137,8 +142,57 @@ test('POST /browsers/:browserId/suspend suspends the VM and marks the browser su
   const res = await post(setupApp(), `/browsers/${publicId}/suspend`, workspaceId);
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), `/browsers/${publicId}`);
-  assert.deepEqual(calls, [{ name: 'suspendBrowser', args: 'Qabc12345' }]);
+  // Before it, the page pictures look up the CDP URL, which the fake has not.
+  assert.deepEqual(
+    calls.filter(({ name }) => name !== 'resolveCdpUrl'),
+    [{ name: 'suspendBrowser', args: 'Qabc12345' }]
+  );
   assert.equal(await statusNow(), 'suspended');
+});
+
+test('POST /browsers/:browserId/suspend keeps a picture of each page, taken before the VM stops', async (t) => {
+  const workspaceId = await makeUser();
+  const { publicId } = await makeBrowser(workspaceId);
+  const order = [];
+  const saved = [];
+  fakeVms({
+    resolveCdpUrl: async () => 'ws://127.0.0.1:9/devtools/browser/x',
+    suspendBrowser: async (browserId, { previews }) => {
+      order.push('suspend');
+      saved.push(...previews);
+    }
+  });
+  const { listPages, pool } = screenshotCache;
+  t.after(() => {
+    screenshotCache.listPages = listPages;
+    screenshotCache.pool = pool;
+    screenshotCache.screenshots.clear();
+  });
+  screenshotCache.listPages = async () => ({
+    data: [
+      { targetId: 'page0', title: 'First', url: 'https://example.com/0' },
+      { targetId: 'page1', title: 'Second', url: 'https://example.com/1' },
+      { targetId: 'page2', title: 'Broken', url: 'https://example.com/2' }
+    ]
+  });
+  screenshotCache.pool = {
+    capture: async ({ pageId }) => {
+      order.push(`capture ${pageId}`);
+      return pageId === 'page2' ? { error: 'NO_SUCH_PAGE' } : { data: Buffer.from(`png of ${pageId}`) };
+    },
+    close: async () => {}
+  };
+  const res = await post(setupApp(), `/browsers/${publicId}/suspend`, workspaceId);
+  assert.equal(res.status, 303);
+  // Captured while the browser still runs; a page that fails is left out.
+  assert.equal(order.at(-1), 'suspend');
+  assert.deepEqual(
+    saved.map(({ pageId, title, url, data }) => ({ pageId, title, url, data: data.toString() })),
+    [
+      { pageId: 'page0', title: 'First', url: 'https://example.com/0', data: 'png of page0' },
+      { pageId: 'page1', title: 'Second', url: 'https://example.com/1', data: 'png of page1' }
+    ]
+  );
 });
 
 test('POST /browsers/:browserId/suspend from htmx redirects to the browser page', async () => {
@@ -281,8 +335,77 @@ test("a suspended browser's page says so, and offers Resume and Terminate", asyn
   assert.match(body, /<button type="submit" class="btn-primary">Resume</);
   assert.match(body, new RegExp(`hx-post="/browsers/${publicId}/resume"`));
   assert.match(body, /class="busy-message" role="status">Resuming\.\.\.</);
-  assert.match(body, new RegExp(`href="/browsers/${publicId}/terminate" class="btn-danger">Terminate`));
   assert.doesNotMatch(body, />Suspend</);
   // No connection details while it cannot be reached.
   assert.doesNotMatch(body, /class="instruction-block"/);
+  // Resume leads the details column, in its own panel; the sidebar keeps only
+  // the status and Terminate.
+  const panel = body.match(/<section id="suspended-panel" class="browser-panel">([\s\S]*?)<\/section>/);
+  assert.ok(panel, 'the suspended panel');
+  assert.match(panel[1], /<button type="submit" class="btn-primary">Resume</);
+  assert.match(panel[1], /This browser is suspended/);
+  assert.match(panel[1], /Until then, the playground and coding\s+assistant are unavailable\./);
+  // The sidebar shows only the status.
+  assert.match(body, /<div id="browser-actions" class="browser-actions busy-on-request">\s*<\/div>/);
+  // No pictures were kept, so a paused box holds the previews' place.
+  assert.match(body, /class="browser-preview-placeholder browser-preview-paused"/);
+  // Under it, what comes back on resume, dimmed and out of reach.
+  assert.match(
+    body,
+    /<div class="browser-panels-disabled" inert>\s*<section id="playground-panel" class="browser-panel">/
+  );
+  assert.match(body, /<span class="btn-primary browser-panel-action" aria-disabled="true">Open Playground<\/span>/);
+  assert.doesNotMatch(body, /\/playground"/, 'no link to a playground that cannot run');
+  assert.match(body, /<section\s+id="coding-panel"\s+class="browser-panel"\s+data-copy-value=""\s*>/);
+  assert.match(body, /<button type="button" class="btn-primary" disabled>Copy instructions<\/button>/);
+  // Nothing that would connect to the browser.
+  const info = body.slice(body.indexOf('id="browser-connection-info"'), body.indexOf('id="browser-sidebar"'));
+  assert.doesNotMatch(info, /instruction-content|connectOverCDP|\/cdp\/|code-copy-button/);
+  assert.ok(body.indexOf('id="suspended-panel"') < body.indexOf('id="playground-panel"'), 'Resume leads');
+});
+
+test("a suspended browser's page shows each page as it was when suspended", async () => {
+  const workspaceId = await makeUser();
+  const { publicId } = await makeBrowser(workspaceId, { status: 'suspended' });
+  fakeVms({
+    listSuspendedPreviews: async () => [
+      { pageId: 'page0', title: 'First', url: 'https://example.com/0' },
+      { pageId: 'page1', title: '', url: 'https://example.com/1' }
+    ],
+    readSuspendedPreview: async (browserId, pageId) => (pageId === 'page0' ? Buffer.from('png of page0') : null)
+  });
+  const app = setupApp();
+  for (const path of [`/browsers/${publicId}`, `/browsers/${publicId}/status?shown=suspended&preview=1`]) {
+    const body = await (await app.request(path, { headers: { cookie: cookie() } })).text();
+    // Dimmed and labelled, and not links: the pages open once it resumes.
+    assert.match(
+      body,
+      new RegExp(
+        `<figure class="browser-suspended-preview">\\s*<img\\s+class="browser-screenshot"\\s+id="screenshot-page0"\\s+src="/browsers/${publicId}/pages/page0/suspended"\\s+alt="First in calm-otter, as it was when suspended"`
+      ),
+      path
+    );
+    assert.match(body, /alt="https:\/\/example\.com\/1 in calm-otter, as it was when suspended"/, path);
+    assert.match(body, /<figcaption class="browser-suspended-label">Suspended<\/figcaption>/, path);
+    assert.doesNotMatch(body, /page-preview-link/, path);
+    assert.doesNotMatch(body, /browser-preview-paused/, path);
+  }
+  const image = await app.request(`/browsers/${publicId}/pages/page0/suspended`, { headers: { cookie: cookie() } });
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('content-type'), 'image/png');
+  assert.equal(await image.text(), 'png of page0');
+  const missing = await app.request(`/browsers/${publicId}/pages/page1/suspended`, { headers: { cookie: cookie() } });
+  assert.equal(missing.status, 404);
+});
+
+test('the playground of a suspended browser keeps Resume in its status bar', async () => {
+  const workspaceId = await makeUser();
+  const { publicId } = await makeBrowser(workspaceId, { status: 'suspended' });
+  const body = await (
+    await setupApp().request(`/browsers/${publicId}/playground`, { headers: { cookie: cookie() } })
+  ).text();
+  assert.match(body, /id="playground-not-ready"/);
+  // It has no panel of its own for Resume, unlike the browser page.
+  const actions = body.match(/<div id="browser-actions"[\s\S]*?<\/form>/)[0];
+  assert.match(actions, new RegExp(`hx-post="/browsers/${publicId}/resume"`));
 });

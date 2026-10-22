@@ -112,6 +112,23 @@ const getScreenshot = (browserId, pageId = '') => {
   return cached;
 };
 
+// A fresh frame of every open page, in tab order, e.g. to keep a picture of a
+// browser past a suspend. A page that fails to capture is left out.
+const captureAllPages = async (browserId) => {
+  const listed = await cache.listPages({ browserId });
+  if (listed.error || !listed.data) {
+    return [];
+  }
+  const frames = await Promise.all(
+    listed.data.map(async ({ targetId: pageId, title, url }) => {
+      const captured = await requestScreenshot(browserId, pageId);
+      const frame = cache.screenshots.get(screenshotKey({ browserId, pageId }));
+      return captured.error || !frame ? null : { pageId, title, url, data: frame.data };
+    })
+  );
+  return frames.filter((frame) => frame !== null);
+};
+
 // Clean up frames idle for too long; deleting is safe because a later read re-queues a capture.
 const cleanupScreenshots = (now = Date.now()) => {
   for (const [key, frame] of cache.screenshots) {
@@ -132,4 +149,4 @@ const stopScreenshots = async () => {
   cache.firstPages.clear();
 };
 
-export { getScreenshot, requestScreenshot, stopScreenshots, cleanupScreenshots, cache };
+export { getScreenshot, requestScreenshot, captureAllPages, stopScreenshots, cleanupScreenshots, cache };
