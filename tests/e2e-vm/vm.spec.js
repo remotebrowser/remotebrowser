@@ -187,12 +187,21 @@ test.describe('real QEMU VMs', () => {
     await expect(preview).toBeVisible({ timeout: 60000 });
     const href = await preview.getAttribute('href');
 
-    const shot = await page.request.get(`${href}/view`);
+    // The first read may get the PNG placeholder while the capture runs.
+    let shot;
+    await expect
+      .poll(
+        async () => {
+          shot = await page.request.get(`${href}/view`);
+          return shot.headers()['content-type'];
+        },
+        { timeout: 30000 }
+      )
+      .toBe('image/jpeg');
     expect(shot.status()).toBe(200);
-    expect(shot.headers()['content-type']).toBe('image/png');
-    const png = await shot.body();
-    // PNG magic number: a real render, not an error page.
-    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const jpeg = await shot.body();
+    // JPEG magic number: a real render, not an error page.
+    expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
 
     await terminateBrowser(page, publicId, browserName);
   });

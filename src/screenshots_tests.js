@@ -37,10 +37,10 @@ const resetCache = ({ capture } = {}) => {
 
 test('getScreenshot returns null on a miss and queues a capture', async () => {
   const s = resetCache();
-  assert.equal(getScreenshot('br-1', 'p1'), null, 'a miss is reported as null');
+  assert.equal(await getScreenshot('br-1', 'p1'), null, 'a miss is reported as null');
   await flush();
   assert.deepEqual(s.captureCalls, [{ browserId: 'br-1', pageId: 'p1', url: CDP_URL }]);
-  const frame = getScreenshot('br-1', 'p1');
+  const frame = await getScreenshot('br-1', 'p1');
   assert.equal(frame.browserId, 'br-1');
   assert.equal(frame.pageId, 'p1');
   assert.equal(frame.data.toString(), 'br-1:p1');
@@ -49,10 +49,10 @@ test('getScreenshot returns null on a miss and queues a capture', async () => {
 
 test('getScreenshot serves a frame younger than the window without capturing', async () => {
   const s = resetCache();
-  getScreenshot('br-1', 'p1');
+  await getScreenshot('br-1', 'p1');
   await flush();
   assert.equal(s.captureCalls.length, 1);
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'br-1:p1', 'the fresh frame is served');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'br-1:p1', 'the fresh frame is served');
   await flush();
   assert.equal(s.captureCalls.length, 1, 'a frame inside the window must not refresh');
 });
@@ -65,10 +65,10 @@ test('getScreenshot serves a stale frame and queues a refresh in the background'
     data: Buffer.from('stale'),
     timestamp: Date.now() - 5000
   });
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'stale', 'the stale frame is served as-is');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'stale', 'the stale frame is served as-is');
   await flush();
   assert.equal(s.captureCalls.length, 1, 'a stale read queues a fresh capture');
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'br-1:p1', 'the refreshed frame is served next');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'br-1:p1', 'the refreshed frame is served next');
 });
 
 test('a failed capture is not cached, so a later read retries', async () => {
@@ -76,13 +76,13 @@ test('a failed capture is not cached, so a later read retries', async () => {
   const s = resetCache({
     capture: async () => (fail ? { error: 'NO_SUCH_PAGE' } : { data: Buffer.from('frame') })
   });
-  assert.equal(getScreenshot('br-1', 'p1'), null);
+  assert.equal(await getScreenshot('br-1', 'p1'), null);
   await flush();
   assert.equal(cache.screenshots.size, 0, 'a failed capture must not be cached');
   fail = false;
-  assert.equal(getScreenshot('br-1', 'p1'), null, 'still nothing cached to serve');
+  assert.equal(await getScreenshot('br-1', 'p1'), null, 'still nothing cached to serve');
   await flush();
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'frame');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'frame');
 });
 
 test('a throwing capture is logged, not cached', async () => {
@@ -95,7 +95,7 @@ test('a throwing capture is logged, not cached', async () => {
         throw new Error('capture exploded');
       }
     });
-    assert.equal(getScreenshot('br-1', 'p1'), null);
+    assert.equal(await getScreenshot('br-1', 'p1'), null);
     await flush();
     assert.equal(cache.screenshots.size, 0);
     assert.match(messages.join('\n'), /capture exploded/);
@@ -138,13 +138,13 @@ test('getScreenshot does not stack workers when called again before the first fi
       return { data: Buffer.from('frame') };
     }
   });
-  assert.equal(getScreenshot('br-1', 'p1'), null);
-  assert.equal(getScreenshot('br-1', 'p1'), null);
+  assert.equal(await getScreenshot('br-1', 'p1'), null);
+  assert.equal(await getScreenshot('br-1', 'p1'), null);
   await flush();
   assert.equal(s.captureCalls.length, 1, 'the second call must not fire another worker');
   release();
   await flush();
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'frame');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'frame');
 });
 
 test('cleanupScreenshots drops frames idle past the inactive window, keeping the rest', () => {
@@ -189,15 +189,15 @@ test('a cleaned up page is captured again on the next read', async () => {
     timestamp: Date.now() - 10 * 60 * 1000 - 1
   });
   cleanupScreenshots();
-  assert.equal(getScreenshot('br-1', 'p1'), null);
+  assert.equal(await getScreenshot('br-1', 'p1'), null);
   await flush();
   assert.equal(s.captureCalls.length, 1);
-  assert.equal(getScreenshot('br-1', 'p1').data.toString(), 'br-1:p1');
+  assert.equal((await getScreenshot('br-1', 'p1')).data.toString(), 'br-1:p1');
 });
 
 test('stopScreenshots closes the pool once and drops the frames', async () => {
   const s = resetCache();
-  getScreenshot('br-1', 'p1');
+  await getScreenshot('br-1', 'p1');
   await flush();
   assert.equal(cache.screenshots.size, 1);
   await stopScreenshots();
@@ -217,7 +217,7 @@ test('stopScreenshots is a no-op with no pool', async () => {
 
 test('getScreenshot returns null for a page that was never captured', async () => {
   resetCache();
-  assert.equal(getScreenshot('nope', 'nope'), null);
+  assert.equal(await getScreenshot('nope', 'nope'), null);
   await flush();
 });
 
@@ -226,10 +226,10 @@ test('getScreenshot without a page id serves the first page once it is looked up
   cache.firstPages = new Map();
   cache.resolving = new Set();
   cache.listPages = async () => ({ data: [{ targetId: 'p1' }, { targetId: 'p2' }] });
-  assert.equal(getScreenshot('br-1'), null, 'the first page is unknown until looked up');
+  assert.equal(await getScreenshot('br-1'), null, 'the first page is unknown until looked up');
   await flush();
-  assert.equal(getScreenshot('br-1'), null, 'the first read after lookup queues the capture');
+  assert.equal(await getScreenshot('br-1'), null, 'the first read after lookup queues the capture');
   await flush();
   assert.deepEqual(s.captureCalls, [{ browserId: 'br-1', pageId: 'p1', url: CDP_URL }]);
-  assert.equal(getScreenshot('br-1').data.toString(), 'br-1:p1');
+  assert.equal((await getScreenshot('br-1')).data.toString(), 'br-1:p1');
 });

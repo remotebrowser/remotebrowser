@@ -1088,6 +1088,17 @@ a.btn-secondary {
   object-fit: cover;
 }
 
+.browser-grid-card .browser-suspended-preview .browser-suspended-label {
+  top: auto;
+  bottom: 0.5rem;
+  transform: translateX(-50%);
+}
+
+.browser-grid-card .browser-suspended-label {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.7rem;
+}
+
 .browser-grid-name {
   display: block;
   margin-bottom: 0.375rem;

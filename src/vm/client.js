@@ -10,7 +10,13 @@ import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
-import { readSuspendedPreviewImage, readSuspendedPreviewList } from './previews.js';
+import {
+  readAnyScreenshot,
+  readScreenshot,
+  readSuspendedPreviewImage,
+  readSuspendedPreviewList,
+  writeScreenshot
+} from './previews.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -341,6 +347,40 @@ const createVmClient = ({
   const readSuspendedPreview = async (browserId, pageId) =>
     isWellFormedBrowserId(browserId) ? readSuspendedPreviewImage(vmDir(browserId), pageId) : null;
 
+  // Frames can come faster than the disk takes them, so one write runs per
+  // page and only the newest waiting frame is written after it.
+  /** @type {Map<string, {next: Buffer | null}>} */
+  const screenshotWrites = new Map();
+
+  const saveScreenshot = async (browserId, pageId, jpeg) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      return;
+    }
+    const key = `${browserId}:${pageId}`;
+    const running = screenshotWrites.get(key);
+    if (running) {
+      running.next = jpeg;
+      return;
+    }
+    const write = { next: jpeg };
+    screenshotWrites.set(key, write);
+    try {
+      while (write.next) {
+        const data = write.next;
+        write.next = null;
+        await writeScreenshot(vmDir(browserId), pageId, data).catch(() => {});
+      }
+    } finally {
+      screenshotWrites.delete(key);
+    }
+  };
+
+  const readSavedScreenshot = async (browserId, pageId) =>
+    isWellFormedBrowserId(browserId) ? readScreenshot(vmDir(browserId), pageId) : null;
+
+  const readAnySavedScreenshot = async (browserId) =>
+    isWellFormedBrowserId(browserId) ? readAnyScreenshot(vmDir(browserId)) : null;
+
   // The guest needs a moment to boot before /json/version answers, so the
   // lookup is retried; the last failure is what surfaces.
   const resolveCdpUrl = async (browserId) => {
@@ -380,6 +420,9 @@ const createVmClient = ({
     resumeBrowser,
     listSuspendedPreviews,
     readSuspendedPreview,
+    saveScreenshot,
+    readSavedScreenshot,
+    readAnySavedScreenshot,
     setProxy,
     clearProxy,
     resolveCdpUrl

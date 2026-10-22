@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 // A picture of each page as it was when the browser was suspended, so its page
@@ -6,7 +6,7 @@ import path from 'node:path';
 // suspended state, and go with it:
 //
 //   suspended-previews/pages.json   [{pageId, title, url}], in tab order
-//   suspended-previews/<n>.png      the screenshot of page n
+//   suspended-previews/<n>.jpg      the screenshot of page n
 //
 // The files are named by position, never by a page id, so a page id from a
 // request only ever looks up pages.json and cannot name a path.
@@ -21,7 +21,7 @@ const writeSuspendedPreviews = async (dir, previews) => {
   const partial = `${target}.part`;
   await rm(partial, { recursive: true, force: true });
   await mkdir(partial, { recursive: true });
-  await Promise.all(previews.map(({ data }, index) => writeFile(path.join(partial, `${index}.png`), data)));
+  await Promise.all(previews.map(({ data }, index) => writeFile(path.join(partial, `${index}.jpg`), data)));
   const pages = previews.map(({ pageId, title, url }) => ({ pageId, title, url }));
   await writeFile(path.join(partial, 'pages.json'), JSON.stringify(pages));
   await rm(target, { recursive: true, force: true });
@@ -44,9 +44,79 @@ const readSuspendedPreviewImage = async (dir, pageId) => {
   if (index === -1) {
     return null;
   }
-  return readFile(path.join(previewsDir(dir), `${index}.png`)).catch(() => null);
+  return readFile(path.join(previewsDir(dir), `${index}.jpg`)).catch(() => null);
 };
 
 const removeSuspendedPreviews = (dir) => rm(previewsDir(dir), { recursive: true, force: true });
 
-export { writeSuspendedPreviews, readSuspendedPreviewList, readSuspendedPreviewImage, removeSuspendedPreviews };
+// The latest full-size frame of each page, as screenshot-<page-id>.jpg, so it
+// can be seen from the host. Chrome's target ids are hex, so anything else is
+// refused before it can name a path.
+const SAFE_PAGE_ID = /^[A-Za-z0-9_-]+$/;
+
+// Written next to it and renamed, so a reader never sees half a file. No mkdir:
+// a VM dir that is gone means a stopped browser, which must stay gone.
+const writeScreenshot = async (dir, pageId, jpeg) => {
+  if (!SAFE_PAGE_ID.test(pageId)) {
+    return;
+  }
+  const target = path.join(dir, `screenshot-${pageId}.jpg`);
+  const partial = `${target}.part`;
+  await writeFile(partial, jpeg);
+  await rename(partial, target);
+};
+
+// The saved frame of a page and when it was taken, or null.
+const readScreenshot = async (dir, pageId) => {
+  if (!SAFE_PAGE_ID.test(pageId)) {
+    return null;
+  }
+  const file = path.join(dir, `screenshot-${pageId}.jpg`);
+  try {
+    const [data, info] = await Promise.all([readFile(file), stat(file)]);
+    return { data, timestamp: info.mtimeMs };
+  } catch {
+    return null;
+  }
+};
+
+const SCREENSHOT_FILE = /^screenshot-([A-Za-z0-9_-]+)\.jpg$/;
+
+// A picture of the browser when its pages cannot be listed, e.g. while it is
+// suspended: the first page as it was when suspended, else the newest saved
+// frame of any page. With its page and when it was taken, or null.
+const readAnyScreenshot = async (dir) => {
+  const [first] = await readSuspendedPreviewList(dir);
+  const preview = first ? await readSuspendedPreviewImage(dir, first.pageId) : null;
+  if (preview) {
+    const info = await stat(path.join(previewsDir(dir), 'pages.json')).catch(() => null);
+    return { pageId: first.pageId, data: preview, timestamp: info?.mtimeMs ?? 0 };
+  }
+  const names = await readdir(dir).catch(() => []);
+  const saved = await Promise.all(
+    names
+      .filter((name) => SCREENSHOT_FILE.test(name))
+      .map((name) =>
+        stat(path.join(dir, name)).then(
+          (info) => ({ name, mtimeMs: info.mtimeMs }),
+          () => null
+        )
+      )
+  );
+  const newest = saved.filter(Boolean).sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+  if (!newest) {
+    return null;
+  }
+  const data = await readFile(path.join(dir, newest.name)).catch(() => null);
+  return data ? { pageId: newest.name.match(SCREENSHOT_FILE)[1], data, timestamp: newest.mtimeMs } : null;
+};
+
+export {
+  writeSuspendedPreviews,
+  readSuspendedPreviewList,
+  readSuspendedPreviewImage,
+  removeSuspendedPreviews,
+  writeScreenshot,
+  readScreenshot,
+  readAnyScreenshot
+};

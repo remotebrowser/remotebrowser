@@ -14,7 +14,23 @@ include('/partials/breadcrumbs', it) %>
         <% it.browsers.forEach(function(browser) { %>
         <a class="browser-grid-card" href="/browsers/<%= browser.publicId %>">
           <span class="browser-grid-name" title="<%= browser.browserName %>"><%= browser.browserName %></span>
-          <% if (browser.hasThumbnail) { %>
+          <% if (browser.status === 'suspended') { %> <% /* Dimmed with the same label as on the browser's page, so it
+          does not pass for live. */ %> <% if (browser.hasThumbnail) { %>
+          <figure class="browser-suspended-preview">
+            <img
+              class="browser-screenshot"
+              id="screenshot-<%= browser.publicId %>"
+              src="/browsers/<%= browser.publicId %>/view?t=<%= it.screenshotCacheBust %>"
+              alt=""
+              decoding="async"
+            />
+            <figcaption class="browser-suspended-label">Suspended</figcaption>
+          </figure>
+          <% } else { %>
+          <div class="browser-preview-placeholder browser-preview-paused">
+            <span class="browser-suspended-label">Suspended</span>
+          </div>
+          <% } %> <% } else if (browser.hasThumbnail) { %>
           <img
             class="browser-screenshot"
             id="screenshot-<%= browser.publicId %>"
@@ -24,7 +40,7 @@ include('/partials/breadcrumbs', it) %>
           />
           <% } else { %>
           <div class="browser-preview-placeholder"></div>
-          <% } %> <% if (browser.status !== 'running') { %>
+          <% } %> <% if (browser.status !== 'running' && browser.status !== 'suspended') { %>
           <span class="browser-grid-status"><%= browser.status %></span>
           <% } %>
         </a>

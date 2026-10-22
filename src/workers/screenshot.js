@@ -120,7 +120,7 @@ const createScreenshotPool = () => {
   return { capture, close, size: workerCount };
 };
 
-// Worker half: one capture per message, replying with the PNG Buffer (never transferred).
+// Worker half: one capture per message, replying with the JPEG Buffer (never transferred).
 if (!isMainThread && parentPort) {
   parentPort.on('message', async ({ browserId, pageId, url }) => {
     const result = await capturePageScreenshot({ browserId, pageId, cdpUrlFor: () => url });
