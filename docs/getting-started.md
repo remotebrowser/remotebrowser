@@ -1,8 +1,10 @@
 # Getting Started
 
-To try Remote Browser locally on Linux, you need [KVM](https://linux-kvm.org), [Docker](https://www.docker.com), and [Postgres](https://www.postgresql.org). The steps below are for Linux.
+!!! warning "macOS"
 
-To try Remote Browser locally on macOS, run it from source, as the [development setup for macOS](setup.md#macos) shows. Docker on macOS has no KVM, so the browser VMs cannot run in a container there.
+    To try Remote Browser locally on macOS, run it from source. Refer to the [development setup for macOS](setup.md#macos).
+
+To try Remote Browser locally on Linux, you need [KVM](https://linux-kvm.org), [Docker](https://www.docker.com), and [Postgres](https://www.postgresql.org).
 
 Check that your user can access KVM:
 
