@@ -316,8 +316,12 @@ test('GET /browsers/:browserId omits previews when listing pages over CDP fails'
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.doesNotMatch(body, /browser-screenshot/);
-  // The preview column stays, empty, even when the page listing fails.
-  assert.match(body, /<div id="browser-preview" class="browser-preview">\s*<\/div>/);
+  // Right after it starts running, a browser may not answer yet, so the
+  // starting box stays until there is a page to show.
+  assert.match(
+    body,
+    /<div id="browser-preview" class="browser-preview">\s*<div class="browser-preview-placeholder browser-preview-starting"/
+  );
   // Rest of page still renders; a CDP listing hiccup shouldn't break UI.
   assert.match(body, /id="browser-connection-info"/);
 });
@@ -403,17 +407,20 @@ test('GET /browsers/:browserId renders for the active shared workspace with unpr
   assert.match(body, /class="breadcrumb-switcher-trigger">Acme Corp</);
   assert.match(body, /<a href="\/browsers">Browsers<\/a>/);
   assert.match(body, /aria-current="page">calm-otter/);
-  // The starting notice lives inside the connection panel now.
-  assert.match(
-    body,
-    /<div id="browser-connection-info">[\s\S]*Connection details will appear here once the browser is ready\./
-  );
+  // Like a suspended browser: a notice, then the panels to come, dimmed.
+  assert.match(body, /<div id="browser-connection-info">[\s\S]*This browser is starting\./);
+  assert.match(body, /<div class="browser-panels-disabled" inert>[\s\S]*id="playground-panel"[\s\S]*Copy instructions/);
+  assert.doesNotMatch(body, /href="\/browsers\/[^"]+\/playground"/, 'the playground cannot be opened yet');
   assert.doesNotMatch(body, /browser-starting-notice/);
   assert.doesNotMatch(body, /connectOverCDP/);
   assert.doesNotMatch(body, /browser-screenshot/, 'no screenshot until the browser is actually running');
   // Placeholder holds right column width so layout doesn't jump later.
   assert.match(body, /<main>/);
-  assert.match(body, /<div id="browser-preview" class="browser-preview">\s*<\/div>/, 'the preview column stays, empty');
+  assert.match(
+    body,
+    /<div id="browser-preview" class="browser-preview">\s*<div class="browser-preview-placeholder browser-preview-starting"/
+  );
+  assert.doesNotMatch(body, /id="browser-actions"[^>]*>\s*<a/, 'no controls while starting');
 });
 
 test('GET /browsers/:browserId/status?preview=1 brings the live previews out of band', async () => {

@@ -54,7 +54,7 @@ test('launching a browser answers right away, then records the id the browserfle
   // internal browser id and handle, so its absence here proves provisioning did
   // not block the response.
   const connectionInfo = page.locator('#browser-connection-info');
-  await expect(connectionInfo).toContainText('Connection details will appear here once the browser is ready.');
+  await expect(connectionInfo).toContainText('This browser is starting.');
   expect(await connectionInfo.locator('.instruction-block').count()).toBe(0);
 
   // The instruction block appearing proves the assigned browser id and handle

@@ -100,7 +100,14 @@ include('/partials/code-copy', it) %>
           { ...it, disabled: true }) %>
         </div>
         <% } else { %>
-        <p>Connection details will appear here once the browser is ready.</p>
+        <section id="starting-panel" class="browser-panel">
+          <p>This browser is starting. Until it is ready, the playground and remote access are unavailable.</p>
+        </section>
+        <% /* What becomes available once it runs, dimmed and out of reach until then. */ %>
+        <div class="browser-panels-disabled" inert>
+          <%~ include('/browsers/playground-panel', { ...it, disabled: true }) %> <%~ include('/browsers/coding-panel',
+          { ...it, disabled: true }) %>
+        </div>
         <% } %>
       </div>
     </div>
