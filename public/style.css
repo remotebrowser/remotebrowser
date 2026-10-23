@@ -541,6 +541,16 @@ a.btn-secondary {
   display: none;
 }
 
+.starting-spinner {
+  display: block;
+  width: 2em;
+  height: 2em;
+  border: 4px solid var(--fill);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spinner-spin 1.2s infinite cubic-bezier(0.785, 0.135, 0.15, 0.86);
+}
+
 .form-note {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -928,6 +938,7 @@ a.btn-secondary {
 
 .browser-preview-starting {
   aspect-ratio: 1.9753;
+  background-color: light-dark(#2a2a2a, #0a0a0a);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -938,24 +949,34 @@ a.btn-secondary {
 }
 
 .page-preview-link > canvas[data-awaiting-frame] {
-  background-color: var(--border);
+  background-color: light-dark(#2a2a2a, #0a0a0a);
 }
 
 .page-preview-link:has(> canvas[data-awaiting-frame])::after {
+  content: '';
   position: absolute;
   inset: 0;
   margin: auto;
+  width: 50%;
+  height: 0.5rem;
+  border-radius: 999px;
+  background-color: #e4e4e4;
 }
 
-.browser-preview-starting::after,
-.page-preview-link:has(> canvas[data-awaiting-frame])::after {
+.browser-preview-starting::after {
   content: '';
-  width: 3rem;
-  height: 3rem;
-  border: 4px solid var(--border-strong);
-  border-top-color: var(--text);
-  border-radius: 50%;
-  animation: spinner-spin 1.2s infinite cubic-bezier(0.785, 0.135, 0.15, 0.86);
+  width: 50%;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(#e4e4e4, #e4e4e4) no-repeat #4a4a4a;
+  background-size: 0% 100%;
+  animation: preview-progress 5s ease-out forwards;
+}
+
+@keyframes preview-progress {
+  to {
+    background-size: 100% 100%;
+  }
 }
 
 /* A pause sign: two bars. */
@@ -2067,9 +2088,12 @@ pre {
   }
 
   .busy-message::before,
-  .browser-preview-starting::after,
-  .page-preview-link::after {
+  .starting-spinner {
     animation: none;
+  }
+
+  .browser-preview-starting::after {
+    animation-timing-function: steps(1, end);
   }
 }
 

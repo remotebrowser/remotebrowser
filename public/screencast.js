@@ -36,7 +36,7 @@
       }
       context.drawImage(bitmap, 0, 0);
       bitmap.close();
-      // Ends the spinner that stands in for the first frame (see style.css).
+      // Ends the full progress bar that stands in for the first frame (see style.css).
       delete canvas.dataset.awaitingFrame;
       return true;
     };
