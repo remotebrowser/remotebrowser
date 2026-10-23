@@ -1,7 +1,20 @@
 # Domains that the browser may not reach, one per line. Each one also blocks its
 # subdomains. An entry in allowlist.txt overrides an entry here.
+api.axept.io
+ay.delivery
+c2.piano.io
+content-settings.com
+cxense.com
 doubleclick.net
-googlesyndication.com
 edgedl.me.gvt1.com
+go-mpulse.net
+googlesyndication.com
+googletagmanager.com
+jwpltx.com
+npttech.com
 optimizationguide-pa.googleapis.com
+parsely.com
+permutive.com
+pub.network
 safebrowsing.googleapis.com
+stats.wp.com
