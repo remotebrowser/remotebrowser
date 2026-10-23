@@ -166,10 +166,10 @@ body {
 }
 
 /* Same breakpoint as the split sign-in page: iPad landscape and laptops get
-   more room. */
+   more room, but not so much that a wide screen spreads the page thin. */
 @media (min-width: 64rem) and (orientation: landscape) {
   body {
-    max-width: 84rem;
+    max-width: 76rem;
     padding: 2rem 2.5rem;
   }
 }
@@ -507,9 +507,6 @@ a.btn-secondary {
   gap: 0.5rem;
   margin: 0;
 }
-.browser-actions form {
-  margin: 0;
-}
 /* Keeps a row of buttons together in the form grid's second column,
    alongside the inputs rather than under the labels. */
 .form-actions {
@@ -793,29 +790,21 @@ a.btn-secondary {
   margin: 0.25rem 0;
 }
 
-/* Two columns - details on the left, and the sidebar with the status line, the
-   controls that act on it, and the live previews on the right - rather than
-   the preview floating alongside the text, so its width is a real fraction of
-   the page instead of a fixed pixel box wherever the text happens to wrap
-   around it. The golden ratio keeps the preview readable without a 1:1
-   split. */
+/* Two columns of the same width - the playground and the coding assistant on
+   the left, and the sidebar with the status line, the controls that act on it,
+   and the live previews on the right - so a script and what it does to the
+   page get the same room. */
 .browser-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
 
-/* At the full 84rem page, a fixed 30rem keeps about the same ratio. The cap
-   holds the preview at 480px. */
-@media (min-width: 84rem) and (orientation: landscape) {
+/* At the full page width (see body). */
+@media (min-width: 76rem) and (orientation: landscape) {
   .browser-layout {
-    grid-template-columns: minmax(0, 1fr) 30rem;
     gap: 2rem;
-  }
-
-  .browser-preview {
-    max-width: 30rem;
   }
 }
 
@@ -2101,9 +2090,14 @@ pre {
   border: 1px solid var(--border-strong);
 }
 
-/* Stays on the right while the drop-down is hidden during a run. */
+/* Stays on the right of the drop-down. */
 .playground-toolbar button {
   margin-left: auto;
+}
+
+/* Out of sight during a run, but still taking its space. */
+.playground-toolbar select.playground-template-running {
+  opacity: 0;
 }
 
 .playground-elapsed {
@@ -2121,7 +2115,7 @@ pre {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  min-height: 18rem;
+  min-height: 9rem;
   resize: vertical;
   padding: 0.75rem 1rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2132,6 +2126,11 @@ pre {
   background-color: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 0.25rem;
+}
+
+/* Spaced from the previews above it like they are from each other. */
+#playground-output-block {
+  margin-top: 0.75rem;
 }
 
 .playground-status {

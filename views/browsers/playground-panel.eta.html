@@ -1,13 +1,40 @@
-<% /* With "disabled", a copy for a browser that cannot run now, to show what comes back; show.eta.html dims it and
-makes it inert. */ %>
-<section id="playground-panel" class="browser-panel">
-  <% if (it.disabled) { %>
-  <span class="btn-primary browser-panel-action" aria-disabled="true">Open Playground</span>
-  <% } else { %>
-  <a href="/browsers/<%= it.browser.publicId %>/playground" class="btn-primary browser-panel-action">Open Playground</a>
-  <% } %>
-  <p>
-    Try this browser right now, with no setup. Pick a ready-made script to grab the headlines from a news site, fill in
-    and submit a search form, or read the title of any page, then run it and watch the result live.
-  </p>
+<% /* The code runs in the visitor's own tab (public/playground.js), and the sidebar shows what it does: the previews,
+and the output under them (show.eta.html). With "disabled", a copy for a browser that cannot run now, to show what comes
+back; show.eta.html dims it and makes it inert. It has no CDP URL, and playground.js leaves it alone, as it looks only
+for #playground. Without JavaScript nothing can run, so it starts hidden and show.eta.html reveals it. */ %>
+<section id="playground-panel" class="browser-panel hidden" aria-label="Playground">
+  <div
+    id="<%= it.disabled ? 'playground-disabled' : 'playground' %>"
+    data-cdp-url="<%= it.disabled ? '' : it.cdpUrl %>"
+    data-pages-url="<%= it.pagesUrl %>"
+  >
+    <p>
+      Try this browser right now, with no setup. Pick a ready-made script or write your own, run it, and watch the
+      result live in the previews.
+    </p>
+    <div class="playground-toolbar">
+      <label for="playground-template" class="visually-hidden">Template</label>
+      <select id="playground-template">
+        <% it.templates.forEach(function(template) { %>
+        <option value="<%= template.key %>" data-code="<%= template.code %>"><%= template.label %></option>
+        <% }) %>
+      </select>
+      <span id="playground-elapsed" class="playground-elapsed hidden"></span>
+      <button type="button" id="playground-run" class="btn-primary" disabled>Run</button>
+    </div>
+    <label for="playground-editor" class="visually-hidden">Code</label>
+    <textarea
+      id="playground-editor"
+      class="playground-editor"
+      spellcheck="false"
+      autocomplete="off"
+      autocapitalize="off"
+      rows="8"
+    >
+<%= it.disabled ? it.templates[0].code : '' %></textarea>
+    <p class="form-note">
+      For a detailed guide, refer to the
+      <a href="https://remotebrowser.ai/playground/" target="_blank" rel="noopener">Playground documentation</a>.
+    </p>
+  </div>
 </section>

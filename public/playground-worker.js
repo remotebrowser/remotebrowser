@@ -135,10 +135,6 @@ class Page {
     });
   }
 
-  show() {
-    post({ type: 'page', pageId: this.targetId });
-  }
-
   cdp(method, params = {}) {
     return this.connection.send(method, params, this.sessionId);
   }
@@ -148,7 +144,6 @@ class Page {
   }
 
   async goto(url, { waitUntil = 'load', timeout = DEFAULT_TIMEOUT } = {}) {
-    this.show();
     const event = waitUntil === 'domcontentloaded' ? 'Page.domContentEventFired' : 'Page.loadEventFired';
     const loaded = this.connection.waitFor(this.sessionId, event, timeout);
     let result;
@@ -226,7 +221,6 @@ class Page {
       const rect = element.getBoundingClientRect();
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
     });
-    this.show();
     const fields = { x, y, button: 'left', clickCount: 1 };
     await this.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
     await this.cdp('Input.dispatchMouseEvent', { type: 'mousePressed', ...fields });
@@ -249,7 +243,6 @@ class Page {
   async press(selector, key, options) {
     await this.waitForSelector(selector, options);
     await this.$eval(selector, (element) => element.focus());
-    this.show();
     const known = KEYS[key];
     const fields = known ? { key, ...known } : { key, text: key };
     await this.cdp('Input.dispatchKeyEvent', { type: fields.text ? 'keyDown' : 'rawKeyDown', ...fields });
@@ -269,7 +262,6 @@ class Page {
   }
 
   async screenshot({ fullPage = false } = {}) {
-    this.show();
     const { data } = await this.cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: fullPage });
     post({ type: 'image', data });
     return data;
@@ -286,7 +278,6 @@ const openPage = async (connection) => {
   const { sessionId } = await connection.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
   const page = new Page(connection, target.targetId, sessionId, target.url);
   await page.cdp('Page.enable');
-  page.show();
   return page;
 };
 

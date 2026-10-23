@@ -17,8 +17,49 @@ import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDispla
 
 export const routes = new Hono();
 
+// Starting points for the editor. The code runs in the visitor's own tab
+// (public/playground-worker.js), not on this server.
+const PLAYGROUND_TEMPLATES = [
+  {
+    key: 'title',
+    label: 'Get the page title',
+    code: `await page.goto('https://www.sciencenews.org/');
+console.log('Title:', await page.title());`
+  },
+  {
+    key: 'headlines',
+    label: 'Extract headlines',
+    code: `await page.goto('https://text.npr.org/');
+const headlines = await page.$$eval('.topic-container a.topic-title', (links) =>
+  links.map((link) => link.textContent.trim())
+);
+headlines.slice(0, 7).map((headline, index) => console.log(\`\${index + 1}. \${headline}\`));`
+  },
+  {
+    key: 'search',
+    label: 'Fill and submit a form',
+    code: `await page.goto('https://en.wikipedia.org/wiki/Special:Search');
+await page.fill('#ooui-php-1', 'headless browser');
+await page.press('#ooui-php-1', 'Enter');
+await page.waitForSelector('.mw-search-result-heading a');
+const results = await page.$$eval('.mw-search-result-heading a', (links) =>
+  links.slice(0, 5).map((link) => ({ title: link.textContent, href: link.href }))
+);
+console.log(results);`
+  },
+  {
+    key: 'cdp',
+    label: 'Send a raw CDP command',
+    code: `const { result } = await page.cdp('Runtime.evaluate', {
+  expression: 'navigator.userAgent',
+  returnByValue: true
+});
+console.log(result.value);`
+  }
+];
+
 // Same origin over websocket; http:/https: becomes ws:/wss:.
-export const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
+const cdpUrlFor = (c, browserHandle) => `${absoluteOrigin(c).replace(/^http/, 'ws')}/cdp/${browserHandle}`;
 
 const findBrowser = async (c) => {
   const user = c.get('user');
@@ -52,9 +93,8 @@ const listSuspendedPages = async (browser) =>
     ? listSuspendedPreviews({ browserId: browser.internalBrowserId })
     : [];
 
-// What the status bar (views/browsers/status-bar.eta.html) needs, so any page
-// about one browser can show its status and the controls that act on it.
-export const statusBarData = (c, browser) => {
+// What the status bar (views/browsers/status-bar.eta.html) needs.
+const statusBarData = (c, browser) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
   // Only the creator (or an Admin/Owner) sees the Terminate, Suspend, and
@@ -104,6 +144,9 @@ const renderBrowser = async (c, { error = null } = {}) => {
     // Prose preamble the page lays out as a flowing paragraph; the fenced code
     // itself is playwrightJavascriptExample below.
     instructionPreamble: isConnectable ? INSTRUCTION_PREAMBLE : null,
+    // Only the playground's worker reads it; the Copy payload above has it too.
+    cdpUrl,
+    templates: PLAYGROUND_TEMPLATES,
     pages,
     suspendedPages: await listSuspendedPages(browser),
     // Set by secureHeaders first; the inline script reads it back for CSP.
@@ -128,30 +171,24 @@ const handleShow = async (c) => {
 
 routes.get('/:browserId', requireUser, requireWorkspaceRole('User'), handleShow);
 
-// The one poll on a browser's page, so it skips the rest of the page. It always
-// answers with the status line. With ?preview=1 it also brings the previews,
-// picking up opened and closed pages, and when the status has changed, the
-// controls that act on it; the status line swaps both out of band, by id
-// (status.eta.html). Only htmx asks for it, so the
-// previews always stream.
+// The one poll on a browser's page, so it skips the rest of the page. It
+// answers with the status line and the previews, picking up opened and closed
+// pages, and when the status has changed, the controls that act on it; the
+// status line swaps both out of band, by id (status.eta.html). Only htmx asks
+// for it, so the previews always stream.
 routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), async (c) => {
   const browser = await findBrowser(c);
   if (!browser) {
     return c.text('Not found', 404);
   }
-  const withPreview = c.req.query('preview') === '1';
-  // The browser page asks for the previews, and it has Resume in its details
-  // column; the playground does not, so it keeps the controls in its status bar.
-  const data = { ...statusBarData(c, browser), suspendedControls: !withPreview };
-  let html = eta.render('browsers/status', { ...data, withPreview, live: true });
-  if (withPreview) {
-    html += eta.render('browsers/preview', {
-      ...data,
-      pages: await listPreviewPages(browser),
-      suspendedPages: await listSuspendedPages(browser),
-      live: true
-    });
-  }
+  const data = statusBarData(c, browser);
+  let html = eta.render('browsers/status', { ...data, live: true });
+  html += eta.render('browsers/preview', {
+    ...data,
+    pages: await listPreviewPages(browser),
+    suspendedPages: await listSuspendedPages(browser),
+    live: true
+  });
   const shown = c.req.query('shown');
   if (shown && shown !== browser.status) {
     html += eta.render('browsers/actions', data);
@@ -162,4 +199,4 @@ routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), asyn
   return c.html(html);
 });
 
-export { renderBrowser };
+export { renderBrowser, PLAYGROUND_TEMPLATES };

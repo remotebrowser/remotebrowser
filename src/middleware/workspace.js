@@ -131,14 +131,6 @@ const buildBrowserPageBreadcrumbs = (workspace, browserInstanceId, browserName, 
   { label: pageId, href: null }
 ];
 
-// The playground sits beside Pages: Foo > Browsers > calm-otter > Playground.
-const buildBrowserPlaygroundBreadcrumbs = (workspace, browserInstanceId, browserName) => [
-  { label: workspace.name, href: '/', switcher: true },
-  { label: 'Browsers', href: '/browsers' },
-  { label: browserName, href: `/browsers/${browserInstanceId}` },
-  { label: 'Playground', href: null }
-];
-
 export {
   ROLE_RANK,
   hasRole,
@@ -153,6 +145,5 @@ export {
   buildBrowsersBreadcrumbs,
   buildCollaboratorsBreadcrumbs,
   buildBrowserPagesBreadcrumbs,
-  buildBrowserPlaygroundBreadcrumbs,
   buildBrowserPageBreadcrumbs
 };
