@@ -3,9 +3,9 @@ hide:
   - title
 ---
 
-Remote Browser lets your team launch multiple secure, [isolated browser sessions](isolation.md) per user.
+Remote Browser lets your team launch multiple [secure, isolated browsers](isolation.md) per user.
 
-It's [free and open source](https://github.com/remotebrowser/remotebrowser), so you can [self-host](self-hosting.md) it in your home lab or deploy to enterprise on-premises for complete data privacy and control.
+It's [free and open source](https://github.com/remotebrowser/remotebrowser), and easy to [deploy](self-hosting.md) on your own infrastructure.
 
 ![Remote Browser](remotebrowser.jpg){: style="width: 478px; max-width: 100%; height: auto" }
 
