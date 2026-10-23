@@ -49,6 +49,18 @@ include('/partials/code-copy', it) %>
   const revealPlayground = () => document.querySelector('#playground-panel')?.classList.remove('hidden');
   document.body.addEventListener('htmx:afterSettle', revealPlayground);
 
+  // Keep the starting box, so the poll does not restart its progress bar.
+  document.body.addEventListener('htmx:oobBeforeSwap', (event) => {
+    const { target, fragment } = event.detail;
+    if (
+      target.id === 'browser-preview' &&
+      target.querySelector('.browser-preview-starting') &&
+      fragment.querySelector('.browser-preview-starting')
+    ) {
+      event.detail.shouldSwap = false;
+    }
+  });
+
   // Delegated from body, which is never swapped, so it survives a refresh.
   document.body.addEventListener('click', (event) => {
     const button = event.target.closest('.instruction-toggle');
@@ -108,6 +120,9 @@ include('/partials/code-copy', it) %>
         </div>
         <% } else { %>
         <section id="starting-panel" class="browser-panel">
+          <div class="browser-panel-action">
+            <span class="starting-spinner" aria-hidden="true"></span>
+          </div>
           <p>This browser is starting. Until it is ready, remote access is unavailable.</p>
         </section>
         <% /* What becomes available once it runs, dimmed and out of reach until then. */ %>
