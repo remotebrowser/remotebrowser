@@ -8,7 +8,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
-const { routes } = await import('./terminate.js');
+const { routes, MIN_TERMINATE_FEEDBACK } = await import('./terminate.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { ensurePersonalWorkspace, createWorkspace, createCollaborator } = await import('../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, getBrowserInstance, browserIdForHandle } =
@@ -258,10 +258,18 @@ test('POST /browsers/:browserId/terminate from htmx answers with the result page
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
   const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
   try {
+    const startedAt = Date.now();
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter', htmx: true });
+    // Stopping can be near-instant, but the spinner must be visible first.
+    assert.ok(Date.now() - startedAt >= MIN_TERMINATE_FEEDBACK, 'the response must wait out the minimum feedback time');
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /<strong>calm-otter<\/strong> is terminated/);
+    // The result page carries what the script needs to go back when idle.
+    assert.match(body, /id="browser-terminated"/);
+    assert.match(body, /data-redirect-url="\/browsers"/);
+    assert.match(body, /data-idle-ms="15000"/);
+    assert.match(body, /window\.location\.assign/);
     assert.doesNotMatch(body, /Back to browsers/);
     assert.doesNotMatch(body, /hx-post=/);
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
