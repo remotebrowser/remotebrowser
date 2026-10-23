@@ -10,7 +10,9 @@
     const outputBlock = document.querySelector('#playground-output-block');
     const status = document.querySelector('#playground-status');
     const elapsedLabel = root.querySelector('#playground-elapsed');
-    const { cdpUrl, pagesUrl } = root.dataset;
+    const { pagesUrl } = root.dataset;
+    const cdpUrl = new URL(root.dataset.cdpUrl);
+    cdpUrl.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 
     const draftKey = `playground:${pagesUrl}`;
     const loadDraft = () => {
@@ -136,7 +138,7 @@
         append('playground-error', event.message || 'The script could not start.');
         finish(`Failed after ${elapsed()}.`);
       };
-      worker.postMessage({ type: 'run', code: editor.value, cdpUrl });
+      worker.postMessage({ type: 'run', code: editor.value, cdpUrl: cdpUrl.href });
     };
 
     const stop = () => {
