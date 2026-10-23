@@ -23,7 +23,7 @@ const PLAYGROUND_TEMPLATES = [
   {
     key: 'title',
     label: 'Get the page title',
-    code: `await page.goto('https://www.sciencenews.org/');
+    code: `await page.goto('https://phys.org');
 console.log('Title:', await page.title());`
   },
   {

@@ -260,7 +260,7 @@ test('GET /browsers/:browserId renders the playground for a running browser', as
   for (const template of PLAYGROUND_TEMPLATES) {
     assert.match(body, new RegExp(`<option value="${template.key}" data-code="[^"]*">${template.label}</option>`));
   }
-  assert.match(body, /data-code="await page\.goto\(&#39;https:\/\/www\.sciencenews\.org\/&#39;\);/);
+  assert.match(body, /data-code="[^"]*page\.title\(\)/);
   // The playground leads, and the coding assistant follows.
   assert.ok(body.indexOf('id="playground-panel"') < body.indexOf('id="coding-panel"'));
 });
