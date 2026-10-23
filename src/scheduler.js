@@ -19,24 +19,32 @@ const createBoss = async () => {
   return new PgBoss({ connectionString: config.databaseUrl, ssl: config.databaseSsl });
 };
 
+const cleanup = async () => {
+  consola.info('SCHEDULER running clean-up tasks...', { 'event.domain': 'scheduler' });
+  const timestamp = performance.now();
+  cleanupScreenshots();
+  // A failed purge must not fail the job: the next run retries it.
+  const purged = await deleteExpiredSigninCodes();
+  if (purged.error) {
+    consola.error('SCHEDULER could not purge expired sign-in codes', {
+      'event.domain': 'scheduler',
+      'error.type': String(purged.error)
+    });
+  }
+  const duration = Math.round(performance.now() - timestamp);
+  consola.info('SCHEDULER finished with clean-up tasks', {
+    'event.domain': 'scheduler',
+    'scheduler.duration_ms': duration
+  });
+};
+
 const createScheduler = async () => {
   const boss = await createBoss();
   boss.on('error', (error) => consola.error('SCHEDULER error', error, { 'event.domain': 'scheduler' }));
   await boss.start();
   await boss.createQueue(CLEANUP_QUEUE);
   await boss.schedule(CLEANUP_QUEUE, EVERY_MINUTE);
-  await boss.work(CLEANUP_QUEUE, async () => {
-    cleanupScreenshots();
-    // A failed purge must not fail the job: the next run retries it.
-    const purged = await deleteExpiredSigninCodes();
-    if (purged.error) {
-      consola.error('SCHEDULER could not purge expired sign-in codes', {
-        'event.domain': 'scheduler',
-        'error.type': String(purged.error)
-      });
-    }
-    consola.info('SCHEDULER cleanup task ran', { 'event.domain': 'scheduler' });
-  });
+  await boss.work(CLEANUP_QUEUE, cleanup);
   consola.info('SCHEDULER started', { 'event.domain': 'scheduler' });
   return boss;
 };
