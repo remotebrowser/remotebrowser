@@ -8,12 +8,13 @@ include('/partials/code-copy', it) %>
 <script nonce="<%= it.scriptNonce %>">
   // The status line's poll keeps the whole sidebar up to date, and its
   // endpoint fires this event when the status changes. The connection panel
-  // depends on the status too, so it follows.
+  // depends on the status too, so it follows. The view transition slides the
+  // panels into place, instead of letting them jump (see style.css).
   document.body.addEventListener('browser-status-changed', () => {
     htmx.ajax('GET', window.location.pathname, {
       target: '#browser-connection-info',
       select: '#browser-connection-info',
-      swap: 'outerHTML'
+      swap: 'outerHTML transition:true'
     });
   });
 

@@ -844,6 +844,7 @@ a.btn-secondary {
   justify-content: space-between;
   gap: 0.5rem 1rem;
   margin-bottom: 1rem;
+  min-height: calc(1.15rem + 0.75rem);
 }
 
 /* The bar's own margin spaces it from the previews below, so the status line
@@ -1176,11 +1177,49 @@ pre {
 
 /* The panels for what comes back once the browser runs again: dimmed and
    grey, and inert in the markup, so they cannot be clicked or focused
-   meanwhile. */
+   meanwhile. On the panels, not the wrapper, so the view transition below
+   captures them dimmed. */
 .browser-panels-disabled {
+  user-select: none;
+}
+
+.browser-panels-disabled > .browser-panel {
   opacity: 0.5;
   filter: grayscale(1);
-  user-select: none;
+}
+
+/* Named, so each panel slides to its new place when the status changes. */
+#starting-panel {
+  view-transition-name: starting-panel;
+}
+
+#suspended-panel {
+  view-transition-name: suspended-panel;
+}
+
+#playground-panel {
+  view-transition-name: playground-panel;
+}
+
+#coding-panel,
+#coding-panel-disabled {
+  view-transition-name: coding-panel;
+}
+
+footer {
+  view-transition-name: footer;
+}
+
+::view-transition-group(*) {
+  animation-duration: 0.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
 }
 
 /* The grid's gap already spaces the last panel from what follows it. */
@@ -1198,6 +1237,16 @@ pre {
 }
 
 .browser-panel > :last-child {
+  margin-bottom: 0;
+}
+
+/* The playground's content sits in a wrapper, so it needs the same trim to
+   line up with the other panels. */
+.browser-panel > :only-child > :first-child {
+  margin-top: 0;
+}
+
+.browser-panel > :only-child > :last-child {
   margin-bottom: 0;
 }
 
