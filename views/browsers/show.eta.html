@@ -4,6 +4,7 @@
 <%~ include('/partials/htmx-form-errors', it) %> <%~ include('/partials/screenshot-refresh', it) %> <%~
 include('/partials/code-copy', it) %>
 <script src="/screencast.js" defer></script>
+<script src="/playground.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
   // The status line's poll keeps the whole sidebar up to date, and its
   // endpoint fires this event when the status changes. The connection panel
@@ -40,6 +41,13 @@ include('/partials/code-copy', it) %>
   };
   document.addEventListener('DOMContentLoaded', revealInstructionToggles);
   document.body.addEventListener('htmx:afterSwap', revealInstructionToggles);
+
+  // The playground needs JavaScript, so it starts hidden. A refreshed panel
+  // brings it back hidden, and htmx runs no inline script it swaps in (CSP).
+  // After the settle, not the swap: htmx keeps the old class on an element
+  // with the same id until then, and would hide the panel again.
+  const revealPlayground = () => document.querySelector('#playground-panel')?.classList.remove('hidden');
+  document.body.addEventListener('htmx:afterSettle', revealPlayground);
 
   // Delegated from body, which is never swapped, so it survives a refresh.
   document.body.addEventListener('click', (event) => {
@@ -89,9 +97,8 @@ include('/partials/code-copy', it) %>
           </div>
           <% } %>
           <p>
-            This browser is suspended. Resume it to pick up where you left off. Until then, the playground and coding
-            assistant are unavailable.<% if (!it.canSuspend) { %> Only its creator or a workspace admin can resume it.<%
-            } %>
+            This browser is suspended. Resume it to pick up where you left off. Until then, remote access is
+            unavailable.<% if (!it.canSuspend) { %> Only its creator or a workspace admin can resume it.<% } %>
           </p>
         </section>
         <% /* What comes back on resume, dimmed and out of reach until then. */ %>
@@ -101,7 +108,7 @@ include('/partials/code-copy', it) %>
         </div>
         <% } else { %>
         <section id="starting-panel" class="browser-panel">
-          <p>This browser is starting. Until it is ready, the playground and remote access are unavailable.</p>
+          <p>This browser is starting. Until it is ready, remote access is unavailable.</p>
         </section>
         <% /* What becomes available once it runs, dimmed and out of reach until then. */ %>
         <div class="browser-panels-disabled" inert>
@@ -114,7 +121,18 @@ include('/partials/code-copy', it) %>
     <% /* The status line, the controls that act on it, and the previews share the sidebar column, so the controls sit
     next to what they act on. One poll of the status line keeps all of them up to date. */ %>
     <div id="browser-sidebar" class="browser-sidebar">
-      <%~ include('/browsers/status-bar', { ...it, withPreview: true }) %> <%~ include('/browsers/preview', it) %>
+      <%~ include('/browsers/status-bar', it) %> <%~ include('/browsers/preview', it) %> <% /* Under the previews, so a
+      run's output and its effect show together. Outside the connection panel, so it is already here when the browser
+      starts running, and a refresh of that panel keeps it. Hidden until a run ends. */ %>
+      <div id="playground-output-block" class="hidden">
+        <div id="playground-output" class="playground-output" aria-live="polite"></div>
+        <p id="playground-status" class="playground-status" role="status">Loading...</p>
+      </div>
     </div>
   </article>
 </main>
+<% /* Right after the main content, so the playground shows before the first paint. Outside it, so no htmx swap brings
+it back. */ %>
+<script nonce="<%= it.scriptNonce %>">
+  revealPlayground();
+</script>

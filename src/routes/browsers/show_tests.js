@@ -51,7 +51,7 @@ process.env.BROWSERFLEET_URL = `http://127.0.0.1:${cdpStub.address().port}`;
 after(() => new Promise((resolve) => cdpStub.close(resolve)));
 
 const { createSessionCookie } = await import('../../auth/session.js');
-const { routes } = await import('./show.js');
+const { routes, PLAYGROUND_TEMPLATES } = await import('./show.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus, getBrowserInstanceByPublicId } =
@@ -148,7 +148,7 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(
     body,
     new RegExp(
-      `<p[^>]*id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running&amp;preview=1"[^>]*hx-trigger="load, every 3s"`
+      `<p[^>]*id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running"[^>]*hx-trigger="load, every 3s"`
     )
   );
   // Per-page <img> to its own view route, wrapped in a link, ?t= not fixed.
@@ -178,15 +178,13 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   assert.match(body, /<div id="browser-preview" class="browser-preview">/);
   assert.doesNotMatch(body, /<div id="browser-preview"[^>]*hx-/);
   assert.doesNotMatch(body, /<canvas\s/);
-  assert.match(body, /<script src="\/screencast\.js" defer><\/script>/);
-  assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`), 'a running browser offers Terminate');
-  // Inside the connection panel, so it appears when the status poll refreshes it.
   assert.match(
     body,
-    new RegExp(
-      `<div id="browser-connection-info">[\\s\\S]*href="/browsers/${browserPublicId}/playground"[\\s\\S]*</div>`
-    )
+    /<script src="\/screencast\.js" defer><\/script>\s*<script src="\/playground\.js" defer><\/script>/
   );
+  assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`), 'a running browser offers Terminate');
+  // Inside the connection panel, so it appears when the status poll refreshes it.
+  assert.match(body, /<div id="browser-connection-info">\s*<section id="playground-panel"/);
   assert.doesNotMatch(body, /Browser handle/);
   assert.doesNotMatch(body, /hljs/);
   // The whole CDP URL is masked on screen; the real one only reaches the
@@ -212,12 +210,6 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
     body,
     /<div class="browser-panel-footer">\s*<button\s+type="button"\s+class="btn-secondary instruction-toggle hidden"\s+aria-expanded="false"\s+aria-controls="instruction-content"\s*>\s*<span class="instruction-toggle-label">Show instructions<\/span>\s*<\/button>\s*<button type="button" class="btn-primary code-copy-button hidden">Copy instructions<\/button>/
   );
-  assert.match(
-    body,
-    new RegExp(
-      `href="/browsers/${browserPublicId}/playground" class="btn-primary browser-panel-action"\\s*>Open Playground</a`
-    )
-  );
   // Click handler in its own nonce'd partial; confirm it's in the page.
   assert.match(body, /<script nonce="test-nonce-value">[\s\S]*navigator\.clipboard\.writeText[\s\S]*<\/script>/);
   // The preview swap reuses the existing <img> nodes, so previews don't blank.
@@ -228,6 +220,49 @@ test("GET /browsers/:browserId renders the status in the visitor's own workspace
   // The status line's own poll already brings the new controls and previews.
   assert.doesNotMatch(body, /target: '#browser-sidebar'/);
   assert.doesNotMatch(body, /setInterval/);
+});
+
+test('GET /browsers/:browserId renders the playground for a running browser', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId);
+  const handle = (await getBrowserInstanceByPublicId({ workspaceId, publicId: browserPublicId })).data.browserHandle;
+
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  // Hidden without JavaScript, which it needs to run; the script right after
+  // <main> reveals it, and again after htmx settles a new one.
+  assert.match(body, /<section id="playground-panel" class="browser-panel hidden" aria-label="Playground">/);
+  assert.match(body, /<\/main>\s*<script nonce="test-nonce-value">\s*revealPlayground\(\);\s*<\/script>/);
+  assert.match(body, /'htmx:afterSettle', revealPlayground/);
+  // The worker dials the relay with the handle.
+  assert.match(
+    body,
+    new RegExp(
+      `<div\\s+id="playground"\\s+data-cdp-url="ws://localhost/cdp/${handle}"\\s+data-pages-url="/browsers/${browserPublicId}/pages"\\s*>`
+    )
+  );
+  assert.match(body, /<textarea\s+id="playground-editor"/);
+  // Hidden until a run takes longer than 2 seconds; playground.js fills it in.
+  // The same button stops a run, so there is no separate Stop button.
+  assert.match(
+    body,
+    /<\/select>\s*<span id="playground-elapsed" class="playground-elapsed hidden"><\/span>\s*<button type="button" id="playground-run" class="btn-primary" disabled>Run<\/button>/
+  );
+  assert.doesNotMatch(body, /id="playground-stop"/);
+  // In the sidebar under the previews, hidden until a run ends.
+  assert.match(
+    body,
+    /<div id="playground-output-block" class="hidden">\s*<div id="playground-output"[^>]*><\/div>\s*<p id="playground-status"[^>]*>[^<]*<\/p>\s*<\/div>/
+  );
+  const sidebar = body.slice(body.indexOf('id="browser-sidebar"'));
+  assert.ok(sidebar.indexOf('id="browser-preview"') < sidebar.indexOf('id="playground-output-block"'));
+  for (const template of PLAYGROUND_TEMPLATES) {
+    assert.match(body, new RegExp(`<option value="${template.key}" data-code="[^"]*">${template.label}</option>`));
+  }
+  assert.match(body, /data-code="await page\.goto\(&#39;https:\/\/www\.sciencenews\.org\/&#39;\);/);
+  // The playground leads, and the coding assistant follows.
+  assert.ok(body.indexOf('id="playground-panel"') < body.indexOf('id="coding-panel"'));
 });
 
 // The sidebar opens with the status and the controls that act on it, side by
@@ -257,7 +292,7 @@ test('GET /browsers/:browserId puts the status and the controls in the sidebar, 
   const bar = body.match(/<div class="browser-status-bar">([\s\S]*?)class="browser-preview"/);
   assert.ok(bar, 'the status bar sits above the previews');
   assert.match(bar[1], /id="browser-status"/);
-  assert.match(bar[1], /class="browser-actions busy-on-request"/);
+  assert.match(bar[1], /class="browser-actions"/);
   assert.match(bar[1], new RegExp(`href="/browsers/${browserPublicId}/terminate"`));
   assert.ok(sidebar < at('class="browser-status-bar"'));
 });
@@ -366,7 +401,7 @@ test('GET /browsers/:browserId shows a distinct notice when the browser has been
   assert.doesNotMatch(body, /browser-error-notice/);
   assert.match(body, /<div id="browser-preview" class="browser-preview">\s*<\/div>/, 'the preview column stays, empty');
   assert.doesNotMatch(body, /\/terminate"/, 'a stopped browser offers no Terminate');
-  assert.doesNotMatch(body, /\/playground"/, 'a stopped browser offers no playground');
+  assert.doesNotMatch(body, /id="playground-panel"/, 'a stopped browser offers no playground');
 });
 
 // Deleting a personal workspace while the user's pointer still named it, then
@@ -410,7 +445,10 @@ test('GET /browsers/:browserId renders for the active shared workspace with unpr
   // Like a suspended browser: a notice, then the panels to come, dimmed.
   assert.match(body, /<div id="browser-connection-info">[\s\S]*This browser is starting\./);
   assert.match(body, /<div class="browser-panels-disabled" inert>[\s\S]*id="playground-panel"[\s\S]*Copy instructions/);
-  assert.doesNotMatch(body, /href="\/browsers\/[^"]+\/playground"/, 'the playground cannot be opened yet');
+  assert.doesNotMatch(body, /id="playground"/, 'the playground cannot run yet');
+  assert.match(body, /<textarea\s+id="playground-editor"[^>]*>\s*await page\.goto/);
+  assert.match(body, /data-cdp-url=""/);
+  assert.doesNotMatch(body, /\/cdp\//);
   assert.doesNotMatch(body, /browser-starting-notice/);
   assert.doesNotMatch(body, /connectOverCDP/);
   assert.doesNotMatch(body, /browser-screenshot/, 'no screenshot until the browser is actually running');
@@ -423,13 +461,13 @@ test('GET /browsers/:browserId renders for the active shared workspace with unpr
   assert.doesNotMatch(body, /id="browser-actions"[^>]*>\s*<a/, 'no controls while starting');
 });
 
-test('GET /browsers/:browserId/status?preview=1 brings the live previews out of band', async () => {
+test('GET /browsers/:browserId/status brings the live previews out of band', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-happy' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/status?shown=running&preview=1`, {
+  const res = await app.request(`/browsers/${browserPublicId}/status?shown=running`, {
     headers: { 'cookie': `session=${cookie}`, 'HX-Request': 'true' }
   });
   assert.equal(res.status, 200);
@@ -438,7 +476,7 @@ test('GET /browsers/:browserId/status?preview=1 brings the live previews out of 
   assert.match(
     body,
     new RegExp(
-      `^\\s*<p\\s+id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running&amp;preview=1"[^>]*hx-trigger="every 3s"`
+      `^\\s*<p\\s+id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running"[^>]*hx-trigger="every 3s"`
     )
   );
   // The status line swaps the previews in out of band, by id.
@@ -453,13 +491,13 @@ test('GET /browsers/:browserId/status?preview=1 brings the live previews out of 
   assert.doesNotMatch(body, /<html|connectOverCDP/);
 });
 
-test('GET /browsers/:browserId/status?preview=1 keeps the previews empty while the browser is not running', async () => {
+test('GET /browsers/:browserId/status keeps the previews empty while the browser is not running', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { status: 'suspended' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/status?shown=suspended&preview=1`, {
+  const res = await app.request(`/browsers/${browserPublicId}/status?shown=suspended`, {
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
@@ -470,45 +508,21 @@ test('GET /browsers/:browserId/status?preview=1 keeps the previews empty while t
   );
 });
 
-test('GET /browsers/:browserId/status renders only the status line', async () => {
+test('GET /browsers/:browserId/status announces a status change', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId);
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/status?shown=running`, {
-    headers: { cookie: `session=${cookie}` }
-  });
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get('hx-trigger'), null, 'the status has not changed');
-  const body = await res.text();
-  assert.match(
-    body,
-    new RegExp(
-      `^\\s*<p\\s+id="browser-status"[^>]*hx-get="/browsers/${browserPublicId}/status\\?shown=running"[^>]*hx-trigger="every 3s"`
-    )
-  );
-  assert.match(body, /<strong>Status:<\/strong>\s*running/);
-  // Without ?preview=1 (as on the playground) it skips the previews and their
-  // CDP call, and an unchanged status brings no controls.
-  assert.doesNotMatch(body, /<html|id="browser-preview"|id="browser-actions"|connectOverCDP/);
-});
-
-test('GET /browsers/:browserId/status announces a status change', async () => {
-  const workspaceId = await makeUser();
-  const browserPublicId = await makeBrowser(workspaceId, { status: 'suspended' });
-
-  const app = setupApp();
-  const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/status?shown=running`, {
+  const res = await app.request(`/browsers/${browserPublicId}/status?shown=starting`, {
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('hx-trigger'), 'browser-status-changed');
   const body = await res.text();
-  assert.match(body, /hx-get="[^"]*\?shown=suspended"/);
+  assert.match(body, /hx-get="[^"]*\?shown=running"/);
   // The controls for the new status come along, out of band.
-  assert.match(body, /<div id="browser-actions" class="browser-actions busy-on-request">/);
+  assert.match(body, /<div id="browser-actions" class="browser-actions">/);
   assert.match(body, new RegExp(`href="/browsers/${browserPublicId}/terminate"`));
 });
 
@@ -536,13 +550,13 @@ test('GET /browsers/:browserId/status returns 404 when the browser does not exis
   assert.equal(res.status, 404);
 });
 
-test('GET /browsers/:browserId/status?preview=1 stops polling once the browser is terminated', async () => {
+test('GET /browsers/:browserId/status keeps the previews empty once the browser is terminated', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { status: 'terminated' });
 
   const app = setupApp();
   const cookie = makeSessionCookie();
-  const res = await app.request(`/browsers/${browserPublicId}/status?shown=terminated&preview=1`, {
+  const res = await app.request(`/browsers/${browserPublicId}/status?shown=terminated`, {
     headers: { cookie: `session=${cookie}` }
   });
   assert.equal(res.status, 200);

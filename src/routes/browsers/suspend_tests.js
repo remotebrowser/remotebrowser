@@ -11,7 +11,6 @@ const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./suspend.js');
 const { routes: showRoutes } = await import('./show.js');
-const { routes: playgroundRoutes } = await import('./playground.js');
 const { routes: viewRoutes } = await import('./pages/view.js');
 const { setVmClient } = await import('../../vm/index.js');
 const { cache: screenshotCache } = await import('../../screenshots.js');
@@ -36,7 +35,6 @@ const setupApp = () => {
   });
   app.route('/browsers', routes);
   app.route('/browsers', showRoutes);
-  app.route('/browsers', playgroundRoutes);
   app.route('/browsers', viewRoutes);
   return app;
 };
@@ -344,18 +342,18 @@ test("a suspended browser's page says so, and offers Resume and Terminate", asyn
   assert.ok(panel, 'the suspended panel');
   assert.match(panel[1], /<button type="submit" class="btn-primary">Resume</);
   assert.match(panel[1], /This browser is suspended/);
-  assert.match(panel[1], /Until then, the playground and coding\s+assistant are unavailable\./);
+  assert.match(panel[1], /Until then, remote access is\s+unavailable\./);
   // The sidebar shows only the status.
-  assert.match(body, /<div id="browser-actions" class="browser-actions busy-on-request">\s*<\/div>/);
+  assert.match(body, /<div id="browser-actions" class="browser-actions">\s*<\/div>/);
   // No pictures were kept, so a paused box holds the previews' place.
   assert.match(body, /class="browser-preview-placeholder browser-preview-paused"/);
   // Under it, what comes back on resume, dimmed and out of reach.
   assert.match(
     body,
-    /<div class="browser-panels-disabled" inert>\s*<section id="playground-panel" class="browser-panel">/
+    /<div class="browser-panels-disabled" inert>\s*<section id="playground-panel" class="browser-panel hidden" aria-label="Playground">/
   );
-  assert.match(body, /<span class="btn-primary browser-panel-action" aria-disabled="true">Open Playground<\/span>/);
-  assert.doesNotMatch(body, /\/playground"/, 'no link to a playground that cannot run');
+  assert.match(body, /<textarea\s+id="playground-editor"[^>]*>\s*await page\.goto/);
+  assert.doesNotMatch(body, /id="playground"/, 'no editor for playground.js to start');
   assert.match(body, /<section\s+id="coding-panel"\s+class="browser-panel"\s+data-copy-value=""\s*>/);
   assert.match(body, /<button type="button" class="btn-primary" disabled>Copy instructions<\/button>/);
   // Nothing that would connect to the browser.
@@ -375,7 +373,7 @@ test("a suspended browser's page shows each page as it was when suspended", asyn
     readSuspendedPreview: async (browserId, pageId) => (pageId === 'page0' ? Buffer.from('jpeg of page0') : null)
   });
   const app = setupApp();
-  for (const path of [`/browsers/${publicId}`, `/browsers/${publicId}/status?shown=suspended&preview=1`]) {
+  for (const path of [`/browsers/${publicId}`, `/browsers/${publicId}/status?shown=suspended`]) {
     const body = await (await app.request(path, { headers: { cookie: cookie() } })).text();
     // Dimmed and labelled, and not links: the pages open once it resumes.
     assert.match(
@@ -396,18 +394,6 @@ test("a suspended browser's page shows each page as it was when suspended", asyn
   assert.equal(await image.text(), 'jpeg of page0');
   const missing = await app.request(`/browsers/${publicId}/pages/page1/suspended`, { headers: { cookie: cookie() } });
   assert.equal(missing.status, 404);
-});
-
-test('the playground of a suspended browser keeps Resume in its status bar', async () => {
-  const workspaceId = await makeUser();
-  const { publicId } = await makeBrowser(workspaceId, { status: 'suspended' });
-  const body = await (
-    await setupApp().request(`/browsers/${publicId}/playground`, { headers: { cookie: cookie() } })
-  ).text();
-  assert.match(body, /id="playground-not-ready"/);
-  // It has no panel of its own for Resume, unlike the browser page.
-  const actions = body.match(/<div id="browser-actions"[\s\S]*?<\/form>/)[0];
-  assert.match(actions, new RegExp(`hx-post="/browsers/${publicId}/resume"`));
 });
 
 test("a suspended browser's thumbnail is a picture saved in its VM dir, never a capture", async () => {
