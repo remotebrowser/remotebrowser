@@ -26,7 +26,7 @@ await setBrowserProxy(browserId, 'socks5://proxy.example.com:1080');
 await clearBrowserProxy(browserId); // direct again
 ```
 
-The URL starts with `http://`, `socks4://`, or `socks5://`. An HTTP proxy carries HTTPS too, with `CONNECT`. tinyproxy does not decode the user and password, so they can only have letters, digits, and `- . _ ~ ! $ & * + , ; =`. See `src/vm/proxy.js`. Only local VMs have this; with `BROWSERFLEET_URL`, the calls answer `NOT_SUPPORTED`.
+The URL starts with `http://`, `socks4://`, or `socks5://`. An HTTP proxy carries HTTPS too, with `CONNECT`. The proxy may be on a private network, such as `10.0.0.5` or `192.168.1.20`, which is common for an egress proxy. A loopback, link-local, multicast, or reserved address (such as `127.0.0.1` or `169.254.169.254`) is refused, as is `localhost`, since no proxy can be there. tinyproxy does not decode the user and password, so they can only have letters, digits, and `- . _ ~ ! $ & * + , ; =`.
 
 How it works:
 
