@@ -34,6 +34,33 @@ const loadBrowser = async (c) => {
   return result.error || !result.data ? null : result.data;
 };
 
+// Shared with the REST API. The caller checks canTerminateBrowser first.
+const terminateBrowser = async ({ user, workspace, browser }) => {
+  // Keep watching until the fleet confirms the stop; if it fails, the browser is still running.
+  const stopped = await stopBrowser({ browserId: browser.internalBrowserId });
+  if (stopped.error) {
+    consola.error('stopBrowser failed:', stopped.error);
+    return { error: stopped.error };
+  }
+  await browserMonitors.stopBrowserMonitor({ internalBrowserId: browser.internalBrowserId });
+  const removedInstance = await deleteBrowserInstance({
+    workspaceId: workspace.id,
+    browserInstanceId: browser.browserInstanceId
+  });
+  if (removedInstance.error) {
+    consola.error('deleteBrowserInstance failed:', removedInstance.error);
+    return { error: removedInstance.error };
+  }
+  consola.info('TERMINATE_BROWSER', {
+    'event.domain': 'browser',
+    'user.id': user.id,
+    'user.email': user.email,
+    'workspace.id': workspace.id,
+    'browser.public_id': browser.publicId
+  });
+  return { data: true };
+};
+
 const renderTerminate = async (c, data = {}) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
@@ -88,38 +115,13 @@ routes.post(
       );
     }
 
-    const user = c.get('user');
-    const workspace = c.get('workspace');
-
-    // Keep watching until the fleet confirms the stop; if it fails, the browser is still running.
-    const stopped = await stopBrowser({ browserId: browser.internalBrowserId });
-    if (stopped.error) {
-      consola.error('stopBrowser failed:', stopped.error);
+    const terminated = await terminateBrowser({ user: c.get('user'), workspace: c.get('workspace'), browser });
+    if (terminated.error) {
       return c.html(
         await renderTerminate(c, { browser, error: 'Unable to terminate the browser. Please try again.' }),
         400
       );
     }
-    await browserMonitors.stopBrowserMonitor({ internalBrowserId: browser.internalBrowserId });
-    const removedInstance = await deleteBrowserInstance({
-      workspaceId: workspace.id,
-      browserInstanceId: browser.browserInstanceId
-    });
-    if (removedInstance.error) {
-      consola.error('deleteBrowserInstance failed:', removedInstance.error);
-      return c.html(
-        await renderTerminate(c, { browser, error: 'Unable to terminate the browser. Please try again.' }),
-        400
-      );
-    }
-
-    consola.info('TERMINATE_BROWSER', {
-      'event.domain': 'browser',
-      'user.id': user.id,
-      'user.email': user.email,
-      'workspace.id': workspace.id,
-      'browser.public_id': browser.publicId
-    });
     // htmx swaps in the page it gets, so it gets the result; a plain form follows the redirect.
     if (c.req.header('HX-Request') === 'true') {
       const remaining = MIN_TERMINATE_FEEDBACK - (Date.now() - startedAt);
@@ -132,4 +134,4 @@ routes.post(
   }
 );
 
-export { loadBrowser, MIN_TERMINATE_FEEDBACK };
+export { loadBrowser, terminateBrowser, MIN_TERMINATE_FEEDBACK };

@@ -1,0 +1,35 @@
+<% layout('/layout', { title: 'Remote Browser - Generate API Key' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1>Generate a new API key</h1>
+    <p>The key can only reach the browsers in <strong><%= it.workspace.name %></strong>.</p>
+    <% if (it.atLimit) { %>
+    <div role="alert" class="danger">
+      You've reached the limit of <%= it.maxApiKeys %> API keys in this workspace. Delete one of
+      <a href="/api-keys">your API keys</a> to make a new one.
+    </div>
+    <% } else { %> <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <form method="post" action="/api-keys/generate" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" value="<%= it.name %>" required maxlength="80" autocomplete="off" />
+      <span class="field-label" id="expiration-label">Expiration</span>
+      <div class="radio-group" role="radiogroup" aria-labelledby="expiration-label">
+        <% it.expirations.forEach(function(option) { %>
+        <label class="checkbox-label">
+          <% if (option.value === it.expiration) { %>
+          <input type="radio" name="expiration" value="<%= option.value %>" required checked />
+          <% } else { %>
+          <input type="radio" name="expiration" value="<%= option.value %>" required />
+          <% } %> <%= option.label %>
+        </label>
+        <% }) %>
+      </div>
+      <button type="submit" class="btn-primary">Generate</button>
+    </form>
+    <% } %>
+  </article>
+</main>

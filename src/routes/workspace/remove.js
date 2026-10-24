@@ -12,6 +12,7 @@ import { getCollaborator, deleteCollaborator } from '../../models/workspaces.js'
 import { getUserByPublicId } from '../../models/users.js';
 import { renderCollaborators } from './render.js';
 import { outranks } from './permissions.js';
+import { recheckApiSessions } from '../api/sessions.js';
 
 export const routes = new Hono();
 
@@ -73,6 +74,8 @@ routes.post(
         400
       );
     }
+    // Their keys for this workspace were deleted with them; end what those keys opened.
+    recheckApiSessions();
     if (isSelf) {
       return c.redirect('/workspaces', 303);
     }

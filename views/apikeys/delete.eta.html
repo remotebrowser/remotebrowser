@@ -1,0 +1,20 @@
+<% layout('/layout', { title: 'Remote Browser - Delete API Key' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <p>
+      Deleting <strong><%= it.apiKey.name %></strong> stops it at once: any program that still uses it can no longer
+      reach the browsers in this workspace. This cannot be undone.
+    </p>
+    <form method="post" action="/api-keys/<%= it.apiKey.publicId %>/delete" class="page-form">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <div class="form-actions">
+        <button type="submit" class="btn-danger">Delete</button>
+        <a href="/api-keys/<%= it.apiKey.publicId %>" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </article>
+</main>

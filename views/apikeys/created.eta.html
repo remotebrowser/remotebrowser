@@ -1,0 +1,34 @@
+<% layout('/layout', { title: 'Remote Browser - API Key Generated' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %> <%~ include('/partials/code-copy', it) %>
+<main>
+  <article>
+    <h1>API key generated</h1>
+    <p>
+      Here is the new API key <strong><%= it.name %></strong>. Copy it now and keep it somewhere safe: it will not be
+      shown again.
+    </p>
+    <% /* Copy takes data-copy-value, so it copies the real key while it is masked. */ %>
+    <div class="instruction-block api-key-block" data-copy-value="<%= it.apiKey %>">
+      <pre><code id="api-key"><span class="api-key-value"><%= it.apiKey %></span><span class="api-key-mask"><%= it.maskedApiKey %></span></code></pre>
+      <% /* Hidden until script runs, so a visitor without JavaScript never sees a button that does nothing. */ %>
+      <div class="form-actions">
+        <button type="button" class="btn-primary code-copy-button hidden">Copy</button>
+        <button type="button" class="btn-secondary api-key-toggle hidden" aria-controls="api-key" aria-pressed="false">
+          View Key
+        </button>
+      </div>
+    </div>
+  </article>
+</main>
+<script nonce="<%= it.scriptNonce %>">
+  // The key starts masked by CSS whenever scripting is on, so it never shows
+  // before this runs. Without JavaScript, it shows in full, as there is no toggle.
+  const apiKeyBlock = document.querySelector('.api-key-block');
+  const apiKeyToggle = apiKeyBlock.querySelector('.api-key-toggle');
+  apiKeyToggle.classList.remove('hidden');
+  apiKeyToggle.addEventListener('click', () => {
+    const revealed = apiKeyBlock.toggleAttribute('data-revealed');
+    apiKeyToggle.textContent = revealed ? 'Hide Key' : 'View Key';
+    apiKeyToggle.setAttribute('aria-pressed', String(revealed));
+  });
+</script>

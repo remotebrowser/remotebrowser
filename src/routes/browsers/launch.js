@@ -13,7 +13,7 @@ import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
 import { canSetBrowserProxy, canStartBrowser, startBrowser as startBrowserOnFleet } from '../../fleet.js';
-import { normalizeProxyUrl } from '../../vm/index.js';
+import { normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
@@ -32,6 +32,20 @@ const browsersReady = async () => {
     consola.error(`Unable to check whether a browser can be started: ${ready.error}`);
   }
   return ready.data === true;
+};
+
+// What to tell someone whose launch was over the workspace's rate, or null for
+// any other outcome. Shared with the REST API, which answers with the same words.
+const launchRefusal = (launched) => {
+  if (launched.error !== 'LAUNCH_RATE_LIMITED') {
+    return null;
+  }
+  const seconds = launched.retryAfterSeconds;
+  return {
+    // The rate itself is left out on purpose: it is not a promise to anyone.
+    message: `This workspace launched too many browsers in the last minute. Please try again in ${seconds} second${seconds === 1 ? '' : 's'}.`,
+    retryAfterSeconds: seconds
+  };
 };
 
 const generateBrowserName = () => `${randomItem(ADJECTIVES)}-${randomItem(SOLITARY_ANIMALS)}`;
@@ -175,8 +189,14 @@ const handleLaunch = async (c) => {
     userId: user.id,
     browserName: name,
     browserDescription: description,
+    config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
+  const refusal = launchRefusal(launched);
+  if (refusal) {
+    c.header('Retry-After', String(refusal.retryAfterSeconds));
+    return c.html(renderBrowserLaunchError(c, body, refusal.message), 429);
+  }
   if (launched.error) {
     consola.error('launchBrowserInstance failed:', launched.error);
     return c.html(renderBrowserLaunchError(c, body, 'Unable to launch the browser. Please try again.'), 400);
@@ -194,4 +214,4 @@ const handleLaunch = async (c) => {
 
 routes.post('/launch', requireUser, requireWorkspaceRole('User'), requireSubmittedWorkspace, handleLaunch);
 
-export { generateBrowserName, startBrowser, INITIAL_URLS };
+export { generateBrowserName, browsersReady, launchRefusal, startBrowser, INITIAL_URLS };

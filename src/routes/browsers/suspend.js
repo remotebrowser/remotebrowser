@@ -35,6 +35,78 @@ const capturePreviews = (browserId) =>
 // second request for the same VM meanwhile would fight over its QEMU.
 const busy = new Set();
 
+// Shared with the REST API. The caller checks canSuspendBrowsers and
+// canTerminateBrowser first. NOT_RUNNING covers a browser busy being suspended.
+const suspendBrowserInstance = async ({ workspaceId, browser }) => {
+  const { browserInstanceId, internalBrowserId } = browser;
+  if (browser.status !== 'running' || busy.has(internalBrowserId)) {
+    return { error: 'NOT_RUNNING' };
+  }
+  busy.add(internalBrowserId);
+  try {
+    const previews = await capturePreviews(internalBrowserId);
+    // The monitor would take the VM going away for a crash, and mark the browser as failed.
+    await browserMonitors.stopBrowserMonitor({ internalBrowserId });
+    const suspended = await suspendBrowser({ browserId: internalBrowserId, previews });
+    if (suspended.error) {
+      consola.error('suspendBrowser failed:', suspended.error);
+      // A failed suspend leaves the VM running, so watch it again.
+      void browserMonitors.startBrowserMonitor({ workspaceId, browserInstanceId, internalBrowserId });
+      return { error: suspended.error };
+    }
+    // 'error' too: with the monitor gone, a failed screenshot may have written it meanwhile.
+    const marked = await transitionBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId,
+      fromStatuses: ['running', 'error'],
+      toStatus: 'suspended'
+    });
+    if (!marked.data) {
+      consola.error(`Browser ${browserInstanceId} was suspended, but its status could not be marked`);
+    }
+  } finally {
+    busy.delete(internalBrowserId);
+  }
+  return { data: true };
+};
+
+// Shared with the REST API, with the same checks as suspendBrowserInstance.
+const resumeBrowserInstance = async ({ workspaceId, browser }) => {
+  const { browserInstanceId, internalBrowserId } = browser;
+  if (browser.status !== 'suspended') {
+    return { error: 'NOT_SUSPENDED' };
+  }
+  if (busy.has(internalBrowserId)) {
+    return { error: 'BUSY' };
+  }
+  busy.add(internalBrowserId);
+  try {
+    const resumed = await resumeBrowser({ browserId: internalBrowserId });
+    if (resumed.error) {
+      consola.error('resumeBrowser failed:', resumed.error);
+      return { error: resumed.error };
+    }
+    const marked = await transitionBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId,
+      fromStatuses: ['suspended'],
+      toStatus: 'running'
+    });
+    if (!marked.data) {
+      consola.error(`Browser ${browserInstanceId} was resumed, but its status could not be marked`);
+    }
+  } finally {
+    busy.delete(internalBrowserId);
+  }
+  // Watch the browser again; best-effort, as at launch.
+  void browserMonitors.startBrowserMonitor({ workspaceId, browserInstanceId, internalBrowserId }).then((monitored) => {
+    if (monitored.error) {
+      consola.error(`Unable to monitor browser ${browserInstanceId}: ${monitored.error}`);
+    }
+  });
+  return { data: true };
+};
+
 const renderSuspend = async (c, data = {}) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
@@ -96,42 +168,15 @@ routes.post('/:browserId/suspend', requireUser, requireWorkspaceRole('User'), re
   if (!verifyCsrfToken(c, body.csrf)) {
     return c.html(await renderSuspend(c, { browser, error: 'Your session expired. Please try again.' }), 403);
   }
-  if (browser.status !== 'running' || busy.has(browser.internalBrowserId)) {
+  const suspended = await suspendBrowserInstance({ workspaceId: c.get('workspace').id, browser });
+  if (suspended.error === 'NOT_RUNNING') {
     return c.html(
       await renderSuspend(c, { browser, error: 'This browser is not running, so it cannot be suspended.' }),
       409
     );
   }
-
-  const workspaceId = c.get('workspace').id;
-  const { browserInstanceId, internalBrowserId } = browser;
-  busy.add(internalBrowserId);
-  try {
-    const previews = await capturePreviews(internalBrowserId);
-    // The monitor would take the VM going away for a crash, and mark the browser as failed.
-    await browserMonitors.stopBrowserMonitor({ internalBrowserId });
-    const suspended = await suspendBrowser({ browserId: internalBrowserId, previews });
-    if (suspended.error) {
-      consola.error('suspendBrowser failed:', suspended.error);
-      // A failed suspend leaves the VM running, so watch it again.
-      void browserMonitors.startBrowserMonitor({ workspaceId, browserInstanceId, internalBrowserId });
-      return c.html(
-        await renderSuspend(c, { browser, error: 'Unable to suspend the browser. Please try again.' }),
-        400
-      );
-    }
-    // 'error' too: with the monitor gone, a failed screenshot may have written it meanwhile.
-    const marked = await transitionBrowserInstanceStatus({
-      workspaceId,
-      browserInstanceId,
-      fromStatuses: ['running', 'error'],
-      toStatus: 'suspended'
-    });
-    if (!marked.data) {
-      consola.error(`Browser ${browserInstanceId} was suspended, but its status could not be marked`);
-    }
-  } finally {
-    busy.delete(internalBrowserId);
+  if (suspended.error) {
+    return c.html(await renderSuspend(c, { browser, error: 'Unable to suspend the browser. Please try again.' }), 400);
   }
   logAction(c, 'SUSPEND_BROWSER', browser);
   // htmx follows a redirect without changing the address bar, so ask it to navigate.
@@ -155,37 +200,13 @@ routes.post('/:browserId/resume', requireUser, requireWorkspaceRole('User'), req
   if (browser.status !== 'suspended') {
     return c.redirect(`/browsers/${browser.publicId}`, 303);
   }
-  if (busy.has(browser.internalBrowserId)) {
+  const resumed = await resumeBrowserInstance({ workspaceId: c.get('workspace').id, browser });
+  if (resumed.error === 'BUSY') {
     return c.html(await renderBrowser(c, { error: 'This browser is already being resumed.' }), 409);
   }
-
-  const workspaceId = c.get('workspace').id;
-  const { browserInstanceId, internalBrowserId } = browser;
-  busy.add(internalBrowserId);
-  try {
-    const resumed = await resumeBrowser({ browserId: internalBrowserId });
-    if (resumed.error) {
-      consola.error('resumeBrowser failed:', resumed.error);
-      return c.html(await renderBrowser(c, { error: 'Unable to resume the browser. Please try again.' }), 400);
-    }
-    const marked = await transitionBrowserInstanceStatus({
-      workspaceId,
-      browserInstanceId,
-      fromStatuses: ['suspended'],
-      toStatus: 'running'
-    });
-    if (!marked.data) {
-      consola.error(`Browser ${browserInstanceId} was resumed, but its status could not be marked`);
-    }
-  } finally {
-    busy.delete(internalBrowserId);
+  if (resumed.error) {
+    return c.html(await renderBrowser(c, { error: 'Unable to resume the browser. Please try again.' }), 400);
   }
-  // Watch the browser again; best-effort, as at launch.
-  void browserMonitors.startBrowserMonitor({ workspaceId, browserInstanceId, internalBrowserId }).then((monitored) => {
-    if (monitored.error) {
-      consola.error(`Unable to monitor browser ${browserInstanceId}: ${monitored.error}`);
-    }
-  });
   logAction(c, 'RESUME_BROWSER', browser);
   // htmx follows a redirect without changing the address bar, so ask it to navigate.
   if (c.req.header('HX-Request') === 'true') {
@@ -193,3 +214,5 @@ routes.post('/:browserId/resume', requireUser, requireWorkspaceRole('User'), req
   }
   return c.redirect(`/browsers/${browser.publicId}`, 303);
 });
+
+export { suspendBrowserInstance, resumeBrowserInstance };

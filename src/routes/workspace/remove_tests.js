@@ -7,6 +7,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./remove.js');
+const { onRecheckApiSessions } = await import('../api/sessions.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, getCollaborator } = await import('../../models/workspaces.js');
 const { closeDatabase } = await import('../../db/database.js');
@@ -56,17 +57,29 @@ test('POST /workspace/:userId/remove lets a collaborator remove themselves from 
 
   const app = setupApp();
   const csrfId = 'a'.repeat(32);
-  const res = await app.request(`/workspace/${created.data.publicId}/remove`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${ownerSession(created.data.publicId)}; csrf_id=${csrfId}`
-    },
-    body: new URLSearchParams({ workspace: SHARED_WORKSPACE_ID, csrf: makeCsrfToken(csrfId) }).toString()
+  // Their API keys go with them, so open CDP sessions must check their keys at once.
+  let rechecks = 0;
+  const stopListening = onRecheckApiSessions(() => {
+    rechecks += 1;
   });
+  /** @type {Response} */
+  let res;
+  try {
+    res = await app.request(`/workspace/${created.data.publicId}/remove`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'cookie': `session=${ownerSession(created.data.publicId)}; csrf_id=${csrfId}`
+      },
+      body: new URLSearchParams({ workspace: SHARED_WORKSPACE_ID, csrf: makeCsrfToken(csrfId) }).toString()
+    });
+  } finally {
+    stopListening();
+  }
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/workspaces');
   assert.equal((await getCollaborator({ workspaceId: SHARED_WORKSPACE_ID, userId })).data, null);
+  assert.equal(rechecks, 1);
 });
 
 test('POST /workspace/:userId/remove blocks removing the Owner', async () => {

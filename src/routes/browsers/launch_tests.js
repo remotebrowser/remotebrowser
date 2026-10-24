@@ -25,6 +25,7 @@ const { routes } = await import('./launch.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../../models/workspaces.js');
 const {
+  MAX_BROWSER_LAUNCHES_PER_MINUTE,
   launchBrowserInstance,
   recordProvisionedBrowser,
   getBrowserInstance,
@@ -535,4 +536,37 @@ test('POST /browsers/launch writes a browser instance scoped to the active works
   } finally {
     restore();
   }
+});
+
+// Fills the workspace's rate with launches made a moment ago, so the next is over it.
+const fillLaunchRate = async (workspaceId) => {
+  const { getDatabase } = await import('../../db/database.js');
+  await (
+    await getDatabase()
+  ).query(
+    'INSERT INTO browser_launches(workspace_id,user_id,launched_timestamp) SELECT $1,$2,$3 FROM generate_series(1,$4)',
+    [workspaceId, userId, Date.now() - 1000, MAX_BROWSER_LAUNCHES_PER_MINUTE]
+  );
+};
+
+test('POST /browsers/launch answers 429 with Retry-After once the workspace is over the launch rate', async () => {
+  const workspaceId = await makeUser();
+  await fillLaunchRate(workspaceId);
+  const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({ name: 'calm-otter', workspace: workspaceId, csrf: makeCsrfToken(csrfId) }).toString()
+  });
+  assert.equal(res.status, 429);
+  assert.match(res.headers.get('retry-after'), /^\d+$/);
+  assert.match(
+    await res.text(),
+    /This workspace launched too many browsers in the last minute\. Please try again in \d+ seconds?\./
+  );
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });

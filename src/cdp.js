@@ -2,12 +2,28 @@ import { consola } from 'consola/basic';
 import { WebSocket, WebSocketServer } from 'ws';
 import { browserCdpUrl, browserExists } from './fleet.js';
 import { isWellFormedBrowserHandle } from './handle.js';
-import { browserIdForHandle as resolveBrowserHandle } from './models/browsers.js';
+import { browserIdForHandle as resolveBrowserHandle, getBrowserInstanceByPublicId } from './models/browsers.js';
+import { authenticateApiKey } from './middleware/apikey.js';
+import { onRecheckApiSessions } from './routes/api/sessions.js';
 
 // Not a Hono route: a websocket upgrade needs the raw socket from the server's 'upgrade' event.
 
 // Matches only the path shape; the segment stays unvalidated so callers can tell a bad handle (400) from a wrong path (404).
 const CDP_PATH_PATTERN = /^\/cdp\/([^/]+)$/;
+
+// The REST API's CDP endpoint names a browser by its public id and needs a Bearer API key.
+const API_CDP_PATH_PATTERN = /^\/api\/v1\/browsers\/([^/]+)\/cdp$/;
+
+// What the REST API promises when the browser cannot be reached: the upgrade is
+// accepted, then closed with this code.
+const UNREACHABLE_CLOSE_CODE = 4502;
+
+// Closes an open API session whose key no longer works: deleted, expired, or
+// its creator left the workspace. Like HTTP 401.
+const REVOKED_CLOSE_CODE = 4401;
+
+// A minute keeps revocation prompt without a database check on every message.
+const API_SESSION_CHECK_INTERVAL = 60 * 1000;
 
 // Cap frames at 32 MB: enough for base64 screenshots and large DOM/network payloads,
 // while rejecting an oversized frame before ws buffers it whole (a client could otherwise OOM the process).
@@ -33,10 +49,26 @@ const cdpBrowserHandle = (requestUrl) => {
   return match ? match[1] : null;
 };
 
+/** Extracts the public browser id from a REST API CDP upgrade URL. @param {string} requestUrl raw req.url @returns {string | null} */
+const apiCdpBrowserId = (requestUrl) => {
+  const [pathname] = String(requestUrl).split(/[?#]/, 1);
+  const match = API_CDP_PATH_PATTERN.exec(pathname);
+  return match ? match[1] : null;
+};
+
+// The API path's lookup: the key must be valid, and the browser must belong to its workspace.
+const authorizeApiBrowser = async ({ authorization, publicId }) => {
+  const authenticated = await authenticateApiKey(authorization);
+  if (authenticated.error) return { error: authenticated.error };
+  const browser = await getBrowserInstanceByPublicId({ workspaceId: authenticated.data.workspace.id, publicId });
+  if (browser.error) return { error: browser.error };
+  return { data: browser.data ? browser.data.internalBrowserId || null : null };
+};
+
 // Replies with a real status line before the handshake is accepted; after a 101 only an opaque close code is possible.
-const refuseUpgrade = (socket, status, reason) => {
+const refuseUpgrade = (socket, status, reason, headers = '') => {
   if (socket.writable) {
-    socket.write(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+    socket.write(`HTTP/1.1 ${status} ${reason}\r\n${headers}Connection: close\r\nContent-Length: 0\r\n\r\n`);
   }
   socket.destroy();
 };
@@ -94,7 +126,9 @@ const mountCdpRelay = ({
   server,
   cdpUrlFor = browserCdpUrl,
   browserIdForHandle = resolveBrowserHandle,
-  browserExists: checkBrowserExists = browserExists
+  browserExists: checkBrowserExists = browserExists,
+  authorizeApiBrowser: authorizeApi = authorizeApiBrowser,
+  apiSessionCheckInterval = API_SESSION_CHECK_INTERVAL
 }) => {
   const wss = new WebSocketServer({ noServer: true, ...RELAY_SOCKET_OPTIONS });
   /** @type {Set<WebSocket>} */
@@ -105,7 +139,71 @@ const mountCdpRelay = ({
     socket.once('close', () => sockets.delete(socket));
   };
 
-  const relay = ({ req, socket, head, browserId, upstreamUrl }) => {
+  // A session can run for hours, so it checks its key again with the header it opened with.
+  /** @type {Set<{client: WebSocket, upstream: WebSocket, authorization: string | undefined, publicId: string, browserId: string}>} */
+  const apiSessions = new Set();
+
+  const checkApiSession = async (session) => {
+    /** @type {{data?: string | null, error?: string}} */
+    let authorized;
+    try {
+      authorized = await authorizeApi({ authorization: session.authorization, publicId: session.publicId });
+    } catch (error) {
+      authorized = { error: String(error) };
+    }
+    if (authorized.error && authorized.error !== 'UNAUTHORIZED') {
+      // A failed check is not a revoked key: keep the session, and try again next time.
+      consola.warn('API could not check the key of a CDP session', {
+        'event.domain': 'api',
+        'rb.browser_id': session.browserId,
+        'error.type': String(authorized.error)
+      });
+      return;
+    }
+    if (authorized.data === session.browserId) {
+      return;
+    }
+    apiSessions.delete(session);
+    consola.info('API closed a CDP session whose key no longer works', {
+      'event.domain': 'api',
+      'rb.browser_id': session.browserId
+    });
+    session.client.close(REVOKED_CLOSE_CODE, 'API key no longer valid');
+    // Not left to the close handshake: nothing more may reach the browser.
+    session.upstream.terminate();
+  };
+
+  // One check at a time; a request that comes in during one runs right after it.
+  let checking = null;
+  let checkAgain = false;
+  const checkApiSessions = () => {
+    if (checking) {
+      checkAgain = true;
+      return checking;
+    }
+    checking = Promise.all([...apiSessions].map(checkApiSession)).finally(() => {
+      checking = null;
+      if (checkAgain) {
+        checkAgain = false;
+        void checkApiSessions();
+      }
+    });
+    return checking;
+  };
+  const checkTimer = setInterval(() => void checkApiSessions(), apiSessionCheckInterval);
+  checkTimer.unref();
+  const stopListening = onRecheckApiSessions(() => void checkApiSessions());
+
+  // For the API path: the client gets the documented close code instead of a status line.
+  const closeAsUnreachable = (req, socket, head) => {
+    wss.handleUpgrade(req, socket, head, (client) => {
+      client.close(UNREACHABLE_CLOSE_CODE, 'Browser unreachable');
+    });
+  };
+
+  // apiSession is set for the REST API path: { authorization, publicId }.
+  const relay = ({ req, socket, head, browserId, upstreamUrl, apiSession = null }) => {
+    const closeCodeOnFailure = Boolean(apiSession);
     const upstream = new WebSocket(upstreamUrl, {
       ...RELAY_SOCKET_OPTIONS,
       handshakeTimeout: CDP_TIMEOUT
@@ -139,7 +237,11 @@ const mountCdpRelay = ({
         'rb.browser_id': browserId,
         'error.type': String(error)
       });
-      refuseUpgrade(socket, 502, 'Bad Gateway');
+      if (closeCodeOnFailure) {
+        closeAsUnreachable(req, socket, head);
+      } else {
+        refuseUpgrade(socket, 502, 'Bad Gateway');
+      }
     };
 
     upstream.once('open', () => {
@@ -154,6 +256,11 @@ const mountCdpRelay = ({
         socket.off('close', abortDial);
         socket.off('error', abortDial);
         track(client);
+        if (apiSession) {
+          const session = { client, upstream, browserId, ...apiSession };
+          apiSessions.add(session);
+          client.once('close', () => apiSessions.delete(session));
+        }
         forward(client, upstream);
         forward(upstream, client);
         upstream.resume();
@@ -185,40 +292,77 @@ const mountCdpRelay = ({
     upstream.once('close', () => giveUp('closed before the handshake completed'));
   };
 
+  // The handle path: an unguessable handle in the URL is the only credential.
+  // Returns the fleet's browser id, or null once the upgrade has been refused.
+  const resolveHandle = async (socket, handle) => {
+    // The public path carries an unguessable handle, never the bare id; the local MAC check rejects foreign handles with no database read.
+    if (!isWellFormedBrowserHandle(handle)) {
+      refuseUpgrade(socket, 400, 'Bad Request');
+      return null;
+    }
+    const resolved = await browserIdForHandle({ handle });
+    if (resolved.error) {
+      consola.warn('CDP relay could not resolve a browser handle', {
+        'event.domain': 'cdp',
+        'error.type': String(resolved.error)
+      });
+      refuseUpgrade(socket, 503, 'Service Unavailable');
+      return null;
+    }
+    // A valid MAC means this app issued the handle, so a missing mapping was
+    // revoked: answer 410, the same as for a handle that never existed.
+    if (!resolved.data) {
+      refuseUpgrade(socket, 410, 'Gone');
+      return null;
+    }
+    return resolved.data;
+  };
+
+  // The REST API path: a Bearer API key, and a browser in that key's workspace.
+  const resolveApiBrowser = async (req, socket, publicId) => {
+    const authorized = await authorizeApi({ authorization: req.headers.authorization, publicId });
+    if (authorized.error === 'UNAUTHORIZED') {
+      refuseUpgrade(socket, 401, 'Unauthorized', 'WWW-Authenticate: Bearer\r\n');
+      return null;
+    }
+    if (authorized.error) {
+      consola.warn('API could not check a key for a CDP connection', {
+        'event.domain': 'api',
+        'error.type': String(authorized.error)
+      });
+      refuseUpgrade(socket, 503, 'Service Unavailable');
+      return null;
+    }
+    // Not in this workspace, or not provisioned yet: either way there is nothing to reach.
+    if (!authorized.data) {
+      refuseUpgrade(socket, 404, 'Not Found');
+      return null;
+    }
+    return authorized.data;
+  };
+
   const startRelay = async (req, socket, head, hasClientGone) => {
     // Nothing catches throws inside an 'upgrade' listener; fail only the one bad upgrade, never the whole server.
     try {
       const handle = cdpBrowserHandle(req.url);
-      if (handle === null) {
+      const apiBrowserId = handle === null ? apiCdpBrowserId(req.url) : null;
+      if (handle === null && apiBrowserId === null) {
         refuseUpgrade(socket, 404, 'Not Found');
         return;
       }
-      // The public path carries an unguessable handle, never the bare id; the local MAC check rejects foreign handles with no database read.
-      if (!isWellFormedBrowserHandle(handle)) {
-        refuseUpgrade(socket, 400, 'Bad Request');
+      const viaApi = apiBrowserId !== null;
+      const browserId = viaApi
+        ? await resolveApiBrowser(req, socket, apiBrowserId)
+        : await resolveHandle(socket, handle);
+      if (browserId === null) {
         return;
       }
-      const resolved = await browserIdForHandle({ handle });
-      if (resolved.error) {
-        consola.warn('CDP relay could not resolve a browser handle', {
-          'event.domain': 'cdp',
-          'error.type': String(resolved.error)
-        });
-        refuseUpgrade(socket, 503, 'Service Unavailable');
-        return;
-      }
-      // A valid MAC means this app issued the handle, so a missing mapping was
-      // revoked: answer 410, the same as for a handle that never existed.
-      if (!resolved.data) {
-        refuseUpgrade(socket, 410, 'Gone');
-        return;
-      }
-      // Ask the server before dialing: a stopped browser gets a clean 410 here instead of an opaque close code later.
-      const probe = await checkBrowserExists({ browserId: resolved.data });
+      // Ask the server before dialing: a stopped browser gets a clean status here instead of an opaque close code later.
+      const probe = await checkBrowserExists({ browserId });
       if (probe.error) {
         consola.warn('CDP relay could not verify the browser exists', {
           'event.domain': 'cdp',
-          'rb.browser_id': resolved.data,
+          'rb.browser_id': browserId,
           'error.type': String(probe.error)
         });
         refuseUpgrade(socket, 503, 'Service Unavailable');
@@ -227,9 +371,14 @@ const mountCdpRelay = ({
       if (!probe.data) {
         consola.warn('CDP relay refused a browser the server no longer has', {
           'event.domain': 'cdp',
-          'rb.browser_id': resolved.data
+          'rb.browser_id': browserId
         });
-        refuseUpgrade(socket, 410, 'Gone');
+        // The REST API answers 404 for any browser that does not exist.
+        if (viaApi) {
+          refuseUpgrade(socket, 404, 'Not Found');
+        } else {
+          refuseUpgrade(socket, 410, 'Gone');
+        }
         return;
       }
       // The awaits above let the client leave; hasClientGone() sees half-closed sockets that destroyed/writable checks miss.
@@ -238,17 +387,28 @@ const mountCdpRelay = ({
         socket.destroy();
         return;
       }
-      const upstreamUrl = await cdpUrlFor({ browserId: resolved.data });
+      const upstreamUrl = await cdpUrlFor({ browserId });
       // Resolving can take a while (CDP discovery retries); the client may have left since.
       if (hasClientGone()) {
         socket.destroy();
         return;
       }
       if (!upstreamUrl) {
-        refuseUpgrade(socket, 503, 'Service Unavailable');
+        if (viaApi) {
+          closeAsUnreachable(req, socket, head);
+        } else {
+          refuseUpgrade(socket, 503, 'Service Unavailable');
+        }
         return;
       }
-      relay({ req, socket, head, browserId: resolved.data, upstreamUrl });
+      relay({
+        req,
+        socket,
+        head,
+        browserId,
+        upstreamUrl,
+        apiSession: viaApi ? { authorization: req.headers.authorization, publicId: apiBrowserId } : null
+      });
     } catch (error) {
       consola.error('CDP relay failed to start', {
         'event.domain': 'cdp',
@@ -275,6 +435,9 @@ const mountCdpRelay = ({
 
   return {
     close: async () => {
+      clearInterval(checkTimer);
+      stopListening();
+      apiSessions.clear();
       for (const socket of sockets) {
         socket.terminate();
       }
@@ -476,6 +639,9 @@ const checkCdpConnection = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
 
 export {
   cdpBrowserHandle,
+  apiCdpBrowserId,
+  UNREACHABLE_CLOSE_CODE,
+  REVOKED_CLOSE_CODE,
   mountCdpRelay,
   RELAY_SOCKET_OPTIONS,
   CDP_MAX_PAYLOAD,

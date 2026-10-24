@@ -27,6 +27,8 @@
     // full, real source lives in data-copy-value; use that instead.
     const block = button.closest('.instruction-block');
     const code = block.dataset.copyValue || block.querySelector('code').textContent;
+    // Each button goes back to its own label (Copy instructions, Copy, ...).
+    button.dataset.label ??= button.textContent;
     try {
       await navigator.clipboard.writeText(code);
       button.textContent = 'Copied!';
@@ -34,7 +36,7 @@
       button.textContent = 'Copy failed';
     }
     setTimeout(() => {
-      button.textContent = 'Copy instructions';
+      button.textContent = button.dataset.label;
     }, 2000);
   });
 </script>

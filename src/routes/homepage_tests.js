@@ -9,6 +9,7 @@ const { routes } = await import('./homepage.js');
 const { findOrCreateUser } = await import('../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../models/workspaces.js');
 const { launchBrowserInstance, updateBrowserInstanceStatus } = await import('../models/browsers.js');
+const { createApiKey } = await import('../models/apikeys.js');
 const { closeDatabase } = await import('../db/database.js');
 
 test.afterEach(async () => closeDatabase());
@@ -181,4 +182,104 @@ test('GET / still offers "Show all browsers" when every browser has been filtere
   const body = await res.text();
   assert.match(body, /No browsers yet\./);
   assert.match(body, /href="\/browsers">Show all browsers/);
+});
+
+test('GET / says there are no API keys, and offers to generate one', async () => {
+  await makeUser();
+  const body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  assert.match(body, /<h2>API Keys<\/h2>\s*<div class="api-key-summary">\s*<p>You have no API keys\.<\/p>/);
+  assert.match(
+    body,
+    /You have no API keys\.<\/p>\s*<a href="\/api-keys\/generate" class="btn-secondary">New API key<\/a>/
+  );
+  assert.doesNotMatch(body, /<a href="\/api-keys">/);
+});
+
+test("GET / counts the caller's valid API keys in the active workspace, and links to them", async () => {
+  const workspaceId = await makeUser();
+  await makeSharedWorkspace({ workspaceId: 3333 });
+  const live = await createApiKey({ workspaceId, userId, name: 'ci-runner', expiration: '30d' });
+  await createApiKey({ workspaceId, userId, name: 'nightly', expiration: '1d' });
+  await createApiKey({
+    workspaceId,
+    userId,
+    name: 'old-laptop',
+    expiration: '1h',
+    now: Date.now() - 2 * 60 * 60 * 1000
+  });
+  await createApiKey({ workspaceId: 3333, userId, name: 'acme-only', expiration: '1d' });
+
+  const body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  // Two: the expired key and the one in another workspace do not count.
+  assert.match(
+    body,
+    /<p>You have <a href="\/api-keys">2 API keys<\/a>\.<\/p>\s*<a href="\/api-keys\/generate" class="btn-secondary">New API key<\/a>/
+  );
+  // A count only: no list, and never the key.
+  assert.doesNotMatch(body, /ci-runner|api-keys-table|Show all API keys/);
+  assert.ok(!body.includes(live.data.apiKey));
+});
+
+test('GET / says "1 API key" for a single key', async () => {
+  const workspaceId = await makeUser();
+  await createApiKey({ workspaceId, userId, name: 'only', expiration: '1d' });
+  const body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  assert.match(body, /<p>You have <a href="\/api-keys">1 API key<\/a>\.<\/p>/);
+});
+
+// Otherwise an Admin with no keys of their own would have no way to the list of
+// everyone's keys, to revoke one.
+test('GET / offers Manage API keys to an Admin of a shared workspace with no keys of their own', async () => {
+  await makeUser();
+  await makeSharedWorkspace({ workspaceId: 3333, role: 'Admin' });
+  const body = await (await setupApp().request('/', { headers: { cookie: sessionCookie(3333) } })).text();
+  assert.match(
+    body,
+    /You have no API keys\.<\/p>\s*<a href="\/api-keys\/generate" class="btn-secondary">New API key<\/a>\s*<a href="\/api-keys" class="btn-secondary">Manage API keys<\/a>/
+  );
+});
+
+test('GET / leaves out Manage API keys for a User, for an Admin with keys, and in a personal workspace', async () => {
+  await makeUser();
+  // Personal workspace: no other members.
+  let body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  assert.doesNotMatch(body, /Manage API keys/);
+
+  await makeSharedWorkspace({ workspaceId: 3333, role: 'User' });
+  body = await (await setupApp().request('/', { headers: { cookie: sessionCookie(3333) } })).text();
+  assert.doesNotMatch(body, /Manage API keys/);
+
+  await makeSharedWorkspace({ workspaceId: 4444, role: 'Admin' });
+  await createApiKey({ workspaceId: 4444, userId, name: 'mine', expiration: '1d' });
+  body = await (await setupApp().request('/', { headers: { cookie: sessionCookie(4444) } })).text();
+  assert.doesNotMatch(body, /Manage API keys/, 'the count already links there');
+  assert.match(body, /<a href="\/api-keys">1 API key<\/a>/);
+});
+
+test('GET / hides New API key once a personal workspace has 10 keys, and offers it below that', async () => {
+  const workspaceId = await makeUser();
+  for (let i = 0; i < 9; i += 1) {
+    await createApiKey({ workspaceId, userId, name: `key-${i}`, expiration: '1d' });
+  }
+  let body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  assert.match(body, /class="btn-secondary">New API key<\/a>/);
+  assert.doesNotMatch(body, /api-key-limit-note/);
+
+  await createApiKey({ workspaceId, userId, name: 'key-9', expiration: '1d' });
+  body = await (await setupApp().request('/', { headers: { cookie: sessionCookie() } })).text();
+  assert.match(body, /<a href="\/api-keys">10 API keys<\/a>/);
+  assert.doesNotMatch(body, /New API key/);
+  assert.match(body, /<span class="api-key-limit-note">You've reached the limit\.<\/span>/);
+});
+
+test('GET / hides New API key once a member has 5 keys in a shared workspace', async () => {
+  await makeUser();
+  await makeSharedWorkspace({ workspaceId: 3333 });
+  for (let i = 0; i < 5; i += 1) {
+    await createApiKey({ workspaceId: 3333, userId, name: `key-${i}`, expiration: '1d' });
+  }
+  const body = await (await setupApp().request('/', { headers: { cookie: sessionCookie(3333) } })).text();
+  assert.match(body, /<a href="\/api-keys">5 API keys<\/a>/);
+  assert.doesNotMatch(body, /New API key/);
+  assert.match(body, /You've reached the limit\./);
 });

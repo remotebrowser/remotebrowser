@@ -10,6 +10,7 @@ nav = [
   { "Overview" = "index.md" },
   { "Isolation" = "isolation.md" },
   { "Getting Started" = "getting-started.md" },
+  { "API" = "api.md" },
   { "Playground" = "playground.md" },
   { "Self-Hosting" = [
     { "Overview" = "self-hosting.md" },

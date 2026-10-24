@@ -12,7 +12,26 @@ include('/partials/breadcrumbs', it) %>
       <% } %>
     </div>
 
-    <% if (!it.workspace.isPersonal) { %>
+    <h2>API Keys</h2>
+    <% if (it.apiKeyCount !== null) { %>
+    <div class="api-key-summary">
+      <% if (it.apiKeyCount === 0) { %>
+      <p>You have no API keys.</p>
+      <% } else { %>
+      <p>You have <a href="/api-keys"><%= it.apiKeyCount %> API key<%= it.apiKeyCount === 1 ? '' : 's' %></a>.</p>
+      <% } %> <% if (it.canGenerateApiKey) { %>
+      <a href="/api-keys/generate" class="btn-secondary">New API key</a>
+      <% } else { %>
+      <span class="api-key-limit-note">You've reached the limit.</span>
+      <% } %> <% if (it.apiKeyCount === 0 && it.canManageAllApiKeys) { %>
+      <a href="/api-keys" class="btn-secondary">Manage API keys</a>
+      <% } %>
+    </div>
+    <% } else { %>
+    <div class="api-key-summary">
+      <a href="/api-keys/generate" class="btn-secondary">New API key</a>
+    </div>
+    <% } %> <% if (!it.workspace.isPersonal) { %>
     <h2>Workspace Management</h2>
     <p><a href="/workspace">Manage collaborators</a></p>
     <% } %>
