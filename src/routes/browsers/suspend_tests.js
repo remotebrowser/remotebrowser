@@ -354,7 +354,7 @@ test("a suspended browser's page says so, and offers Resume and Terminate", asyn
   );
   assert.match(body, /<textarea\s+id="playground-editor"[^>]*>\s*await page\.goto/);
   assert.doesNotMatch(body, /id="playground"/, 'no editor for playground.js to start');
-  assert.match(body, /<section\s+id="coding-panel"\s+class="browser-panel"\s+data-copy-value=""\s*>/);
+  assert.match(body, /<section\s+id="coding-panel-disabled"\s+class="browser-panel"\s+data-copy-value=""\s*>/);
   assert.match(body, /<button type="button" class="btn-primary" disabled>Copy instructions<\/button>/);
   // Nothing that would connect to the browser.
   const info = body.slice(body.indexOf('id="browser-connection-info"'), body.indexOf('id="browser-sidebar"'));

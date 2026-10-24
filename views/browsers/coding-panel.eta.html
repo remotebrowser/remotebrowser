@@ -1,8 +1,9 @@
 <% /* The instruction is long, so it starts collapsed. Without JavaScript the toggle stays hidden and the instruction
 stays open, so the page still works. With "disabled", a copy for a browser that cannot run now, which show.eta.html dims
-and makes inert: it has no instruction, which would carry the private CDP URL. */ %>
+and makes inert: it has no instruction, which would carry the private CDP URL. It has its own id, as htmx keeps the
+classes of an element with the same id until it settles, which would flash the instruction open. */ %>
 <section
-  id="coding-panel"
+  id="<%= it.disabled ? 'coding-panel-disabled' : 'coding-panel' %>"
   class="browser-panel<%= it.disabled ? '' : ' instruction-block' %>"
   data-copy-value="<%= it.disabled ? '' : it.fullInstruction %>"
 >
