@@ -520,6 +520,158 @@ test('setProxy and clearProxy refuse a VM that is not running, a bad id, and a b
   assert.equal(commands.length, 0);
 });
 
+// What the guest agent was asked to write, as [path, text].
+const guestWrites = (commands) => {
+  const writes = [];
+  for (const { command, args } of commands) {
+    if (command === 'guest-file-open') {
+      writes.push([args.path, '']);
+    } else if (command === 'guest-file-write') {
+      writes.at(-1)[1] = Buffer.from(args['buf-b64'], 'base64').toString();
+    }
+  }
+  return writes;
+};
+
+const writingQmp = (answers = {}) =>
+  fakeQmp({
+    'guest-file-open': 3,
+    'guest-file-write': (args) => ({ count: Buffer.from(args['buf-b64'], 'base64').length }),
+    ...answers
+  });
+
+test('launchBrowser sets the screen before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  // The guest sets the screen on the second look.
+  const looks = [];
+  const readScreenSize = async (port) => {
+    looks.push(port);
+    return looks.length > 1 ? { width: 1366, height: 768 } : { width: 1920, height: 1080 };
+  };
+  const { vm } = await launcher({ start, portOpen, connectQmp, readScreenSize, browserStartTimeoutMs: 2000 });
+  await vm.launchBrowser({ screenResolution: { width: 1366, height: 768 } });
+  // On the VNC port, before the clock.
+  assert.deepEqual(looks, [34568, 34568]);
+  assert.deepEqual(names(commands).slice(0, 2), ['query-status', 'cont']);
+  assert.equal(names(commands).at(-1), 'guest-set-time');
+  assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/screen-resolution', '1366x768\n']]);
+});
+
+test('launchBrowser sets the screen scale before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher({ start, portOpen, connectQmp });
+  await vm.launchBrowser({ screenScale: 150 });
+  assert.equal(names(commands).at(-1), 'guest-set-time');
+  assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/screen-scale', '150\n']]);
+});
+
+test('launchBrowser refuses a bad screen scale before it starts a VM', async () => {
+  const dataDir = tempDataDir();
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen, dataDir });
+  await assert.rejects(vm.launchBrowser({ screenScale: 110 }), /in steps of 25%/);
+  assert.equal(starts.length, 0);
+  assert.deepEqual(machines(dataDir), []);
+});
+
+test('launchBrowser writes nothing for the default screen resolution', async () => {
+  const { start, portOpen } = startStub();
+  const { vm, commands } = await launcher({ start, portOpen });
+  await vm.launchBrowser();
+  assert.deepEqual(guestWrites(commands), []);
+});
+
+test('launchBrowser refuses a bad screen resolution before it starts a VM', async () => {
+  const dataDir = tempDataDir();
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen, dataDir });
+  await assert.rejects(vm.launchBrowser({ screenResolution: { width: 5120, height: 2880 } }), /at most 3840x2160/);
+  assert.equal(starts.length, 0);
+  assert.deepEqual(machines(dataDir), []);
+});
+
+// A running VM whose guest sets the screen to the size last written.
+const runningVm = () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  writeFileSync(path.join(dir, 'vnc-port'), '34568');
+  const qmp = writingQmp();
+  const vm = client({
+    dataDir,
+    connectQmp: qmp.connectQmp,
+    isAlive: async () => true,
+    browserStartTimeoutMs: 1000,
+    readScreenSize: async (port) => {
+      assert.equal(port, 34568);
+      const screen = guestWrites(qmp.commands).findLast(([file]) => file.endsWith('/screen-resolution'));
+      const [width, height] = (screen?.[1] ?? '1920x1080').replace('default', '1920x1080').trim().split('x');
+      return { width: Number(width), height: Number(height) };
+    }
+  });
+  return { vm, commands: qmp.commands };
+};
+
+test('setScreenResolution sets the screen of a running browser, and waits until it shows', async () => {
+  const { vm, commands } = runningVm();
+  await vm.setScreenResolution('Qabc12345', { width: 2560, height: 1440 });
+  await vm.setScreenResolution('Qabc12345', null);
+  assert.deepEqual(guestWrites(commands), [
+    ['/etc/remotebrowser/screen-resolution', '2560x1440\n'],
+    ['/etc/remotebrowser/screen-resolution', 'default\n']
+  ]);
+});
+
+test('setScreenResolution fails when the guest does not set the screen', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  writeFileSync(path.join(dir, 'vnc-port'), '34568');
+  const vm = client({
+    dataDir,
+    connectQmp: writingQmp().connectQmp,
+    isAlive: async () => true,
+    browserStartTimeoutMs: 300,
+    readScreenSize: async () => ({ width: 1920, height: 1080 })
+  });
+  await assert.rejects(
+    vm.setScreenResolution('Qabc12345', { width: 1366, height: 768 }),
+    /the screen did not change to 1366x768 \(1920x1080\)/
+  );
+});
+
+test('setScreenResolution refuses a VM that is not running, a bad id, and a bad screen resolution', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const { commands, connectQmp } = fakeQmp();
+  const vm = client({ dataDir, connectQmp, isAlive: async () => false });
+  await assert.rejects(vm.setScreenResolution('Qabc12345', { width: 1280, height: 720 }), /is not running/);
+  await assert.rejects(vm.setScreenResolution('a/../b', { width: 1280, height: 720 }), /Invalid browser id/);
+  await assert.rejects(vm.setScreenResolution('Qabc12345', { width: 320, height: 240 }), /at least 640x480/);
+  assert.equal(commands.length, 0);
+});
+
+test('setScreenScale sets the scale of a running browser', async () => {
+  const { vm, commands } = runningVm();
+  await vm.setScreenScale('Qabc12345', 200);
+  await vm.setScreenScale('Qabc12345', null);
+  assert.deepEqual(guestWrites(commands), [
+    ['/etc/remotebrowser/screen-scale', '200\n'],
+    ['/etc/remotebrowser/screen-scale', 'default\n']
+  ]);
+});
+
+test('setScreenScale refuses a VM that is not running, a bad id, and a bad scale', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const { commands, connectQmp } = fakeQmp();
+  const vm = client({ dataDir, connectQmp, isAlive: async () => false });
+  await assert.rejects(vm.setScreenScale('Qabc12345', 150), /is not running/);
+  await assert.rejects(vm.setScreenScale('a/../b', 150), /Invalid browser id/);
+  await assert.rejects(vm.setScreenScale('Qabc12345', 50), /from 100% to 300%/);
+  assert.equal(commands.length, 0);
+});
+
 test('launchBrowser records the machine, so a resume starts the same one', async () => {
   const dataDir = tempDataDir();
   const { start, portOpen } = startStub();

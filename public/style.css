@@ -208,6 +208,47 @@ input {
   width: 100%;
 }
 
+.field-label {
+  align-self: start;
+  text-align: right;
+}
+
+.field-radios {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.radio-label input[type='radio'] {
+  width: auto;
+}
+
+.radio-detail {
+  color: var(--text-muted);
+}
+
+.field-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.field-slider input[type='range'] {
+  flex: 1;
+  accent-color: #0088f6;
+}
+
+.field-slider output {
+  min-width: 3rem;
+  font-variant-numeric: tabular-nums;
+}
+
 button {
   grid-column: 2;
   justify-self: start;

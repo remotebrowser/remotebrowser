@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch the browser's screen scale that the host sets
+# The host writes the file through the guest agent (see
+# src/vm/screen-scale.js).
+
+[Path]
+PathChanged=/etc/remotebrowser/screen-scale
+Unit=screen-scale.service
+
+[Install]
+WantedBy=paths.target

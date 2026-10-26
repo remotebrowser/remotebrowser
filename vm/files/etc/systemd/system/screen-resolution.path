@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch the browser's screen size that the host sets
+# The host writes the file through the guest agent (see
+# src/vm/screen-resolution.js).
+
+[Path]
+PathChanged=/etc/remotebrowser/screen-resolution
+Unit=screen-resolution.service
+
+[Install]
+WantedBy=paths.target

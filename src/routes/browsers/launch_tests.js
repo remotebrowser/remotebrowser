@@ -326,10 +326,55 @@ test("GET /browsers/launch renders the form in the visitor's own workspace", asy
   assert.match(body, new RegExp(`name="workspace" value="${workspaceId}"`));
 });
 
-test('GET /browsers/launch has no proxy field when an external fleet runs the browsers', async () => {
+test('GET /browsers/launch has no proxy or screen fields when an external fleet runs the browsers', async () => {
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
-  assert.doesNotMatch(await res.text(), /name="proxy"/);
+  const body = await res.text();
+  assert.doesNotMatch(body, /name="proxy"/);
+  assert.doesNotMatch(body, /name="screenResolution"/);
+  assert.doesNotMatch(body, /name="screenScale"/);
+});
+
+test('POST /browsers/launch refuses a screen resolution when an external fleet runs the browsers', async () => {
+  const workspaceId = await makeUser();
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      screenResolution: 'qhd',
+      workspace: workspaceId,
+      csrf: makeCsrfToken(csrfId)
+    }).toString()
+  });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /cannot set the screen resolution/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /browsers/launch refuses a screen scale when an external fleet runs the browsers', async () => {
+  const workspaceId = await makeUser();
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      screenScale: '200',
+      workspace: workspaceId,
+      csrf: makeCsrfToken(csrfId)
+    }).toString()
+  });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /cannot set the screen scale/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
 test('POST /browsers/launch refuses a proxy when an external fleet runs the browsers', async () => {

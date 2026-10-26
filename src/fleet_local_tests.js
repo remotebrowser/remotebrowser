@@ -18,6 +18,8 @@ const {
   resumeBrowser,
   setBrowserProxy,
   clearBrowserProxy,
+  setBrowserScreenResolution,
+  setBrowserScreenScale,
   canSaveBrowserScreenshots,
   saveBrowserScreenshot
 } = await import('./fleet.js');
@@ -56,7 +58,68 @@ test('startBrowser passes the upstream proxy to the VM launch', async () => {
   const { calls, client } = fakeVms();
   setVmClient(client);
   await startBrowser({ proxy: 'http://proxy.example.com:8080' });
-  assert.deepEqual(calls[0], { name: 'launchBrowser', args: { proxy: 'http://proxy.example.com:8080' } });
+  assert.deepEqual(calls[0], {
+    name: 'launchBrowser',
+    args: { proxy: 'http://proxy.example.com:8080', screenResolution: null, screenScale: null }
+  });
+});
+
+test('startBrowser passes the screen resolution to the VM launch', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  await startBrowser({ screenResolution: { width: 1280, height: 720 } });
+  assert.deepEqual(calls[0], {
+    name: 'launchBrowser',
+    args: { proxy: null, screenResolution: { width: 1280, height: 720 }, screenScale: null }
+  });
+});
+
+test('startBrowser passes the screen scale to the VM launch', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  await startBrowser({ screenScale: 150 });
+  assert.deepEqual(calls[0], {
+    name: 'launchBrowser',
+    args: { proxy: null, screenResolution: null, screenScale: 150 }
+  });
+});
+
+test('setBrowserScreenScale drives the local VM, and reports a failure or a malformed id', async () => {
+  const calls = [];
+  setVmClient(
+    fakeVms({
+      setScreenScale: async (browserId, screenScale) => {
+        calls.push([browserId, screenScale]);
+        if (!screenScale) throw new Error('unable to set the screen scale');
+      }
+    }).client
+  );
+  assert.deepEqual(await setBrowserScreenScale('Pabc12345', 200), { data: true });
+  assert.deepEqual(await setBrowserScreenScale('Pabc12345', null), { error: 'unable to set the screen scale' });
+  assert.deepEqual(await setBrowserScreenScale('../etc', null), { error: 'INVALID_BROWSER_ID' });
+  assert.deepEqual(calls, [
+    ['Pabc12345', 200],
+    ['Pabc12345', null]
+  ]);
+});
+
+test('setBrowserScreenResolution drives the local VM, and reports a failure or a malformed id', async () => {
+  const calls = [];
+  setVmClient(
+    fakeVms({
+      setScreenResolution: async (browserId, screenResolution) => {
+        calls.push([browserId, screenResolution]);
+        if (!screenResolution) throw new Error('the screen did not change');
+      }
+    }).client
+  );
+  assert.deepEqual(await setBrowserScreenResolution('Pabc12345', { width: 1280, height: 720 }), { data: true });
+  assert.deepEqual(await setBrowserScreenResolution('Pabc12345', null), { error: 'the screen did not change' });
+  assert.deepEqual(await setBrowserScreenResolution('../etc', null), { error: 'INVALID_BROWSER_ID' });
+  assert.deepEqual(calls, [
+    ['Pabc12345', { width: 1280, height: 720 }],
+    ['Pabc12345', null]
+  ]);
 });
 
 test('setBrowserProxy and clearBrowserProxy drive the local VM, and report a failure or a malformed id', async () => {

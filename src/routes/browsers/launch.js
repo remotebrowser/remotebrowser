@@ -12,13 +12,39 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canSetBrowserProxy, canStartBrowser, startBrowser as startBrowserOnFleet } from '../../fleet.js';
-import { normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
+import {
+  canSetBrowserScreenResolution,
+  canSetBrowserScreenScale,
+  canSetBrowserProxy,
+  canStartBrowser,
+  startBrowser as startBrowserOnFleet
+} from '../../fleet.js';
+import { DEFAULT_SCREEN_RESOLUTION, DEFAULT_SCREEN_SCALE, normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
 // Chosen randomly at launch, all privacy-respecting, to fill the first page.
 const INITIAL_URLS = ['https://duck.com', 'https://startpage.com', 'https://search.brave.com'];
+
+// Screen sizes in pixels. The default is the image's own, so a
+// launch with it sets nothing.
+const SCREEN_RESOLUTIONS = [
+  { value: 'full-hd', label: 'Full HD', ...DEFAULT_SCREEN_RESOLUTION },
+  { value: 'wuxga', label: 'WUXGA', width: 1920, height: 1200 },
+  { value: 'qhd', label: 'QHD', width: 2560, height: 1440 },
+  { value: '4k', label: '4K', width: 3840, height: 2160 }
+].map((resolution) => ({ ...resolution, detail: `${resolution.width}×${resolution.height}` }));
+const DEFAULT_SCREEN_RESOLUTION_CHOICE = 'full-hd';
+
+// In percent, the slider's stops. The default is the image's own, so a launch
+// with it sets nothing.
+const SCREEN_SCALE_RANGE = { min: 100, max: 200, step: 25 };
+const SCREEN_SCALES = [100, 125, DEFAULT_SCREEN_SCALE, 175, 200].map((scale) => ({
+  value: String(scale),
+  label: `${scale}%`,
+  scale
+}));
+const DEFAULT_SCREEN_SCALE_CHOICE = String(DEFAULT_SCREEN_SCALE);
 
 export const routes = new Hono();
 
@@ -67,11 +93,29 @@ const renderBrowserLaunch = async (c, data = {}) => {
     blockAdsAndTrackers: true,
     notReady: false,
     canSetProxy: canSetBrowserProxy(),
+    canSetScreenResolution: canSetBrowserScreenResolution(),
+    screenResolutions: SCREEN_RESOLUTIONS,
+    screenResolution: DEFAULT_SCREEN_RESOLUTION_CHOICE,
+    canSetScreenScale: canSetBrowserScreenScale(),
+    screenScales: SCREEN_SCALES,
+    screenScaleRange: SCREEN_SCALE_RANGE,
+    screenScale: DEFAULT_SCREEN_SCALE_CHOICE,
     scriptNonce: c.get('secureHeadersNonce'),
     useProxy: false,
     proxy: '',
     ...data
   });
+};
+
+// Without the field, e.g. when the server cannot set it, the default.
+const parseScreenResolution = (body) => {
+  const value = formString(body.screenResolution) || DEFAULT_SCREEN_RESOLUTION_CHOICE;
+  return SCREEN_RESOLUTIONS.find((resolution) => resolution.value === value) ?? null;
+};
+
+const parseScreenScale = (body) => {
+  const value = formString(body.screenScale) || DEFAULT_SCREEN_SCALE_CHOICE;
+  return SCREEN_SCALES.find((scale) => scale.value === value) ?? null;
 };
 
 const renderBrowserLaunchError = (c, body, error, data = {}) =>
@@ -82,6 +126,8 @@ const renderBrowserLaunchError = (c, body, error, data = {}) =>
     description: formString(body.description).trim(),
     enableScreenRecording: Boolean(body.enableScreenRecording),
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers),
+    screenResolution: parseScreenResolution(body)?.value ?? DEFAULT_SCREEN_RESOLUTION_CHOICE,
+    screenScale: parseScreenScale(body)?.value ?? DEFAULT_SCREEN_SCALE_CHOICE,
     useProxy: Boolean(body.useProxy),
     // Kept, password included, so a typo is easy to fix; it goes back only to its sender.
     proxy: formString(body.proxy).trim()
@@ -100,10 +146,12 @@ const startBrowser = async ({
   browserInstanceId,
   userId,
   proxy = null,
+  screenResolution = null,
+  screenScale = null,
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserOnFleet({ proxy });
+  const started = await startBrowserOnFleet({ proxy, screenResolution, screenScale });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -181,6 +229,35 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, 'This server cannot set a proxy for its browsers.'), 400);
   }
 
+  const choice = parseScreenResolution(body);
+  if (!choice) {
+    return c.html(renderBrowserLaunchError(c, body, 'Choose a screen resolution from the list.'), 400);
+  }
+  const { width, height } = choice;
+  const screenResolution = choice.value === DEFAULT_SCREEN_RESOLUTION_CHOICE ? null : { width, height };
+  if (screenResolution && !canSetBrowserScreenResolution()) {
+    return c.html(
+      renderBrowserLaunchError(c, body, 'This server cannot set the screen resolution for its browsers.'),
+      400
+    );
+  }
+
+  const scaleChoice = parseScreenScale(body);
+  if (!scaleChoice) {
+    return c.html(
+      renderBrowserLaunchError(
+        c,
+        body,
+        `Choose a screen scale from ${SCREEN_SCALE_RANGE.min}% to ${SCREEN_SCALE_RANGE.max}%, in steps of ${SCREEN_SCALE_RANGE.step}%.`
+      ),
+      400
+    );
+  }
+  const screenScale = scaleChoice.value === DEFAULT_SCREEN_SCALE_CHOICE ? null : scaleChoice.scale;
+  if (screenScale && !canSetBrowserScreenScale()) {
+    return c.html(renderBrowserLaunchError(c, body, 'This server cannot set the screen scale for its browsers.'), 400);
+  }
+
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -206,7 +283,9 @@ const handleLaunch = async (c) => {
     workspaceId: workspace.id,
     browserInstanceId: launched.data.browserInstanceId,
     userId: user.id,
-    proxy
+    proxy,
+    screenResolution,
+    screenScale
   });
 
   return c.redirect(`/browsers/${launched.data.publicId}`, 303);

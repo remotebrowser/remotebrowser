@@ -5,7 +5,10 @@ Description=Chromium
 # must not start when nftables fails. All its traffic goes through tinyproxy,
 # so it needs that too, with the upstream proxy that the host may set at launch.
 Requires=xvnc.service nftables.service tinyproxy.service
-After=xvnc.service nftables.service tinyproxy.service tinyproxy-upstream.service network.target
+# Openbox maximizes the window, and xsettingsd sets its scale, so the browser
+# starts after them.
+Wants=openbox.service xsettingsd.service
+After=xvnc.service openbox.service xsettingsd.service nftables.service tinyproxy.service tinyproxy-upstream.service network.target
 
 [Service]
 User=browser

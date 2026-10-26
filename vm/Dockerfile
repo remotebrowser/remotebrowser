@@ -23,10 +23,12 @@ RUN apt-get update \
 RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime \
     && echo America/Los_Angeles >/etc/timezone
 
-# Debian's Chromium, for amd64 and arm64, plus fonts that most sites expect.
+# Debian's Chromium, for amd64 and arm64, plus fonts that most sites expect,
+# xrandr to resize the screen, openbox to keep the browser maximized, and
+# xsettingsd to set the screen scale (Xft/DPI), which Chromium follows live.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        chromium tigervnc-standalone-server \
+        chromium tigervnc-standalone-server x11-xserver-utils openbox xsettingsd \
         fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,7 +39,8 @@ COPY files/ /
 
 # Chromium is not enabled: chromium-start.timer starts it, once a VM starts
 # from the snapshot.
-RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path xvnc cdp-proxy guest-ready \
+RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path \
+        screen-resolution.path screen-scale.path xvnc openbox xsettingsd cdp-proxy guest-ready \
         chromium-start.timer \
     # Nothing in the VM needs these, and each one slows the boot.
     && systemctl mask systemd-networkd-wait-online apt-daily.timer apt-daily-upgrade.timer \
