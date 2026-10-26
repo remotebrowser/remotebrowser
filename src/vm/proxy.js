@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { BlockList } from 'node:net';
 import { delay } from './host.js';
 
 // Each VM's tinyproxy can forward the browser's traffic to an upstream proxy,
@@ -15,8 +16,48 @@ const DEFAULT_PORTS = { 'http:': '80', 'socks4:': '1080', 'socks5:': '1080' };
 // without decoding, so only chars that need no escaping there.
 const CREDENTIAL = /^[-A-Za-z0-9._~!$&*+,;=]*$/;
 const HOSTNAME = /^[a-z0-9][-a-z0-9.]*$/;
-// The guest's own loopback is tinyproxy itself.
-const LOOPBACK = /^(localhost|127\.|0\.)/;
+
+// No real proxy can be at these: the guest's loopback is tinyproxy itself, and
+// link-local is where a cloud keeps its metadata service. Private ranges stay
+// allowed, since an egress proxy often sits on the private network.
+const REFUSED_ADDRESSES = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['192.0.0.0', 24],
+  ['198.18.0.0', 15],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4]
+]) {
+  REFUSED_ADDRESSES.addSubnet(network, prefix, 'ipv4');
+}
+
+// Names that always mean the guest itself.
+const LOOPBACK_NAME = /(^|\.)localhost$/;
+
+// A numeric last label means an address in some other form, which a resolver
+// reads as 127.0.0.1. Only a plain dotted quad passes, so the range check sees
+// the address that will be used.
+const NUMERIC_LABEL = /^(0x[0-9a-f]*|[0-9]+)$/;
+const DOTTED_QUAD = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+
+const REFUSED_HOST_ERROR = 'The proxy host must not be a loopback, link-local, or reserved address';
+
+// Checked by spelling only, since tinyproxy resolves the name again later.
+const checkProxyHost = (hostname) => {
+  const name = hostname.replace(/\.$/, '');
+  if (NUMERIC_LABEL.test(name.split('.').at(-1) ?? '')) {
+    if (!DOTTED_QUAD.test(name)) {
+      throw new Error('The proxy host must be a host name or a plain IPv4 address, e.g. 203.0.113.7');
+    }
+    if (REFUSED_ADDRESSES.check(name, 'ipv4')) {
+      throw new Error(REFUSED_HOST_ERROR);
+    }
+  } else if (LOOPBACK_NAME.test(name)) {
+    throw new Error(REFUSED_HOST_ERROR);
+  }
+};
 
 const decode = (part) => {
   try {
@@ -66,9 +107,7 @@ const normalizeProxyUrl = (input) => {
   if (!HOSTNAME.test(hostname)) {
     throw new Error('The proxy host must be a host name or an IPv4 address');
   }
-  if (LOOPBACK.test(hostname)) {
-    throw new Error('The proxy host must not be a loopback address');
-  }
+  checkProxyHost(hostname);
   const user = decode(url.username);
   const password = decode(url.password);
   if (user === null || password === null || !CREDENTIAL.test(user) || !CREDENTIAL.test(password)) {
