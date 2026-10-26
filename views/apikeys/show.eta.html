@@ -1,0 +1,26 @@
+<% layout('/layout', { title: 'Remote Browser - API Key ' + it.apiKey.name }) %> <%~ include('/partials/topnav', it) %>
+<%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1><%= it.apiKey.name %></h1>
+    <p><code class="key-preview"><%= it.apiKey.keyPreview %></code></p>
+    <p>
+      Expires
+      <time datetime="<%= it.apiKey.expiresAt %>" title="<%= it.apiKey.expiresAt %>"><%= it.apiKey.expiresIn %></time>.
+    </p>
+    <p>Created by <%= it.apiKey.creatorEmail %>.</p>
+    <% if (it.apiKey.lastUsedAt) { %>
+    <p>
+      Last used
+      <time datetime="<%= it.apiKey.lastUsedAt %>" title="<%= it.apiKey.lastUsedAt %>"
+        ><%= it.apiKey.lastUsedAgo %></time
+      >.
+    </p>
+    <% } else { %>
+    <p>Never used.</p>
+    <% } %>
+    <div class="form-actions">
+      <a href="/api-keys/<%= it.apiKey.publicId %>/delete" class="btn-danger">Delete</a>
+    </div>
+  </article>
+</main>

@@ -16,6 +16,10 @@ const hasAdminRole = (role) => hasRole(role, 'Admin');
 const canTerminateBrowser = (browser, workspace, user) =>
   hasAdminRole(workspace.role) || browser.creatorUserId === user.id;
 
+// Admins and Owners manage every key in the workspace, e.g. to revoke one that
+// leaked; anyone else only their own.
+const canManageApiKey = (apiKey, workspace, user) => hasAdminRole(workspace.role) || apiKey.creatorUserId === user.id;
+
 const loadActiveWorkspace = async (c) => {
   const user = c.get('user');
   // The session's choice, else the workspace every user has, so a session that
@@ -113,6 +117,13 @@ const buildCollaboratorsBreadcrumbs = (workspace, pageLabel) => [
   { label: pageLabel, href: null }
 ];
 
+// Likewise for the API key list's sub-pages: Foo > API keys > Generate.
+const buildApiKeysBreadcrumbs = (workspace, pageLabel) => [
+  { label: workspace.name, href: '/', switcher: true },
+  { label: 'API keys', href: '/api-keys' },
+  { label: pageLabel, href: null }
+];
+
 // A single browser's pages list continues past the browser itself, one level
 // deeper than buildBrowsersBreadcrumbs: Foo > Browsers > calm-otter > Pages.
 const buildBrowserPagesBreadcrumbs = (workspace, browserInstanceId, browserName) => [
@@ -136,6 +147,7 @@ export {
   hasRole,
   hasAdminRole,
   canTerminateBrowser,
+  canManageApiKey,
   loadActiveWorkspace,
   loadWorkspaceSwitcherItems,
   requireWorkspaceRole,
@@ -144,6 +156,7 @@ export {
   buildBreadcrumbs,
   buildBrowsersBreadcrumbs,
   buildCollaboratorsBreadcrumbs,
+  buildApiKeysBreadcrumbs,
   buildBrowserPagesBreadcrumbs,
   buildBrowserPageBreadcrumbs
 };

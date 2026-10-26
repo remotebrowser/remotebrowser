@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+const { describe } = test;
+
 process.env.PGLITE_DATA_DIR = 'memory://';
 
 const {
@@ -13,6 +15,9 @@ const {
   listProvisionedBrowserInstances,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
+  setBrowserInstanceConfig,
+  deleteOldBrowserLaunches,
+  MAX_BROWSER_LAUNCHES_PER_MINUTE,
   browserIdForHandle
 } = await import('./browsers.js');
 const { findOrCreateUser } = await import('./users.js');
@@ -353,4 +358,77 @@ test('listProvisionedBrowserInstances skips suspended browsers, which have nothi
     toStatus: 'suspended'
   });
   assert.deepEqual((await listProvisionedBrowserInstances()).data, []);
+});
+
+test('a browser starts with the config it was launched with, and setBrowserInstanceConfig replaces it', async () => {
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const plain = await launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'plain' });
+  assert.deepEqual(
+    (await getBrowserInstance({ workspaceId, browserInstanceId: plain.data.browserInstanceId })).data.config,
+    {}
+  );
+
+  const launched = await launchBrowserInstance({
+    workspaceId,
+    userId: ownerId,
+    browserName: 'proxied',
+    config: { proxy: 'socks5://proxy.example.com:1080' }
+  });
+  const { browserInstanceId } = launched.data;
+  const config = async () => (await getBrowserInstance({ workspaceId, browserInstanceId })).data.config;
+  assert.deepEqual(await config(), { proxy: 'socks5://proxy.example.com:1080' });
+
+  assert.deepEqual(await setBrowserInstanceConfig({ workspaceId, browserInstanceId, config: { proxy: null } }), {
+    data: true
+  });
+  assert.deepEqual(await config(), { proxy: null });
+});
+
+describe('launch rate', () => {
+  const NOW = 1_700_000_000_000;
+  const launch = (workspaceId, userId, { now = NOW } = {}) =>
+    launchBrowserInstance({ workspaceId, userId, browserName: 'calm-otter', launchesPerMinute: 3, now });
+
+  test('refuses a launch over the rate, and says when a slot frees up', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    // 50 s, 30 s, and 10 s ago: all in the last minute.
+    for (const ago of [50_000, 30_000, 10_000]) {
+      assert.equal((await launch(workspaceId, ownerId, { now: NOW - ago })).error, undefined);
+    }
+    // The oldest leaves the window in 10 s.
+    assert.deepEqual(await launch(workspaceId, ownerId), { error: 'LAUNCH_RATE_LIMITED', retryAfterSeconds: 10 });
+    assert.equal((await launch(workspaceId, ownerId, { now: NOW + 10_000 })).error, undefined);
+  });
+
+  // Otherwise launching and terminating in a loop would get around the rate.
+  test('still counts a launch whose browser was terminated', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    for (let i = 0; i < 3; i += 1) {
+      const launched = await launch(workspaceId, ownerId);
+      await deleteBrowserInstance({ workspaceId, browserInstanceId: launched.data.browserInstanceId });
+    }
+    assert.equal((await launch(workspaceId, ownerId)).error, 'LAUNCH_RATE_LIMITED');
+  });
+
+  test('counts each workspace on its own', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    const other = await createWorkspace({ name: 'Other', ownerId });
+    for (let i = 0; i < 3; i += 1) {
+      await launch(workspaceId, ownerId);
+    }
+    assert.equal((await launch(workspaceId, ownerId)).error, 'LAUNCH_RATE_LIMITED');
+    assert.equal((await launch(other.data.workspaceId, ownerId)).error, undefined);
+  });
+
+  test('allows 120 launches a minute by default', () => {
+    assert.equal(MAX_BROWSER_LAUNCHES_PER_MINUTE, 120);
+  });
+
+  test('deleteOldBrowserLaunches removes only launches older than the window', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    await launch(workspaceId, ownerId, { now: NOW - 90_000 });
+    await launch(workspaceId, ownerId, { now: NOW - 30_000 });
+    assert.deepEqual(await deleteOldBrowserLaunches({ now: NOW }), { data: 1 });
+    assert.deepEqual(await deleteOldBrowserLaunches({ now: NOW }), { data: 0 });
+  });
 });

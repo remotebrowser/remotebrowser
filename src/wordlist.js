@@ -97,6 +97,69 @@ const SOLITARY_ANIMALS = [
   'wombat'
 ];
 
+// For API key names, e.g. "fragrant-peony": adjectives that suit a flower.
+const FLOWER_ADJECTIVES = [
+  'blooming',
+  'blushing',
+  'bright',
+  'budding',
+  'dainty',
+  'dewy',
+  'fragrant',
+  'fresh',
+  'golden',
+  'graceful',
+  'lovely',
+  'lush',
+  'radiant',
+  'rosy',
+  'scented',
+  'serene',
+  'silky',
+  'sunlit',
+  'sweet',
+  'tender',
+  'velvety',
+  'vivid',
+  'wild'
+];
+
+// Popular flowers, one word each, so a name stays "adjective-flower".
+const FLOWERS = [
+  'aster',
+  'azalea',
+  'begonia',
+  'bluebell',
+  'camellia',
+  'carnation',
+  'daffodil',
+  'dahlia',
+  'daisy',
+  'freesia',
+  'gardenia',
+  'geranium',
+  'hibiscus',
+  'hyacinth',
+  'iris',
+  'jasmine',
+  'lavender',
+  'lilac',
+  'lily',
+  'lotus',
+  'magnolia',
+  'marigold',
+  'orchid',
+  'peony',
+  'poppy',
+  'primrose',
+  'rose',
+  'snapdragon',
+  'sunflower',
+  'tulip',
+  'violet',
+  'zinnia'
+];
+
 const randomItem = (list) => list[Math.floor(Math.random() * list.length)];
 
-export { ADJECTIVES, SOCIAL_ANIMALS, SOLITARY_ANIMALS, randomItem };
+export { ADJECTIVES, SOCIAL_ANIMALS, SOLITARY_ANIMALS, FLOWER_ADJECTIVES, FLOWERS, randomItem };

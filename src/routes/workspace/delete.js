@@ -12,6 +12,7 @@ import {
 } from '../../middleware/workspace.js';
 import { deleteWorkspaceCascade } from '../../models/workspaces.js';
 import { formString } from '../../form.js';
+import { recheckApiSessions } from '../api/sessions.js';
 
 export const routes = new Hono();
 
@@ -58,6 +59,8 @@ routes.post(
       consola.error('deleteWorkspaceCascade failed:', deleted.error);
       return c.html(renderWorkspaceDelete(c, { error: 'Unable to delete the workspace. Please try again.' }), 400);
     }
+    // Its API keys went with it; end what those keys opened.
+    recheckApiSessions();
     consola.info('DELETE_WORKSPACE', {
       'event.domain': 'workspace',
       'user.id': user.id,

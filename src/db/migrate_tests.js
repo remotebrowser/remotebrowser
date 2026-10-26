@@ -24,7 +24,17 @@ test('migrate creates the application tables once', async () => {
     `);
     assert.deepEqual(
       tables.rows.map((row) => row.tablename),
-      ['browser_instances', 'collaborators', 'invitations', 'schema_migrations', 'signin_codes', 'users', 'workspaces']
+      [
+        'api_keys',
+        'browser_instances',
+        'browser_launches',
+        'collaborators',
+        'invitations',
+        'schema_migrations',
+        'signin_codes',
+        'users',
+        'workspaces'
+      ]
     );
     const migrations = await database.query('SELECT name FROM schema_migrations ORDER BY name');
     assert.deepEqual(
@@ -39,7 +49,9 @@ test('migrate creates the application tables once', async () => {
         '007_workspaces_public_id.sql',
         '008_browser_instances_public_id.sql',
         '009_signin_codes_expiry_index.sql',
-        '010_browser_instances_suspended.sql'
+        '010_browser_instances_suspended.sql',
+        '011_api_keys.sql',
+        '012_browser_launches.sql'
       ]
     );
   });

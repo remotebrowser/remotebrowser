@@ -1,0 +1,34 @@
+<% /* On a phone each row is a card (see .api-keys-table in style.css). The roles keep it a table for screen readers,
+which drop the table once its display changes. */ %>
+<table class="roster-table api-keys-table" role="table">
+  <thead role="rowgroup">
+    <tr role="row">
+      <th role="columnheader">Name</th>
+      <th role="columnheader">Key</th>
+      <th role="columnheader">Expires</th>
+      <th role="columnheader">Last used</th>
+      <% if (it.showCreator) { %>
+      <th role="columnheader">Created by</th>
+      <% } %>
+    </tr>
+  </thead>
+  <tbody role="rowgroup">
+    <% it.apiKeys.forEach(function(apiKey) { %>
+    <tr role="row">
+      <td role="cell" class="api-key-name"><a href="/api-keys/<%= apiKey.publicId %>"><%= apiKey.name %></a></td>
+      <td role="cell"><code class="key-preview"><%= apiKey.keyPreview %></code></td>
+      <td role="cell" data-label="Expires">
+        <time datetime="<%= apiKey.expiresAt %>" title="<%= apiKey.expiresAt %>"><%= apiKey.expiresIn %></time>
+      </td>
+      <td role="cell" data-label="Last used">
+        <% if (apiKey.lastUsedAt) { %>
+        <time datetime="<%= apiKey.lastUsedAt %>" title="<%= apiKey.lastUsedAt %>"><%= apiKey.lastUsedAgo %></time>
+        <% } else { %>Never<% } %>
+      </td>
+      <% if (it.showCreator) { %>
+      <td role="cell" data-label="Created by"><%= apiKey.creatorEmail %></td>
+      <% } %>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>

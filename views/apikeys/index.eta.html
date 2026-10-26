@@ -1,0 +1,25 @@
+<% layout('/layout', { title: 'Remote Browser - API Keys' }) %> <%~ include('/partials/topnav', it) %> <%~
+include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1>API keys</h1>
+    <% /* The caller's own keys only, which is what their limit counts. */ %> <% if (it.ownCount !== null) { %>
+    <div class="api-key-summary">
+      <% if (it.ownCount === 0) { %>
+      <p>You have no API keys.</p>
+      <% } else { %>
+      <p>You have <%= it.ownCount %> API key<%= it.ownCount === 1 ? '' : 's' %>.</p>
+      <% } %> <% if (!it.canGenerate) { %>
+      <span class="api-key-limit-note">
+        You've reached the limit of <%= it.maxApiKeys %> API keys in this workspace.
+      </span>
+      <% } %>
+    </div>
+    <% } %> <% if (it.apiKeys.length > 0) { %> <%~ include('/partials/api-keys-table', it) %> <% } %> <% if
+    (it.canGenerate) { %>
+    <div class="key-table-actions">
+      <a href="/api-keys/generate" class="btn-primary">Generate a new API key</a>
+    </div>
+    <% } %>
+  </article>
+</main>

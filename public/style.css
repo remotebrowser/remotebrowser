@@ -415,8 +415,22 @@ button.signin-submit[disabled] {
   grid-column: 2;
 }
 
-.checkbox-label input[type='checkbox'] {
+.checkbox-label input[type='checkbox'],
+.checkbox-label input[type='radio'] {
   width: auto;
+}
+
+/* A form label for a group of controls, such as radio buttons, which has no
+   single input to point at. It sits level with the first choice. */
+.field-label {
+  text-align: right;
+  align-self: start;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 
 .btn-primary {
@@ -650,7 +664,36 @@ a.btn-secondary {
   margin-bottom: 1rem;
 }
 
+/* The API key count with the button to make one, on the workspace page and on
+   the list. */
+.api-key-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.api-key-summary p {
+  margin: 0;
+}
+
+/* Takes the place of the button to make a key, once the limit is reached. */
+.api-key-limit-note {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* The limit note gets its own line, under the count. */
+.api-key-summary .api-key-limit-note {
+  flex-basis: 100%;
+}
+
 .key-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   max-width: 40rem;
   margin-bottom: 1rem;
 }
@@ -662,6 +705,56 @@ a.btn-secondary {
   .browser-table-actions,
   .key-table-actions {
     max-width: none;
+  }
+}
+
+/* Four or five columns do not fit a phone, so each key becomes a card: the
+   name on top, its key preview under it, then one labelled line per detail. */
+@media (max-width: 40rem) {
+  .api-keys-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .api-keys-table,
+  .api-keys-table tbody,
+  .api-keys-table tr,
+  .api-keys-table td {
+    display: block;
+  }
+
+  .api-keys-table tr {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .api-keys-table td {
+    padding: 0.125rem 0;
+    border-bottom: none;
+  }
+
+  .api-keys-table td[data-label] {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .api-keys-table td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 6rem;
+    color: var(--text-muted);
+  }
+
+  .api-keys-table .api-key-name {
+    font-weight: 600;
+  }
+
+  /* An email can be long; let it wrap rather than push the card wider. */
+  .api-keys-table td[data-label='Created by'] {
+    overflow-wrap: anywhere;
   }
 }
 
@@ -1443,6 +1536,22 @@ footer {
    actually run, so a visitor with no JavaScript never sees a dead button. */
 .hidden {
   display: none;
+}
+
+/* A new API key starts masked when script can unmask it, and in full when it
+   cannot, so it never shows before the View Key button exists. */
+.api-key-mask {
+  display: none;
+}
+
+@media (scripting: enabled) {
+  .api-key-block:not([data-revealed]) .api-key-value {
+    display: none;
+  }
+
+  .api-key-block:not([data-revealed]) .api-key-mask {
+    display: inline;
+  }
 }
 
 .auth-aside {

@@ -122,6 +122,14 @@ const normalizeProxyUrl = (input) => {
 };
 
 /**
+ * The proxy URL with its password hidden, for storing and showing. Takes the
+ * normalized form, so the password is always between "user:" and "@".
+ * @param {string | null} proxy
+ * @returns {string | null}
+ */
+const maskProxyUrl = (proxy) => (proxy ? proxy.replace(/^([a-z0-9]+:\/\/[^:@/]*):[^@]+@/, '$1:****@') : null);
+
+/**
  * Writes the upstream proxy into the guest, which restarts tinyproxy with it.
  * That also ends the browser's open connections, so none keep the old route.
  * The guest agent may not answer yet right after the VM starts, so this
@@ -166,4 +174,4 @@ const writeGuestProxy = async ({ dir, proxy, connectQmp, attempts = 20 }) => {
   );
 };
 
-export { GUEST_PROXY_FILE, normalizeProxyUrl, writeGuestProxy };
+export { GUEST_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy };

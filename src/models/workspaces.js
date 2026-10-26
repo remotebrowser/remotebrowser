@@ -128,12 +128,16 @@ const updateCollaboratorRole = async ({ workspaceId, userId, role }) => {
 
 // Route-gated only — see src/routes/workspace/remove.js and delete.js (via
 // deleteWorkspaceCascade) for the sole authorized callers.
+// The member's API keys go too: they would stop working anyway, but would work
+// again if the same person were invited back.
 const deleteCollaborator = async ({ workspaceId, userId }) => {
+  const database = await db();
   try {
-    const r = await (
-      await db()
-    ).query('DELETE FROM collaborators WHERE workspace_id=$1 AND user_id=$2', [workspaceId, userId]);
-    return { data: r.rowCount > 0 };
+    return await database.transaction(async (tx) => {
+      const r = await tx.query('DELETE FROM collaborators WHERE workspace_id=$1 AND user_id=$2', [workspaceId, userId]);
+      await tx.query('DELETE FROM api_keys WHERE workspace_id=$1 AND user_id=$2', [workspaceId, userId]);
+      return { data: r.rowCount > 0 };
+    });
   } catch (e) {
     return { error: e.message };
   }

@@ -44,6 +44,11 @@ const server = http.createServer((req, res) => {
     setTimeout(() => respondJson(res, 201, body), DELAY_MS);
     return;
   }
+  // The existence check the CDP relay makes before it dials.
+  if (req.method === 'GET' && /^\/api\/v1\/browsers\/mock-\d+$/.test(req.url)) {
+    respondJson(res, 200, { last_activity_timestamp: Math.floor(Date.now() / 1000) });
+    return;
+  }
   respondJson(res, 404, { detail: 'not found' });
 });
 

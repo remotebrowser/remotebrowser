@@ -27,7 +27,7 @@ const setVmClient = (client) => {
 
 export { createVmClient } from './client.js';
 export { buildQemuArgs, detectAccel, hostArch, imageFiles } from './qemu.js';
-export { normalizeProxyUrl } from './proxy.js';
+export { normalizeProxyUrl, maskProxyUrl } from './proxy.js';
 export { openQmp } from './qmp.js';
 export { isWellFormedBrowserId } from './state.js';
 export { setVmClient, vms };

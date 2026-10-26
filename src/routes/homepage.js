@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
+import { consola } from 'consola/basic';
 import { eta } from '../render.js';
 import { createCsrfToken } from '../auth/csrf.js';
 import { requireUser } from '../middleware/auth.js';
 import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } from '../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../models/browsers.js';
+import { countApiKeysByUser } from '../models/apikeys.js';
+import { seesAllApiKeys, atApiKeyLimit } from './apikeys/index.js';
 
 export const routes = new Hono();
 
@@ -25,6 +28,11 @@ const renderDashboard = async (c) => {
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const instances = listResult.error ? [] : listResult.data;
+  // Only a count: the keys themselves are listed on /api-keys.
+  const apiKeyCount = await countApiKeysByUser({ workspaceId: workspace.id, userId: user.id });
+  if (apiKeyCount.error) {
+    consola.error('API could not count the keys', { 'event.domain': 'api', 'error.type': String(apiKeyCount.error) });
+  }
   const browsers = instances.filter((instance) => CURRENT_STATUSES.has(instance.status)).map(summarizeBrowserInstance);
   return eta.render('workspace/index', {
     email: user.email,
@@ -34,7 +42,13 @@ const renderDashboard = async (c) => {
     breadcrumbs: buildBreadcrumbs(workspace),
     browsers,
     // Counts stopped browsers too, so 'Show all browsers' has a target.
-    hasAnyBrowsers: instances.length > 0
+    hasAnyBrowsers: instances.length > 0,
+    // Null when the count failed, which leaves the sentence out.
+    apiKeyCount: apiKeyCount.error ? null : apiKeyCount.data,
+    // An Admin with no keys of their own has no link to /api-keys, so they get a button.
+    canManageAllApiKeys: seesAllApiKeys(workspace),
+    // Offered too when the count failed: the generate page checks again.
+    canGenerateApiKey: Boolean(apiKeyCount.error) || !atApiKeyLimit(workspace, apiKeyCount.data)
   });
 };
 

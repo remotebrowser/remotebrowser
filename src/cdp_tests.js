@@ -7,6 +7,7 @@ const { describe } = test;
 process.env.BROWSERFLEET_URL = 'http://browserfleet.test';
 
 const { cdpBrowserHandle } = await import('./cdp.js');
+const { recheckApiSessions } = await import('./routes/api/sessions.js');
 const { generateBrowserHandle } = await import('./handle.js');
 
 // The path segment is a browser handle, not an id, and the two are unrelated now
@@ -57,6 +58,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const {
   mountCdpRelay,
+  apiCdpBrowserId,
+  UNREACHABLE_CLOSE_CODE,
+  REVOKED_CLOSE_CODE,
   RELAY_SOCKET_OPTIONS,
   CDP_MAX_PAYLOAD,
   capturePageScreenshot,
@@ -118,6 +122,15 @@ const defaultLookup = async ({ handle }) => ({ data: handle === HANDLE ? UPSTREA
 // src/fleet_tests.js.
 const defaultBrowserExists = async () => ({ data: true });
 
+// Stands in for the API key check and the workspace lookup, which are covered in
+// src/middleware/apikey_tests.js. Only API_KEY may reach API_BROWSER_ID.
+const API_KEY = 'sk-rb-v1-test';
+const API_BROWSER_ID = 'Bapi234';
+const defaultAuthorizeApi = async ({ authorization, publicId }) => {
+  if (authorization !== `Bearer ${API_KEY}`) return { error: 'UNAUTHORIZED' };
+  return { data: publicId === API_BROWSER_ID ? UPSTREAM_ID : null };
+};
+
 // Records every lookup the relay attempts, so a test can assert that a handle
 // failing the local MAC check never reaches the database at all.
 const recordingLookup = (respond = defaultLookup) => {
@@ -133,10 +146,23 @@ const recordingLookup = (respond = defaultLookup) => {
 
 // The relay under test, on a real HTTP server, with the upstream URL injected so
 // it points at the stub's ephemeral port rather than at config.browserFleetUrl.
-const startRelay = ({ cdpUrlFor, browserIdForHandle = defaultLookup, browserExists = defaultBrowserExists }) =>
+const startRelay = ({
+  cdpUrlFor,
+  browserIdForHandle = defaultLookup,
+  browserExists = defaultBrowserExists,
+  authorizeApiBrowser = defaultAuthorizeApi,
+  apiSessionCheckInterval
+}) =>
   new Promise((resolve) => {
     const server = http.createServer((_req, res) => res.writeHead(426).end());
-    const relay = mountCdpRelay({ server, cdpUrlFor, browserIdForHandle, browserExists });
+    const relay = mountCdpRelay({
+      server,
+      cdpUrlFor,
+      browserIdForHandle,
+      browserExists,
+      authorizeApiBrowser,
+      apiSessionCheckInterval
+    });
     server.listen(0, '127.0.0.1', () =>
       resolve({
         port: server.address().port,
@@ -166,6 +192,18 @@ const connect = (port, path) =>
     socket.once('error', reject);
   });
 
+// Like connect, with headers, so a test can send an API key.
+const connectWithHeaders = (port, path, headers) =>
+  new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`, { perMessageDeflate: false, maxPayload: 0, headers });
+    socket.once('open', () => resolve(socket));
+    socket.once('unexpected-response', (_req, res) => {
+      res.resume();
+      reject(Object.assign(new Error(`HTTP ${res.statusCode}`), { statusCode: res.statusCode, headers: res.headers }));
+    });
+    socket.once('error', reject);
+  });
+
 const nextMessage = (socket) =>
   new Promise((resolve) => socket.once('message', (data, isBinary) => resolve({ data, isBinary })));
 
@@ -174,7 +212,10 @@ const nextClose = (socket) =>
 
 // Each case builds its own stub upstream, relay and client, and tears all three
 // down; a socket left open would keep the test process alive.
-const withRelay = async (run, { onUpstreamConnection, browserIdForHandle, browserExists } = {}) => {
+const withRelay = async (
+  run,
+  { onUpstreamConnection, browserIdForHandle, browserExists, authorizeApiBrowser } = {}
+) => {
   const upstream = await startUpstream(onUpstreamConnection);
   const opened = [];
   /** @type {{port: number, close: () => Promise<void>} | undefined} */
@@ -183,7 +224,12 @@ const withRelay = async (run, { onUpstreamConnection, browserIdForHandle, browse
   // finally that covers startRelay too: a leaked listening server keeps the test
   // process alive long past the failure that caused it.
   try {
-    relay = await startRelay({ cdpUrlFor: upstreamUrlFor(upstream.port), browserIdForHandle, browserExists });
+    relay = await startRelay({
+      cdpUrlFor: upstreamUrlFor(upstream.port),
+      browserIdForHandle,
+      browserExists,
+      authorizeApiBrowser
+    });
     await run({
       upstream,
       relay,
@@ -668,6 +714,206 @@ describe('mountCdpRelay', () => {
         return true;
       });
     });
+  });
+});
+
+describe('apiCdpBrowserId', () => {
+  test('returns the browser id from a REST API CDP path, ignoring a query string', () => {
+    assert.equal(apiCdpBrowserId('/api/v1/browsers/Bapi234/cdp'), 'Bapi234');
+    assert.equal(apiCdpBrowserId('/api/v1/browsers/Bapi234/cdp?x=1'), 'Bapi234');
+  });
+
+  test('returns null for any other path', () => {
+    for (const path of ['/api/v1/browsers/Bapi234', '/api/v1/browsers//cdp', '/api/v1/browsers/a/b/cdp', CDP_PATH]) {
+      assert.equal(apiCdpBrowserId(path), null, `for ${path}`);
+    }
+  });
+});
+
+// An open session checks its key again, so deleting a key, its expiry, or its
+// creator leaving the workspace ends what the key already opened.
+describe('mountCdpRelay closing API sessions whose key stopped working', () => {
+  const API_PATH = '/api/v1/browsers/Bapi234/cdp';
+  const AUTH = { authorization: `Bearer ${API_KEY}` };
+
+  // The key check, with a switch to revoke the key or make the check fail.
+  const switchableAuthorize = () => {
+    const state = { outcome: 'valid', checks: 0 };
+    return {
+      state,
+      authorizeApiBrowser: async (params) => {
+        state.checks += 1;
+        if (state.outcome === 'revoked') return { error: 'UNAUTHORIZED' };
+        if (state.outcome === 'failing') return { error: 'DATABASE_DOWN' };
+        return defaultAuthorizeApi(params);
+      }
+    };
+  };
+
+  // A relay with a stub upstream, and an API client already connected through it.
+  const withApiSession = async (run, { apiSessionCheckInterval } = {}) => {
+    const browser = upstreamSocket();
+    const upstream = await startUpstream(browser.onUpstreamConnection);
+    const auth = switchableAuthorize();
+    const relay = await startRelay({
+      cdpUrlFor: upstreamUrlFor(upstream.port),
+      authorizeApiBrowser: auth.authorizeApiBrowser,
+      apiSessionCheckInterval
+    });
+    const client = await connectWithHeaders(relay.port, API_PATH, AUTH);
+    try {
+      await run({ client, browserSocket: await browser.promise, auth, relay });
+    } finally {
+      client.terminate();
+      await relay.close();
+      await upstream.close();
+    }
+  };
+
+  test(`closes the session with ${REVOKED_CLOSE_CODE} once the key is revoked, and cuts off the browser`, async () => {
+    await withApiSession(async ({ client, browserSocket, auth }) => {
+      const closed = nextClose(client);
+      const browserClosed = nextClose(browserSocket);
+      auth.state.outcome = 'revoked';
+      recheckApiSessions();
+      const { code } = await closed;
+      assert.equal(code, REVOKED_CLOSE_CODE);
+      await browserClosed;
+    });
+  });
+
+  test('keeps the session while the key still works', async () => {
+    await withApiSession(async ({ client, browserSocket, auth }) => {
+      recheckApiSessions();
+      assert.ok(await waitUntil(() => auth.state.checks >= 2));
+      const received = nextMessage(browserSocket);
+      client.send('{"id":1}');
+      assert.equal(String((await received).data), '{"id":1}');
+    });
+  });
+
+  // A database blip must not drop every open session.
+  test('keeps the session when the check itself fails', async () => {
+    await withApiSession(async ({ client, browserSocket, auth }) => {
+      auth.state.outcome = 'failing';
+      recheckApiSessions();
+      assert.ok(await waitUntil(() => auth.state.checks >= 2));
+      await settle(20);
+      assert.equal(client.readyState, WebSocket.OPEN);
+      const received = nextMessage(browserSocket);
+      client.send('{"id":2}');
+      assert.equal(String((await received).data), '{"id":2}');
+    });
+  });
+
+  test('checks open sessions again on its own, without being asked', async () => {
+    await withApiSession(
+      async ({ client, auth }) => {
+        const closed = nextClose(client);
+        auth.state.outcome = 'revoked';
+        const { code } = await closed;
+        assert.equal(code, REVOKED_CLOSE_CODE);
+      },
+      { apiSessionCheckInterval: 20 }
+    );
+  });
+
+  test('leaves sessions opened with a browser handle alone', async () => {
+    const auth = switchableAuthorize();
+    auth.state.outcome = 'revoked';
+    await withRelay(
+      async ({ connect }) => {
+        const client = await connect(CDP_PATH);
+        recheckApiSessions();
+        await settle(50);
+        assert.equal(client.readyState, WebSocket.OPEN);
+        assert.equal(auth.state.checks, 0, 'a handle session has no key to check');
+      },
+      { authorizeApiBrowser: auth.authorizeApiBrowser }
+    );
+  });
+});
+
+describe('mountCdpRelay on the REST API path', () => {
+  const API_PATH = '/api/v1/browsers/Bapi234/cdp';
+  const AUTH = { authorization: `Bearer ${API_KEY}` };
+
+  test('relays to the browser the API key may reach', async () => {
+    await withRelay(async ({ upstream, relay }) => {
+      const socket = await connectWithHeaders(relay.port, API_PATH, AUTH);
+      socket.terminate();
+      assert.deepEqual(upstream.dialed, [`/api/v1/browsers/${UPSTREAM_ID}/cdp`]);
+    });
+  });
+
+  test('answers 401 with a Bearer challenge, and dials nothing, without a valid API key', async () => {
+    await withRelay(async ({ upstream, relay }) => {
+      for (const headers of [{}, { authorization: 'Bearer sk-rb-v1-wrong' }, { authorization: API_KEY }]) {
+        await assert.rejects(connectWithHeaders(relay.port, API_PATH, headers), (error) => {
+          assert.equal(error.statusCode, 401);
+          assert.equal(error.headers['www-authenticate'], 'Bearer');
+          return true;
+        });
+      }
+      assert.deepEqual(upstream.dialed, []);
+    });
+  });
+
+  test('answers 404 for a browser outside the key’s workspace', async () => {
+    await withRelay(async ({ upstream, relay }) => {
+      await assert.rejects(connectWithHeaders(relay.port, '/api/v1/browsers/Bother2/cdp', AUTH), (error) => {
+        assert.equal(error.statusCode, 404);
+        return true;
+      });
+      assert.deepEqual(upstream.dialed, []);
+    });
+  });
+
+  test('answers 404 when the browser no longer exists', async () => {
+    await withRelay(
+      async ({ upstream, relay }) => {
+        await assert.rejects(connectWithHeaders(relay.port, API_PATH, AUTH), (error) => {
+          assert.equal(error.statusCode, 404);
+          return true;
+        });
+        assert.deepEqual(upstream.dialed, []);
+      },
+      { browserExists: async () => ({ data: false }) }
+    );
+  });
+
+  test('answers 503 when the API key check itself fails', async () => {
+    await withRelay(
+      async ({ relay }) => {
+        await assert.rejects(connectWithHeaders(relay.port, API_PATH, AUTH), (error) => {
+          assert.equal(error.statusCode, 503);
+          return true;
+        });
+      },
+      { authorizeApiBrowser: async () => ({ error: 'DATABASE_DOWN' }) }
+    );
+  });
+
+  test(`closes with ${UNREACHABLE_CLOSE_CODE} when no upstream URL can be built`, async () => {
+    const relay = await startRelay({ cdpUrlFor: () => null });
+    try {
+      const socket = await connectWithHeaders(relay.port, API_PATH, AUTH);
+      const { code } = await nextClose(socket);
+      assert.equal(code, UNREACHABLE_CLOSE_CODE);
+    } finally {
+      await relay.close();
+    }
+  });
+
+  test(`closes with ${UNREACHABLE_CLOSE_CODE} when the browser cannot be reached`, async () => {
+    const relay = await startRelay({ cdpUrlFor: () => 'ws://127.0.0.1:1/api/v1/browsers/foobar/cdp' });
+    try {
+      const socket = await connectWithHeaders(relay.port, API_PATH, AUTH);
+      const { code } = await nextClose(socket);
+      assert.equal(code, UNREACHABLE_CLOSE_CODE);
+    } finally {
+      await relay.close();
+    }
   });
 });
 

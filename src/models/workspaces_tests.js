@@ -25,6 +25,8 @@ const {
 } = await import('./workspaces.js');
 const { findOrCreateUser } = await import('./users.js');
 const { generateShortId } = await import('../id.js');
+const { createApiKey } = await import('./apikeys.js');
+const { authenticateApiKey } = await import('../middleware/apikey.js');
 const { getDatabase, closeDatabase } = await import('../db/database.js');
 
 test.afterEach(async () => closeDatabase());
@@ -261,4 +263,35 @@ test('deleteWorkspaceCascade is an alias for deleteWorkspace', async () => {
   const ownerId = await makeUser('owner1@example.com');
   const workspace = await createWorkspace({ name: 'Team', ownerId });
   assert.deepEqual(await deleteWorkspaceCascade({ workspaceId: workspace.data.workspaceId }), { data: true });
+});
+
+// A key would stop working anyway, but would come back if the same person were
+// invited again; so the key goes with the membership.
+test('deleteCollaborator deletes the member’s API keys for that workspace only', async () => {
+  const owner = await findOrCreateUser({ email: 'owner1@example.com' });
+  const member = await findOrCreateUser({ email: 'member1@example.com' });
+  const memberId = member.data.id;
+  await ensurePersonalWorkspace({ userId: memberId, email: 'member1@example.com', personalWorkspaceId: null });
+  const personal = (await getDatabase()).query('SELECT personal_workspace_id FROM users WHERE id=$1', [memberId]);
+  const personalWorkspaceId = (await personal).rows[0].personal_workspace_id;
+  const workspace = await createWorkspace({ name: 'Team', ownerId: owner.data.id });
+  const { workspaceId } = workspace.data;
+  const join = () =>
+    createCollaborator({
+      workspaceId,
+      userId: memberId,
+      email: 'member1@example.com',
+      role: 'User',
+      workspaceName: 'Team'
+    });
+  await join();
+  const teamKey = (await createApiKey({ workspaceId, userId: memberId, name: 'team', expiration: '1d' })).data.apiKey;
+  const ownKey = (
+    await createApiKey({ workspaceId: personalWorkspaceId, userId: memberId, name: 'own', expiration: '1d' })
+  ).data.apiKey;
+
+  assert.deepEqual(await deleteCollaborator({ workspaceId, userId: memberId }), { data: true });
+  await join();
+  assert.deepEqual(await authenticateApiKey(`Bearer ${teamKey}`), { error: 'UNAUTHORIZED' }, 'must not come back');
+  assert.ok((await authenticateApiKey(`Bearer ${ownKey}`)).data, 'keys of other workspaces stay');
 });

@@ -7,6 +7,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 const { sign } = await import('../../auth/signing.js');
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes } = await import('./delete.js');
+const { onRecheckApiSessions } = await import('../api/sessions.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace, getCollaborator, workspaceExists } =
   await import('../../models/workspaces.js');
@@ -118,10 +119,22 @@ test('POST /workspace/delete keeps the workspace when the typed name does not ma
 
 test('POST /workspace/delete deletes the workspace and redirects to /workspaces when the name matches', async () => {
   await makeCollaborator({ role: 'Owner' });
-  const res = await postDelete(setupApp(), { name: '  Acme Corp  ' });
+  // Its API keys go with it, so open CDP sessions must check their keys at once.
+  let rechecks = 0;
+  const stopListening = onRecheckApiSessions(() => {
+    rechecks += 1;
+  });
+  /** @type {Response} */
+  let res;
+  try {
+    res = await postDelete(setupApp(), { name: '  Acme Corp  ' });
+  } finally {
+    stopListening();
+  }
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/workspaces');
   assert.equal((await workspaceExists({ workspaceId: SHARED_WORKSPACE_ID })).data, false);
+  assert.equal(rechecks, 1);
 });
 
 test('POST /workspace/delete refuses a submission for a workspace the visitor is no longer active in', async () => {

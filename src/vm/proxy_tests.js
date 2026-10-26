@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { GUEST_PROXY_FILE, normalizeProxyUrl, writeGuestProxy } from './proxy.js';
+import { GUEST_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy } from './proxy.js';
 
 test('normalizeProxyUrl takes http and socks proxies, with or without credentials', () => {
   assert.equal(normalizeProxyUrl('http://proxy.example.com:8080'), 'http://proxy.example.com:8080');
@@ -197,4 +197,16 @@ test('normalizeProxyUrl takes public addresses and names', () => {
   for (const host of ['203.0.113.7', '8.8.8.8', 'proxy.example.com']) {
     assert.equal(normalizeProxyUrl(`socks5://${host}:1080`), `socks5://${host}:1080`, host);
   }
+});
+
+test('maskProxyUrl hides the password, and keeps everything else', () => {
+  assert.equal(maskProxyUrl('http://user:secret@proxy.example.com:8080'), 'http://user:****@proxy.example.com:8080');
+  assert.equal(maskProxyUrl('socks5://proxy.example.com:1080'), 'socks5://proxy.example.com:1080');
+  // The guest form keeps the colon even with no password; there is nothing to hide.
+  assert.equal(maskProxyUrl('http://user:@proxy.example.com:80'), 'http://user:@proxy.example.com:80');
+  assert.equal(
+    maskProxyUrl(normalizeProxyUrl('http://u:p%21w@Proxy.Example.com')),
+    'http://u:****@proxy.example.com:80'
+  );
+  assert.equal(maskProxyUrl(null), null);
 });

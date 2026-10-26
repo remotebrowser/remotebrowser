@@ -4,6 +4,8 @@ import { config } from './config.js';
 import { getDatabase } from './db/database.js';
 import { cleanupScreenshots } from './screenshots.js';
 import { deleteExpiredSigninCodes } from './models/users.js';
+import { cleanupApiKeys } from './models/apikeys.js';
+import { deleteOldBrowserLaunches } from './models/browsers.js';
 
 const CLEANUP_QUEUE = 'cleanup';
 const EVERY_MINUTE = '* * * * *';
@@ -29,6 +31,20 @@ const cleanup = async () => {
     consola.error('SCHEDULER could not purge expired sign-in codes', {
       'event.domain': 'scheduler',
       'error.type': String(purged.error)
+    });
+  }
+  const removedLaunches = await deleteOldBrowserLaunches();
+  if (removedLaunches.error) {
+    consola.error('SCHEDULER could not remove old browser launches', {
+      'event.domain': 'scheduler',
+      'error.type': String(removedLaunches.error)
+    });
+  }
+  const removedKeys = await cleanupApiKeys();
+  if (removedKeys.error) {
+    consola.error('SCHEDULER could not remove expired API keys', {
+      'event.domain': 'scheduler',
+      'error.type': String(removedKeys.error)
     });
   }
   const duration = Math.round(performance.now() - timestamp);
