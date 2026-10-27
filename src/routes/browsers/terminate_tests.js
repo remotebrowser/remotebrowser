@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 
 // Set before ./terminate pulls in ../../config, which freezes what it read.
-process.env.BROWSERFLEET_URL = process.env.BROWSERFLEET_URL || 'http://browserfleet.test';
 process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { sign } = await import('../../auth/signing.js');
@@ -15,6 +14,7 @@ const { launchBrowserInstance, recordProvisionedBrowser, getBrowserInstance, bro
   await import('../../models/browsers.js');
 const { browserMonitors } = await import('../../browser.js');
 const { closeDatabase } = await import('../../db/database.js');
+const { setVmClient, createVmClient } = await import('../../vm/index.js');
 
 test.afterEach(async () => closeDatabase());
 
@@ -98,29 +98,26 @@ const makeForeignBrowserInSharedWorkspace = async ({ role }) => {
   return { workspaceId, browserInstanceId, publicId: launched.data.publicId };
 };
 
-const stubFetchByRoute = (routes) => {
-  const original = globalThis.fetch;
+// A VM client with no real VMs, which records each browser it is asked to
+// stop. `stop` may throw to fail the stop.
+const stubVms = (stop = async () => {}) => {
   const calls = [];
-  const counters = new Map();
-  globalThis.fetch = async (url, opts) => {
-    calls.push({ url, opts });
-    const route = routes.find((r) => r.match.test(url));
-    if (!route) throw new Error(`Unstubbed fetch call: ${url}`);
-    const callIndex = counters.get(route) || 0;
-    counters.set(route, callIndex + 1);
-    return route.responses[Math.min(callIndex, route.responses.length - 1)]();
-  };
+  setVmClient({
+    browserExists: async () => true,
+    stopBrowser: async (browserId) => {
+      calls.push(browserId);
+      await stop(browserId);
+    }
+  });
   return {
     calls,
-    restore: () => {
-      globalThis.fetch = original;
-    }
+    restore: () => setVmClient(createVmClient())
   };
 };
 
-// The real, unrelated BrowserFleet HTTP API that actually stops the browser.
-// No trailing slash issues here since stopBrowser always appends the id.
-const FLEET_STOP_ROUTE = { match: /\/api\/v1\/browsers\//, responses: [() => new Response(null, { status: 204 })] };
+const failToStop = async () => {
+  throw new Error('unable to stop the VM');
+};
 
 const postTerminate = (
   app,
@@ -183,7 +180,7 @@ test('GET /browsers/:browserId/terminate 404s for a browser that does not exist'
 test('POST /browsers/:browserId/terminate rejects a missing or invalid CSRF token', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const app = setupApp();
     const res = await app.request(`/browsers/${publicId}/terminate`, {
@@ -202,7 +199,7 @@ test('POST /browsers/:browserId/terminate rejects a missing or invalid CSRF toke
 test('POST /browsers/:browserId/terminate keeps the browser when the typed name does not match', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'wrong-name' });
     assert.equal(res.status, 400);
@@ -217,7 +214,7 @@ test('POST /browsers/:browserId/terminate keeps the browser when the typed name 
 test('POST /browsers/:browserId/terminate refuses a submission for a workspace the visitor switched away from', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, {
       name: 'calm-otter',
@@ -231,18 +228,15 @@ test('POST /browsers/:browserId/terminate refuses a submission for a workspace t
   }
 });
 
-test('POST /browsers/:browserId/terminate stops the fleet browser, revokes the handle, deletes the instance, and redirects', async () => {
+test('POST /browsers/:browserId/terminate stops the browser, revokes the handle, deletes the instance, and redirects', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId, internalBrowserId, handle } = await makeRunningBrowser(workspaceId);
-  const { calls, restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { calls, restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: '  calm-otter  ' });
     assert.equal(res.status, 303);
     assert.equal(res.headers.get('location'), '/browsers');
-    const fleetCall = calls.find(
-      (c) => c.opts.method === 'DELETE' && new RegExp(`/api/v1/browsers/${internalBrowserId}$`).test(c.url)
-    );
-    assert.ok(fleetCall, 'the fleet must be asked to stop the internal browser id');
+    assert.deepEqual(calls, [internalBrowserId], 'the VM of the internal browser id must be stopped');
 
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data, null, 'the instance record must be deleted');
@@ -256,7 +250,7 @@ test('POST /browsers/:browserId/terminate stops the fleet browser, revokes the h
 test('POST /browsers/:browserId/terminate from htmx answers with the result page', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const startedAt = Date.now();
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter', htmx: true });
@@ -291,40 +285,30 @@ const spyOnMonitorStop = (events) => {
   };
 };
 
-test('POST /browsers/:browserId/terminate stops the monitor only after the fleet stopped the browser', async () => {
+test('POST /browsers/:browserId/terminate stops the monitor only after the browser stopped', async () => {
   const workspaceId = await makeUser();
   const { publicId, internalBrowserId } = await makeRunningBrowser(workspaceId);
   const events = [];
   const restoreMonitor = spyOnMonitorStop(events);
-  const { restore } = stubFetchByRoute([
-    {
-      match: /\/api\/v1\/browsers\//,
-      responses: [
-        () => {
-          events.push('fleet-stop');
-          return new Response(null, { status: 204 });
-        }
-      ]
-    }
-  ]);
+  const { restore } = stubVms(async () => {
+    events.push('vm-stop');
+  });
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter' });
     assert.equal(res.status, 303);
-    assert.deepEqual(events, ['fleet-stop', `monitor-stop:${internalBrowserId}`]);
+    assert.deepEqual(events, ['vm-stop', `monitor-stop:${internalBrowserId}`]);
   } finally {
     restore();
     restoreMonitor();
   }
 });
 
-test('POST /browsers/:browserId/terminate keeps the monitor when the fleet fails to stop the browser', async () => {
+test('POST /browsers/:browserId/terminate keeps the monitor when the browser fails to stop', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId } = await makeRunningBrowser(workspaceId);
   const events = [];
   const restoreMonitor = spyOnMonitorStop(events);
-  const { restore } = stubFetchByRoute([
-    { match: /\/api\/v1\/browsers\//, responses: [() => new Response(null, { status: 500 })] }
-  ]);
+  const { restore } = stubVms(failToStop);
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter' });
     assert.equal(res.status, 400);
@@ -336,7 +320,7 @@ test('POST /browsers/:browserId/terminate keeps the monitor when the fleet fails
   }
 });
 
-// A 'starting' browser has no fleet id to stop; just clean up the row.
+// A 'starting' browser has no VM to stop; just clean up the row.
 test('POST /browsers/:browserId/terminate terminates a browser that never finished provisioning', async () => {
   const workspaceId = await makeUser();
   const launched = await launchBrowserInstance({
@@ -346,11 +330,11 @@ test('POST /browsers/:browserId/terminate terminates a browser that never finish
     browserDescription: ''
   });
   const browserInstanceId = launched.data.browserInstanceId;
-  const { calls, restore } = stubFetchByRoute([]);
+  const { calls, restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, launched.data.publicId, { name: 'calm-otter' });
     assert.equal(res.status, 303);
-    assert.equal(calls.length, 0, 'nothing to stop on the fleet, and no handle to revoke');
+    assert.equal(calls.length, 0, 'no VM to stop, and no handle to revoke');
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data, null);
   } finally {
@@ -371,14 +355,14 @@ test('GET /browsers/:browserId/terminate forbids a User from a browser they did 
 test('POST /browsers/:browserId/terminate forbids a User from terminating a browser they did not create', async () => {
   await makeUser();
   const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'User' });
-  const { calls, restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { calls, restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, {
       name: 'calm-otter',
       activeWorkspaceId: workspaceId
     });
     assert.equal(res.status, 403);
-    assert.equal(calls.length, 0, 'the fleet must not be asked to stop the browser');
+    assert.equal(calls.length, 0, 'the browser must not be stopped');
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.ok(fetched.data, 'the browser must still exist');
   } finally {
@@ -389,7 +373,7 @@ test('POST /browsers/:browserId/terminate forbids a User from terminating a brow
 test('POST /browsers/:browserId/terminate lets an Admin terminate a browser they did not create', async () => {
   await makeUser();
   const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'Admin' });
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, {
       name: 'calm-otter',
@@ -406,7 +390,7 @@ test('POST /browsers/:browserId/terminate lets an Admin terminate a browser they
 test('POST /browsers/:browserId/terminate lets an Owner terminate a browser they did not create', async () => {
   await makeUser();
   const { workspaceId, browserInstanceId, publicId } = await makeForeignBrowserInSharedWorkspace({ role: 'Owner' });
-  const { restore } = stubFetchByRoute([FLEET_STOP_ROUTE]);
+  const { restore } = stubVms();
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, {
       name: 'calm-otter',
@@ -420,12 +404,10 @@ test('POST /browsers/:browserId/terminate lets an Owner terminate a browser they
   }
 });
 
-test('POST /browsers/:browserId/terminate leaves the browser untouched when the fleet stop fails', async () => {
+test('POST /browsers/:browserId/terminate leaves the browser untouched when the stop fails', async () => {
   const workspaceId = await makeUser();
   const { browserInstanceId, publicId, internalBrowserId, handle } = await makeRunningBrowser(workspaceId);
-  const { restore } = stubFetchByRoute([
-    { match: /\/api\/v1\/browsers\//, responses: [() => new Response(null, { status: 500 })] }
-  ]);
+  const { restore } = stubVms(failToStop);
   try {
     const res = await postTerminate(setupApp(), workspaceId, publicId, { name: 'calm-otter' });
     assert.equal(res.status, 400);

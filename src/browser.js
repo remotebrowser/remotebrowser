@@ -1,6 +1,6 @@
 import { consola } from 'consola/basic';
 import { createBrowserMonitor } from './workers/monitor.js';
-import { browserCdpUrl, browserExists } from './fleet.js';
+import { browserCdpUrl, browserExists } from './vms.js';
 import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './models/browsers.js';
 
 // Shared browser logic: status transitions and the monitor registry.
@@ -18,8 +18,8 @@ const nextBrowserStatus = ({ currentStatus, cdpConnected }) => {
 
 // Only this registry writes status rows; workers just report over postMessage.
 
-// A worker exit may be a CDP blip, so drop the monitor only once the fleet says
-// the browser is gone. The fleet can be down too, so give up after about 1 hour.
+// A worker exit may be a CDP blip, so drop the monitor only once its VM is
+// confirmed gone. That check can fail too, so give up after about 1 hour.
 const RESTART_BACKOFF = 2000;
 const MAX_RESTART_BACKOFF = 30000;
 const MAX_RESTARTS = 122;
@@ -51,7 +51,7 @@ const writeStatus = ({ workspaceId, browserInstanceId, state }) => {
   });
 };
 
-// A factory so tests can swap the worker, the fleet and the database.
+// A factory so tests can swap the worker, the VM calls and the database.
 const createBrowserMonitors = ({
   createMonitor = createBrowserMonitor,
   cdpUrlFor = ({ browserId }) => browserCdpUrl({ browserId }),

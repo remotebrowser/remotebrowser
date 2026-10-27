@@ -12,7 +12,7 @@ import {
 import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
 import { absoluteOrigin } from '../../origin.js';
 import { listBrowserPages } from '../../cdp.js';
-import { canSuspendBrowsers, listSuspendedPreviews } from '../../fleet.js';
+import { listSuspendedPreviews } from '../../vms.js';
 import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
 
 export const routes = new Hono();
@@ -105,7 +105,6 @@ const statusBarData = (c, browser) => {
     workspace,
     csrfToken: createCsrfToken(c),
     canTerminate,
-    canSuspend: canTerminate && canSuspendBrowsers(),
     // Handle presence isn't enough; status gates the controls too.
     isConnectable: browser.status === 'running' && Boolean(browser.browserHandle),
     statusUrl: `/browsers/${browser.publicId}/status`

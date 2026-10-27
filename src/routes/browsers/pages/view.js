@@ -5,7 +5,7 @@ import { requireWorkspaceRole } from '../../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, updateBrowserInstanceStatus } from '../../../models/browsers.js';
 import { getScreenshot, getSuspendedScreenshot, requestScreenshot } from '../../../screenshots.js';
 import { nextBrowserStatus } from '../../../browser.js';
-import { readSuspendedPreview } from '../../../fleet.js';
+import { readSuspendedPreview } from '../../../vms.js';
 
 export const routes = new Hono();
 

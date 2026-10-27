@@ -2,8 +2,8 @@ import nodemailer from 'nodemailer';
 import { consola } from 'consola/basic';
 import { config } from './config.js';
 
-// Mail servers can be slow under load; bound every step of the SMTP
-// conversation the same way fleet.js bounds its HTTP calls.
+// Mail servers can be slow under load, so bound every step of the SMTP
+// conversation.
 const EMAIL_TIMEOUT = 10000;
 
 /**

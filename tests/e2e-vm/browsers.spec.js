@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { signIn, launchBrowser, useQemuVms } from './helpers.js';
 
 // Its own address, since the specs run in parallel and fetchLatestNonce()
 // takes the newest link for an address (see the note in workspaces.spec.js).
@@ -8,47 +9,25 @@ const NO_JS_COPY_BUTTON_OWNER_EMAIL = 'e2e-browser-no-js-copy-owner@example.com'
 const INSTRUCTION_IDENTITY_OWNER_EMAIL = 'e2e-browser-instruction-identity-owner@example.com';
 const SIDEBAR_OWNER_EMAIL = 'e2e-browser-sidebar-owner@example.com';
 
-const requestSignInLink = async (page, email) => {
-  await page.goto('/signin');
-  await page.getByLabel('Email').fill(email);
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('To sign in, click the link sent to')).toBeVisible();
-};
+// A cold VM boot is slow, more so without KVM.
+const BOOT_TIMEOUT = 150000;
 
-const fetchLatestNonce = async (email) => {
-  const response = await fetch(`http://localhost:3000/dev/nonces?email=${encodeURIComponent(email)}`);
-  const { nonce } = await response.json();
-  return nonce;
-};
+// Real VMs, since the browser page changes once the browser is running.
+useQemuVms();
 
-const signIn = async (page, email) => {
-  await requestSignInLink(page, email);
-  const nonce = await fetchLatestNonce(email);
-  await page.goto(`/continue?nonce=${nonce}`);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-};
-
-// The remotebrowser call is deliberately not awaited (startBrowser in
+// The VM launch is deliberately not awaited (startBrowser in
 // src/routes/browsers/launch.js), so the record shows up before the browser
 // exists and is filled in afterwards. Both halves of that are checked here,
-// which is only possible because the mock server holds its answer back for
-// longer than the redirect takes.
-test('launching a browser answers right away, then records the id the browserfleet server assigned', async ({
-  page
-}) => {
+// which is possible because a VM takes longer to start than the redirect.
+test('launching a browser answers right away, then records the id of its VM', async ({ page }) => {
   await signIn(page, OWNER_EMAIL);
   // Signing in lands on the workspace created at sign-up, with no workspace in the URL.
   await expect(page).toHaveURL('/');
 
-  await page.goto('/browsers/launch');
-  await page.locator('#name').fill('e2e-otter');
-  await page.getByRole('button', { name: 'Launch' }).click();
-
-  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+  await launchBrowser(page, 'e2e-otter');
   await expect(page.locator('article p').filter({ hasText: 'Status:' })).toContainText('starting');
 
-  // Still mid-flight: the page is already rendered while the mock is sitting on
-  // its response, which is what "returns immediately" has to mean. The panel is
+  // Still mid-flight: the page is already rendered while the VM is starting, which is what "returns immediately" has to mean. The panel is
   // always present now and shows the starting placeholder; the instruction
   // block only replaces it once recordProvisionedBrowser() has filled in the
   // internal browser id and handle, so its absence here proves provisioning did
@@ -57,10 +36,9 @@ test('launching a browser answers right away, then records the id the browserfle
   await expect(connectionInfo).toContainText('This browser is starting.');
   expect(await connectionInfo.locator('.instruction-block').count()).toBe(0);
 
-  // The instruction block appearing proves the assigned browser id and handle
-  // were recorded once the mock server answered; the status poll refreshes the
-  // panel.
-  await expect(connectionInfo.locator('.instruction-block')).toBeVisible({ timeout: 15000 });
+  // The instruction block appearing proves the browser id and handle were
+  // recorded once the VM started; the status poll refreshes the panel.
+  await expect(connectionInfo.locator('.instruction-block')).toBeVisible({ timeout: BOOT_TIMEOUT });
 });
 
 // The status line and the controls that act on it share one row at the top of
@@ -74,10 +52,7 @@ test('the sidebar shows the status and the controls on one row, above the previe
   await signIn(page, SIDEBAR_OWNER_EMAIL);
   await expect(page).toHaveURL('/');
 
-  await page.goto('/browsers/launch');
-  await page.locator('#name').fill('e2e-sidebar-otter');
-  await page.getByRole('button', { name: 'Launch' }).click();
-  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+  await launchBrowser(page, 'e2e-sidebar-otter');
 
   const sidebar = page.locator('#browser-sidebar');
   await expect(sidebar.locator('#browser-status')).toContainText('Status:');
@@ -89,7 +64,7 @@ test('the sidebar shows the status and the controls on one row, above the previe
   // Provisioning lands, the status poll flips the page to running, and the
   // controls show up in the sidebar - the connection panel never has them.
   const terminate = sidebar.getByRole('link', { name: 'Terminate' });
-  await expect(terminate).toBeVisible({ timeout: 15000 });
+  await expect(terminate).toBeVisible({ timeout: BOOT_TIMEOUT });
   await expect(page.locator('#browser-connection-info').getByRole('link', { name: 'Terminate' })).toHaveCount(0);
 
   // One row: the status and the controls' boxes overlap vertically, and the
@@ -138,17 +113,13 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   await signIn(page, COPY_BUTTON_OWNER_EMAIL);
   await expect(page).toHaveURL('/');
 
-  await page.goto('/browsers/launch');
-  await page.locator('#name').fill('e2e-copy-otter');
-  await page.getByRole('button', { name: 'Launch' }).click();
-  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+  await launchBrowser(page, 'e2e-copy-otter');
 
-  // Provisioning finishes a little after the redirect (mock-remotebrowser.js
-  // holds its answer back on purpose). The panel is always present now; wait
+  // Provisioning finishes once the VM has started. The panel is always present; wait
   // for the instruction block it swaps in once browser_handle lands, which the
   // page's own status poll picks up - no manual reload needed, and this also
   // exercises the Copy button surviving that outerHTML swap.
-  await expect(page.locator('#browser-connection-info .instruction-block')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#browser-connection-info .instruction-block')).toBeVisible({ timeout: BOOT_TIMEOUT });
 
   const copyButtons = page.locator('.code-copy-button');
   const codeBlocks = page.locator('#browser-connection-info #instruction-block-playwright-js code');
@@ -179,9 +150,7 @@ test("clicking a code sample's Copy button copies its plain-text source to the c
   // The displayed code hides the whole CDP URL, so the visible text differs
   // from what Copy should put on the clipboard. The full JS source, with the
   // real URL and handle, lives in the block's data-copy-value instead.
-  const expectedText = await codeBlocks
-    .first()
-    .evaluate((el) => el.closest('.instruction-block').dataset.copyValue);
+  const expectedText = await codeBlocks.first().evaluate((el) => el.closest('.instruction-block').dataset.copyValue);
   const handle = expectedText.match(/const handle = '([^']+)'/)[1];
   expect(handle).toMatch(/^H\w+$/);
 
@@ -219,15 +188,10 @@ test("the instruction block survives the page's 3s poll instead of being recreat
   await signIn(page, INSTRUCTION_IDENTITY_OWNER_EMAIL);
   await expect(page).toHaveURL('/');
 
-  await page.goto('/browsers/launch');
-  await page.locator('#name').fill('e2e-instruction-identity-otter');
-  await page.getByRole('button', { name: 'Launch' }).click();
-  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
-  const browserInstanceId = new URL(page.url()).pathname.split('/').pop();
-
-  await expect(page.locator('#browser-connection-info')).toBeVisible({ timeout: 10000 });
+  const browserInstanceId = await launchBrowser(page, 'e2e-instruction-identity-otter');
 
   const instruction = page.locator('#instruction-block-playwright-js');
+  await expect(instruction).toBeAttached({ timeout: BOOT_TIMEOUT });
   await instruction.evaluate((el) => {
     el.dataset.e2eIdentity = 'original';
   });
@@ -250,10 +214,7 @@ test('the Copy button stays hidden without JavaScript, even once the browser is 
     await signIn(page, NO_JS_COPY_BUTTON_OWNER_EMAIL);
     await expect(page).toHaveURL('/');
 
-    await page.goto('/browsers/launch');
-    await page.locator('#name').fill('e2e-no-js-otter');
-    await page.getByRole('button', { name: 'Launch' }).click();
-    await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+    await launchBrowser(page, 'e2e-no-js-otter');
 
     // No htmx without JavaScript, so nothing here auto-refreshes the way the
     // other tests rely on - reload and check for the Copy button until the
@@ -264,7 +225,7 @@ test('the Copy button stays hidden without JavaScript, even once the browser is 
           await page.reload();
           return page.locator('.code-copy-button').count();
         },
-        { message: 'the Copy button should appear once the server answers', timeout: 15000 }
+        { message: 'the Copy button should appear once the VM has started', timeout: BOOT_TIMEOUT }
       )
       .toBe(1);
     const copyButtons = page.locator('.code-copy-button');

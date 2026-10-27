@@ -1,7 +1,7 @@
 import { consola } from 'consola/basic';
 import sharp from 'sharp';
 import { WebSocket } from 'ws';
-import { browserCdpUrl, canSaveBrowserScreenshots, saveBrowserScreenshot } from './fleet.js';
+import { browserCdpUrl, saveBrowserScreenshot } from './vms.js';
 import { withCdpSession } from './cdp.js';
 
 // JPEG is much smaller than PNG; the size cap keeps big windows from flooding viewers.
@@ -118,9 +118,7 @@ const encodeFrame = async (frame, width = 0) => {
 
 const publishFrame = (entry, data) => {
   // Chrome sends JPEG, and this is the frame before any resize for viewers.
-  if (canSaveBrowserScreenshots()) {
-    void saveBrowserScreenshot({ browserId: entry.browserId, pageId: entry.pageId, jpeg: data });
-  }
+  void saveBrowserScreenshot({ browserId: entry.browserId, pageId: entry.pageId, jpeg: data });
   lastSeq += 1;
   entry.frame = { seq: lastSeq, data, timestamp: Date.now() };
   for (const wake of entry.waiters) {

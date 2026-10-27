@@ -13,7 +13,7 @@ Then every new browser is a VM started from that snapshot. The app sets the gues
 
 Each VM gets `VM_MEMORY` of memory (default `2G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
-Until the snapshot exists, launching a browser fails, and the app logs why. With `BROWSERFLEET_URL` set, the app runs no VMs, and skips all of this.
+Until the snapshot exists, launching a browser fails, and the app logs why.
 
 ## Inside each VM
 
@@ -52,8 +52,6 @@ A new browser gets a directory `machines/<id>` in the data directory, which only
 - **Suspend**: QEMU saves the VM's memory to `suspended.state` and exits, which frees the memory. The app compresses the file with `zstd`, if the host has it. Just before, the app takes a screenshot of each open page and keeps them in `suspended-previews`, so the browser's page can show them while it is suspended.
 - **Resume**: the app starts QEMU again from the saved state, so the browser carries on with the same pages, and sets the guest clock again. It deletes the screenshots, as the pages are live again.
 - **Terminate**: the app stops QEMU and deletes the directory, so nothing of the session is left behind.
-
-Suspend and resume work only with local VMs, not with an external fleet (`BROWSERFLEET_URL`).
 
 ## Data directory
 

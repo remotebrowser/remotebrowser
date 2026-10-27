@@ -3,9 +3,6 @@ import assert from 'node:assert/strict';
 
 const { describe } = test;
 
-// Set before ./config is first required, since config freezes what it read.
-process.env.BROWSERFLEET_URL = 'http://browserfleet.test';
-
 const { cdpBrowserHandle } = await import('./cdp.js');
 const { recheckApiSessions } = await import('./routes/api/sessions.js');
 const { generateBrowserHandle } = await import('./handle.js');
@@ -87,7 +84,7 @@ const waitUntil = async (condition, timeoutMs = 5000) => {
   return false;
 };
 
-// A stub standing in for the browserfleet server's own CDP endpoint. Records
+// A stub standing in for the browser's own CDP endpoint. Records
 // the path the relay dialed, and hands each accepted socket to the test.
 const startUpstream = (onConnection) =>
   new Promise((resolve) => {
@@ -117,9 +114,8 @@ const startUpstream = (onConnection) =>
 // src/models/browsers_tests.js.
 const defaultLookup = async ({ handle }) => ({ data: handle === HANDLE ? UPSTREAM_ID : null });
 
-// Stands in for the browserfleet server's existence endpoint. Injected so
-// relay tests stay socket-only; the fetch is covered in
-// src/fleet_tests.js.
+// Stands in for the VM existence check. Injected so relay tests stay
+// socket-only; the check is covered in src/vms_tests.js.
 const defaultBrowserExists = async () => ({ data: true });
 
 // Stands in for the API key check and the workspace lookup, which are covered in
@@ -145,7 +141,7 @@ const recordingLookup = (respond = defaultLookup) => {
 };
 
 // The relay under test, on a real HTTP server, with the upstream URL injected so
-// it points at the stub's ephemeral port rather than at config.browserFleetUrl.
+// it points at the stub's ephemeral port rather than at a VM.
 const startRelay = ({
   cdpUrlFor,
   browserIdForHandle = defaultLookup,
@@ -1011,7 +1007,7 @@ describe('listBrowserPages', () => {
     assert.ok(result.error, 'expected a connection failure to be reported as an error');
   });
 
-  test('reports an error rather than dialing when the origin is unconfigured', async () => {
+  test('reports an error rather than dialing when there is no CDP URL', async () => {
     const result = await listBrowserPages({ browserId: 'anything', cdpUrlFor: () => null });
     assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
@@ -1103,7 +1099,7 @@ describe('capturePageScreenshot', () => {
     }
   });
 
-  test('reports an error rather than dialing when the origin is unconfigured', async () => {
+  test('reports an error rather than dialing when there is no CDP URL', async () => {
     const result = await capturePageScreenshot({ browserId: 'anything', pageId: 'page1', cdpUrlFor: () => null });
     assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
@@ -1215,7 +1211,7 @@ describe('navigateBrowserToUrl', () => {
     assert.ok(result.error, 'expected a connection failure to be reported as an error');
   });
 
-  test('reports an error rather than dialing when the origin is unconfigured', async () => {
+  test('reports an error rather than dialing when there is no CDP URL', async () => {
     const result = await navigateBrowserToUrl({
       browserId: 'anything',
       url: 'https://google.com',

@@ -12,13 +12,7 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import {
-  canSetBrowserScreenResolution,
-  canSetBrowserScreenScale,
-  canSetBrowserProxy,
-  canStartBrowser,
-  startBrowser as startBrowserOnFleet
-} from '../../fleet.js';
+import { canStartBrowser, startBrowser as startBrowserVm } from '../../vms.js';
 import { DEFAULT_SCREEN_RESOLUTION, DEFAULT_SCREEN_SCALE, normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
@@ -92,11 +86,8 @@ const renderBrowserLaunch = async (c, data = {}) => {
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
     notReady: false,
-    canSetProxy: canSetBrowserProxy(),
-    canSetScreenResolution: canSetBrowserScreenResolution(),
     screenResolutions: SCREEN_RESOLUTIONS,
     screenResolution: DEFAULT_SCREEN_RESOLUTION_CHOICE,
-    canSetScreenScale: canSetBrowserScreenScale(),
     screenScales: SCREEN_SCALES,
     screenScaleRange: SCREEN_SCALE_RANGE,
     screenScale: DEFAULT_SCREEN_SCALE_CHOICE,
@@ -151,7 +142,7 @@ const startBrowser = async ({
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserOnFleet({ proxy, screenResolution, screenScale });
+  const started = await startBrowserVm({ proxy, screenResolution, screenScale });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -173,7 +164,7 @@ const startBrowser = async ({
     consola.error(`Unable to record the remote browser id for ${browserInstanceId}: ${recorded.error}`);
     return;
   }
-  // Fleet assigned a real browser; mark running now, don't wait for scheduler.
+  // The VM is up; mark it running now, don't wait for scheduler.
   const running = await updateBrowserInstanceStatus({
     workspaceId,
     browserInstanceId,
@@ -225,9 +216,6 @@ const handleLaunch = async (c) => {
       return c.html(renderBrowserLaunchError(c, body, 'Enter the proxy URL, or uncheck Use proxy.'), 400);
     }
   }
-  if (proxy && !canSetBrowserProxy()) {
-    return c.html(renderBrowserLaunchError(c, body, 'This server cannot set a proxy for its browsers.'), 400);
-  }
 
   const choice = parseScreenResolution(body);
   if (!choice) {
@@ -235,12 +223,6 @@ const handleLaunch = async (c) => {
   }
   const { width, height } = choice;
   const screenResolution = choice.value === DEFAULT_SCREEN_RESOLUTION_CHOICE ? null : { width, height };
-  if (screenResolution && !canSetBrowserScreenResolution()) {
-    return c.html(
-      renderBrowserLaunchError(c, body, 'This server cannot set the screen resolution for its browsers.'),
-      400
-    );
-  }
 
   const scaleChoice = parseScreenScale(body);
   if (!scaleChoice) {
@@ -254,9 +236,6 @@ const handleLaunch = async (c) => {
     );
   }
   const screenScale = scaleChoice.value === DEFAULT_SCREEN_SCALE_CHOICE ? null : scaleChoice.scale;
-  if (screenScale && !canSetBrowserScreenScale()) {
-    return c.html(renderBrowserLaunchError(c, body, 'This server cannot set the screen scale for its browsers.'), 400);
-  }
 
   const user = c.get('user');
   const workspace = c.get('workspace');

@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Pin a fleet origin so browserCdpUrl stays deterministic and no container is dialed.
-process.env.BROWSERFLEET_URL = 'http://fleet.test';
-
+const { setVmClient } = await import('./vm/index.js');
 const { getScreenshot, requestScreenshot, stopScreenshots, cleanupScreenshots, cache } =
   await import('./screenshots.js');
 const { consola } = await import('consola/basic');
@@ -11,7 +9,19 @@ const { consola } = await import('consola/basic');
 // Silence the module's capture-failure logs so the suite's output stays readable.
 consola.level = -999;
 
-const CDP_URL = 'ws://fleet.test/api/v1/browsers/br-1/cdp';
+const CDP_URL = 'ws://vm.test/devtools/browser/br-1';
+
+// A fake VM client, so browserCdpUrl stays deterministic and no VM is dialed.
+// Nothing is saved on disk, so every miss goes to a capture, unless a test
+// passes the frames it has saved.
+const fakeVms = (saved = {}) => ({
+  resolveCdpUrl: async (browserId) => `ws://vm.test/devtools/browser/${browserId}`,
+  saveScreenshot: async () => {},
+  readSavedScreenshot: async (browserId, pageId) => saved[`${browserId}:${pageId}`] ?? null,
+  readAnySavedScreenshot: async () => null
+});
+
+test.beforeEach(() => setVmClient(fakeVms()));
 
 // Lets the fire-and-forget capture queued by getScreenshot settle.
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -232,4 +242,42 @@ test('getScreenshot without a page id serves the first page once it is looked up
   await flush();
   assert.deepEqual(s.captureCalls, [{ browserId: 'br-1', pageId: 'p1', url: CDP_URL }]);
   assert.equal((await getScreenshot('br-1')).data.toString(), 'br-1:p1');
+});
+
+// A capture that never ends, so only the disk can answer a miss.
+const neverCapture = () => new Promise(() => {});
+
+test('getScreenshot serves the frame saved on disk on a memory miss, and still queues a capture', async () => {
+  const s = resetCache({ capture: neverCapture });
+  const timestamp = Date.now() - 60000;
+  setVmClient(fakeVms({ 'br-1:PAGE1': { data: Buffer.from('saved'), timestamp } }));
+  const frame = await getScreenshot('br-1', 'PAGE1');
+  assert.equal(frame.data.toString(), 'saved');
+  // The file's time, so the old frame is refreshed like any stale one.
+  assert.equal(frame.timestamp, timestamp);
+  assert.equal(cache.screenshots.get('br-1:PAGE1'), frame, 'the next read comes from memory');
+  await flush();
+  assert.deepEqual(
+    s.captureCalls.map((call) => call.pageId),
+    ['PAGE1']
+  );
+});
+
+test('getScreenshot is null when neither memory nor disk has the page', async () => {
+  resetCache({ capture: neverCapture });
+  assert.equal(await getScreenshot('br-1', 'PAGE1'), null);
+  assert.equal(cache.screenshots.size, 0);
+});
+
+test('getScreenshot prefers a capture that lands while the disk is read', async () => {
+  resetCache({ capture: neverCapture });
+  const fresh = { browserId: 'br-1', pageId: 'PAGE1', data: Buffer.from('fresh'), timestamp: Date.now() };
+  setVmClient({
+    ...fakeVms(),
+    readSavedScreenshot: async () => {
+      cache.screenshots.set('br-1:PAGE1', fresh);
+      return { data: Buffer.from('saved'), timestamp: 0 };
+    }
+  });
+  assert.equal(await getScreenshot('br-1', 'PAGE1'), fresh);
 });

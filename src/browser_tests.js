@@ -136,7 +136,7 @@ test('a failed existence check keeps the worker restarting', async () => {
   assert.equal(registry.isMonitored('br-1'), true);
 });
 
-test('a worker exit is final once the fleet confirms the browser is gone', async () => {
+test('a worker exit is final once its VM is confirmed gone', async () => {
   const { registry, spawned, statuses } = setup({ exists: async () => ({ data: false }) });
   await registry.startBrowserMonitor(monitoredBrowser);
   spawned[0].onExit();
@@ -146,7 +146,7 @@ test('a worker exit is final once the fleet confirms the browser is gone', async
   assert.deepEqual(statuses, ['gone']);
 });
 
-test('start marks a browser gone when it has no CDP URL and the fleet confirms it is gone', async () => {
+test('start marks a browser gone when it has no CDP URL and its VM is confirmed gone', async () => {
   const { registry, spawned, statuses } = setup({ cdpUrlFor: async () => null, exists: async () => ({ data: false }) });
   assert.deepEqual(await registry.startBrowserMonitor(monitoredBrowser), { error: 'CDP_URL_UNAVAILABLE' });
   assert.equal(registry.isMonitored('br-1'), false);

@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
-process.env.BROWSERFLEET_URL = 'http://fleet.test';
+
+// A VM client with no real VMs, so frames are never saved on disk.
+const { setVmClient } = await import('../../../vm/index.js');
+setVmClient({
+  resolveCdpUrl: async (browserId) => `ws://vm.test/devtools/browser/${browserId}`,
+  listSuspendedPreviews: async () => [],
+  readSuspendedPreview: async () => null,
+  saveScreenshot: async () => {},
+  readSavedScreenshot: async () => null,
+  readAnySavedScreenshot: async () => null
+});
 
 const BROWSER_ID = 'br-1';
 

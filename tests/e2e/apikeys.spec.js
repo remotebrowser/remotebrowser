@@ -16,7 +16,7 @@ const signIn = async (page, email) => {
 };
 
 // The app's Permissions-Policy denies clipboard reads, so paste with a real
-// keypress instead, as in browsers.spec.js.
+// keypress instead, as in tests/e2e-vm/browsers.spec.js.
 const pasteClipboardText = async (page) => {
   await page.evaluate(() => {
     const scratch = document.createElement('textarea');
@@ -101,70 +101,4 @@ test('without JavaScript, a new API key shows in full, with no buttons that cann
   } finally {
     await context.close();
   }
-});
-
-const API_OWNER_EMAIL = 'e2e-apikey-api-owner@example.com';
-
-const generateApiKey = async (page) => {
-  await page.goto('/api-keys/generate');
-  await page.getByLabel('Name').fill('e2e-api');
-  await page.getByRole('radio', { name: '1 hour' }).check();
-  await page.getByRole('button', { name: 'Generate' }).click();
-  // Copy's own source, the full key, whether or not it is masked on screen.
-  return page.locator('.api-key-block').getAttribute('data-copy-value');
-};
-
-// The CDP endpoint is a WebSocket upgrade with the key in its headers, which a
-// page cannot send; Node's own WebSocket client (ws) can.
-const openCdp = async (browserId, apiKey) => {
-  const { WebSocket } = await import('ws');
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://localhost:3000/api/v1/browsers/${browserId}/cdp`, {
-      headers: { Authorization: `Bearer ${apiKey}` }
-    });
-    socket.once('open', () => resolve(socket));
-    socket.once('unexpected-response', (_req, res) => reject(new Error(`HTTP ${res.statusCode}`)));
-    socket.once('error', reject);
-  });
-};
-
-test('the REST API launches, lists, queries, drives over CDP, and terminates a browser', async ({ page, request }) => {
-  await signIn(page, API_OWNER_EMAIL);
-  const apiKey = await generateApiKey(page);
-  const headers = { Authorization: `Bearer ${apiKey}` };
-
-  expect((await request.get('/api/v1/browsers')).status()).toBe(401);
-
-  const launched = await request.post('/api/v1/browsers', { headers });
-  expect(launched.status()).toBe(200);
-  const { browser_id: browserId, status } = await launched.json();
-  expect(status).toBe('launched');
-
-  expect(await (await request.get('/api/v1/browsers', { headers })).json()).toContain(browserId);
-  expect(await (await request.get(`/api/v1/browsers/${browserId}`, { headers })).json()).toEqual({
-    browser_id: browserId,
-    status: 'starting',
-    description: ''
-  });
-
-  // The mock fleet holds its answer back, so wait for the browser to be provisioned.
-  await expect
-    .poll(async () => {
-      try {
-        const socket = await openCdp(browserId, apiKey);
-        const reply = await new Promise((resolve) => {
-          socket.once('message', (data) => resolve(JSON.parse(String(data))));
-          socket.send(JSON.stringify({ id: 1, method: 'Target.getTargets' }));
-        });
-        socket.close();
-        return reply;
-      } catch (error) {
-        return String(error);
-      }
-    })
-    .toEqual({ id: 1, result: { targetInfos: [] } });
-
-  const terminated = await request.delete(`/api/v1/browsers/${browserId}`, { headers });
-  expect(await terminated.json()).toEqual({ browser_id: browserId, status: 'terminated' });
-  expect((await request.get(`/api/v1/browsers/${browserId}`, { headers })).status()).toBe(404);
 });

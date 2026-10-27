@@ -140,7 +140,7 @@ test('recordProvisionedBrowser records the internal id, and browserIdForHandle r
   assert.deepEqual(await browserIdForHandle({ handle: browserHandle }), { data: 'internal-1' });
 });
 
-test('recordProvisionedBrowser refuses a fleet id that is not a safe path segment', async () => {
+test('recordProvisionedBrowser refuses an internal id that is not a safe path segment', async () => {
   const { workspaceId, ownerId } = await makeWorkspace();
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -276,7 +276,7 @@ test('browserIdForHandle rejects malformed input and stops resolving a deleted b
   assert.deepEqual(await browserIdForHandle({ handle: browserHandle }), { data: null });
 });
 
-test('listProvisionedBrowserInstances returns only browsers that have a fleet id', async () => {
+test('listProvisionedBrowserInstances returns only browsers that have an internal id', async () => {
   const { workspaceId, ownerId } = await makeWorkspace();
   const provisioned = await launchBrowserInstance({
     workspaceId,

@@ -19,7 +19,7 @@ await setBrowserScreenResolution(browserId, { width: 1366, height: 768 });
 await setBrowserScreenResolution(browserId, null); // the default again
 ```
 
-The width and height are in pixels, from 640×480 to 3840×2160. See `src/vm/screen-resolution.js`. Only local VMs have this; with `BROWSERFLEET_URL`, the calls answer `NOT_SUPPORTED`.
+The width and height are in pixels, from 640×480 to 3840×2160. See `src/vm/screen-resolution.js`.
 
 A new size takes effect at once. The browser keeps running, with its pages and CDP connections, and its window stays maximized on the new screen. `setBrowserScreenResolution` returns once the screen has the new size, so the next screenshot already has it.
 
@@ -43,7 +43,7 @@ await setBrowserScreenScale(browserId, 100);
 await setBrowserScreenScale(browserId, null); // 150% again
 ```
 
-The scale is in percent, from 100% to 300%, in steps of 25%. See `src/vm/screen-scale.js`. Only local VMs have this; with `BROWSERFLEET_URL`, the calls answer `NOT_SUPPORTED`.
+The scale is in percent, from 100% to 300%, in steps of 25%. See `src/vm/screen-scale.js`.
 
 The screen keeps its size in pixels, so at 150%, a 1920×1080 screen shows pages as if it were 1280×720, with sharper text. The browser keeps running, with its pages and CDP connections, and follows the new scale without a restart. In a page, `devicePixelRatio` is the scale, e.g. `1.5`. Nothing outside the guest shows the change, so `setBrowserScreenScale` returns once the guest has the new value, and the browser follows a moment later.
 

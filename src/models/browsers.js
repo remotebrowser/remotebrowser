@@ -2,7 +2,7 @@ import { getDatabase } from '../db/database.js';
 import { generateShortId } from '../id.js';
 import { workspaceExists, repairPersonalWorkspace } from './workspaces.js';
 import { generateBrowserHandle } from '../handle.js';
-import { isWellFormedBrowserId } from '../fleet.js';
+import { isWellFormedBrowserId } from '../vms.js';
 
 const db = () => getDatabase();
 
@@ -108,7 +108,7 @@ const launchBrowserInstance = async ({
   return { error: 'PUBLIC_ID_NOT_UNIQUE' };
 };
 
-// Writes the fleet's internal id onto the instance row, for the owner only. The
+// Writes the internal browser id onto the instance row, for the owner only. The
 // field must still be empty, so a second call (a bug, or a replayed request)
 // can't silently re-point an already-provisioned browser.
 const recordProvisionedBrowser = async ({ workspaceId, browserInstanceId, internalBrowserId, userId }) => {
@@ -198,7 +198,7 @@ const deleteBrowserInstance = async ({ workspaceId, browserInstanceId }) => {
   return { data: r.rowCount > 0 };
 };
 
-// Every browser that has a fleet id, across all workspaces: the monitors to
+// Every browser that has an internal id, across all workspaces: the monitors to
 // restore at startup. Unprovisioned rows have nothing to attach to, and a
 // suspended browser gets its monitor back when it is resumed.
 const listProvisionedBrowserInstances = async () => {

@@ -15,7 +15,7 @@ const LONG_TITLE_BROWSER_ID = 'long-title-browser';
 // A default recognised id used for the happy-path listing tests.
 const DEFAULT_BROWSER_ID = 'default-browser';
 
-// CDP stub starts before config freezes env; it returns getTargets' titles.
+// A CDP stub that answers getTargets with page titles.
 const cdpStub = await new Promise((resolve) => {
   const wss = new WebSocketServer({ port: 0, perMessageDeflate: false, maxPayload: 0 });
   wss.on('connection', (socket, req) => {
@@ -66,7 +66,18 @@ const cdpStub = await new Promise((resolve) => {
   });
   wss.once('listening', () => resolve(wss));
 });
-process.env.BROWSERFLEET_URL = `http://127.0.0.1:${cdpStub.address().port}`;
+// A VM client with no real VMs: every browser's CDP URL leads to the stub,
+// and nothing is saved on disk.
+const { setVmClient } = await import('../../../vm/index.js');
+setVmClient({
+  resolveCdpUrl: async (browserId) => `ws://127.0.0.1:${cdpStub.address().port}/api/v1/browsers/${browserId}/cdp`,
+  browserIsRunning: async () => true,
+  listSuspendedPreviews: async () => [],
+  readSuspendedPreview: async () => null,
+  saveScreenshot: async () => {},
+  readSavedScreenshot: async () => null,
+  readAnySavedScreenshot: async () => null
+});
 after(() => new Promise((resolve) => cdpStub.close(resolve)));
 
 const { createSessionCookie } = await import('../../../auth/session.js');
