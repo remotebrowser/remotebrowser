@@ -1,0 +1,35 @@
+#!/bin/sh
+# Sets the X DPI, through xsettingsd, to the screen scale that the host sets
+# in /etc/remotebrowser/screen-scale (see src/vm/screen-scale.js). Chromium
+# follows a change at once.
+#
+# The file holds one line: the scale in percent, e.g. 150, or "default".
+# Anything else, e.g. a write that the host did not finish, is an error, and
+# the scale stays as it is.
+set -eu
+file=/etc/remotebrowser/screen-scale
+conf=/etc/remotebrowser/xsettingsd.conf
+
+# No file is the image as it was built: 150%, as in src/vm/screen-scale.js.
+scale=150
+if [ -f "$file" ]; then
+  if [ "$(wc -l <"$file")" -ne 1 ] || [ -n "$(tail -c 1 "$file")" ]; then
+    echo "$file must hold exactly one line" >&2
+    exit 1
+  fi
+  line=$(cat "$file")
+  if [ "$line" != default ]; then
+    scale=$line
+  fi
+fi
+if ! printf '%s\n' "$scale" | grep -Eqx '[1-9][0-9]{2}' || [ "$scale" -gt 300 ] || [ $((scale % 25)) -ne 0 ]; then
+  echo "$file does not hold a valid scale" >&2
+  exit 1
+fi
+
+# 100% is 96 DPI. xsettingsd takes the DPI times 1024, which is exact for
+# steps of 25%.
+printf 'Xft/DPI %d\n' $((scale * 98304 / 100)) >"$conf.new"
+mv "$conf.new" "$conf"
+# When xsettingsd is not running, it reads the file when it starts.
+systemctl try-reload-or-restart xsettingsd.service

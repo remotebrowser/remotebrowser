@@ -1,0 +1,48 @@
+#!/bin/sh
+# Sets the Xvnc screen, with xrandr, to the size that the host sets in
+# /etc/remotebrowser/screen-resolution (see src/vm/screen-resolution.js).
+#
+# The file holds one line: the size, e.g. 1920x1080, or "default". Only
+# numbers go into the commands. Anything else, e.g. a write that the host did
+# not finish, is an error, and the screen keeps its size.
+set -eu
+file=/etc/remotebrowser/screen-resolution
+
+# No file is the image as it was built: Full HD, as in src/vm/screen-resolution.js.
+screen=1920x1080
+if [ -f "$file" ]; then
+  if [ "$(wc -l <"$file")" -ne 1 ] || [ -n "$(tail -c 1 "$file")" ]; then
+    echo "$file must hold exactly one line" >&2
+    exit 1
+  fi
+  line=$(cat "$file")
+  if [ "$line" != default ]; then
+    screen=$line
+  fi
+fi
+if ! printf '%s\n' "$screen" | grep -Eqx '[1-9][0-9]{2,3}x[1-9][0-9]{2,3}'; then
+  echo "$file does not hold a valid size" >&2
+  exit 1
+fi
+width=${screen%x*}
+height=${screen#*x}
+
+export DISPLAY=:99
+# Xvnc may still be starting, e.g. when this runs right after it.
+tries=0
+until [ -S /tmp/.X11-unix/X99 ]; do
+  tries=$((tries + 1))
+  if [ "$tries" -gt 100 ]; then
+    echo 'Xvnc is not running' >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+output=$(xrandr | awk '$2 == "connected" { print $1; exit }')
+output=${output:-VNC-0}
+# Xvnc lists only common sizes, so others need a mode of their own.
+if ! xrandr | grep -q "^   $screen "; then
+  xrandr --newmode "$screen" 0 "$width" 0 0 0 "$height" 0 0 0
+  xrandr --addmode "$output" "$screen"
+fi
+xrandr --output "$output" --mode "$screen"

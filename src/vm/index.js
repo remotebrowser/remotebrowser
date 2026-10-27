@@ -16,6 +16,8 @@ import { createVmClient } from './client.js';
 //   cdp.js      the guest's CDP websocket URL
 //   suspend.js  suspend and resume
 //   proxy.js    the browser's upstream proxy
+//   screen-resolution.js  the browser's screen size
+//   screen-scale.js       the browser's screen scale
 //   client.js   the VM client that ties these together
 
 // Reassignable so tests (and future callers) can swap the client; importers read
@@ -27,6 +29,8 @@ const setVmClient = (client) => {
 
 export { createVmClient } from './client.js';
 export { buildQemuArgs, detectAccel, hostArch, imageFiles } from './qemu.js';
+export { DEFAULT_SCREEN_RESOLUTION, normalizeScreenResolution } from './screen-resolution.js';
+export { DEFAULT_SCREEN_SCALE, normalizeScreenScale } from './screen-scale.js';
 export { normalizeProxyUrl, maskProxyUrl } from './proxy.js';
 export { openQmp } from './qmp.js';
 export { isWellFormedBrowserId } from './state.js';

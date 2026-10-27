@@ -39,9 +39,9 @@ const startBrowserOnFleet = async () => {
   return { data: { browserId } };
 };
 
-const startBrowserLocally = async ({ proxy }) => {
+const startBrowserLocally = async ({ proxy, screenResolution, screenScale }) => {
   try {
-    const { browserId } = await vms.launchBrowser({ proxy });
+    const { browserId } = await vms.launchBrowser({ proxy, screenResolution, screenScale });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }
@@ -53,15 +53,17 @@ const startBrowserLocally = async ({ proxy }) => {
 
 /**
  * Starts a browser, either on an external fleet server or in a local VM.
- * Only a local VM takes an upstream `proxy` URL (see src/vm/proxy.js).
- * @param {{proxy?: string | null}} [params]
+ * Only a local VM takes an upstream `proxy` URL (see src/vm/proxy.js), a
+ * `screenResolution`, the screen size (see src/vm/screen-resolution.js), and
+ * a `screenScale` in percent (see src/vm/screen-scale.js).
+ * @param {{proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
-const startBrowser = async ({ proxy = null } = {}) => {
+const startBrowser = async ({ proxy = null, screenResolution = null, screenScale = null } = {}) => {
   if (config.browserFleetUrl) {
-    return proxy ? { error: 'NOT_SUPPORTED' } : startBrowserOnFleet();
+    return proxy || screenResolution || screenScale ? { error: 'NOT_SUPPORTED' } : startBrowserOnFleet();
   }
-  return startBrowserLocally({ proxy });
+  return startBrowserLocally({ proxy, screenResolution, screenScale });
 };
 
 /**
@@ -192,9 +194,11 @@ const stopBrowser = async ({ browserId }) => {
   return config.browserFleetUrl ? stopBrowserOnFleet({ browserId }) : stopBrowserLocally({ browserId });
 };
 
-// The external fleet API has no suspend, resume, or proxy, so only local VMs offer them.
+// The external fleet API has no suspend, resume, proxy, screen resolution, or scale, so only local VMs offer them.
 const canSuspendBrowsers = () => !config.browserFleetUrl;
 const canSetBrowserProxy = canSuspendBrowsers;
+const canSetBrowserScreenResolution = canSuspendBrowsers;
+const canSetBrowserScreenScale = canSuspendBrowsers;
 const canSaveBrowserScreenshots = canSuspendBrowsers;
 
 const checkLocalVm = (browserId) => {
@@ -330,7 +334,7 @@ const readAnyBrowserScreenshot = async ({ browserId }) => {
   }
 };
 
-const changeBrowserProxy = async (browserId, change) => {
+const changeLocalBrowser = async (browserId, change) => {
   const invalid = checkLocalVm(browserId);
   if (invalid) {
     return { error: invalid };
@@ -351,14 +355,38 @@ const changeBrowserProxy = async (browserId, change) => {
  * @param {string} proxy
  * @returns {Promise<{data?: true, error?: string}>}
  */
-const setBrowserProxy = (browserId, proxy) => changeBrowserProxy(browserId, () => vms.setProxy(browserId, proxy));
+const setBrowserProxy = (browserId, proxy) => changeLocalBrowser(browserId, () => vms.setProxy(browserId, proxy));
 
 /**
  * Removes a running browser's upstream proxy, so it connects directly.
  * @param {string} browserId
  * @returns {Promise<{data?: true, error?: string}>}
  */
-const clearBrowserProxy = (browserId) => changeBrowserProxy(browserId, () => vms.clearProxy(browserId));
+const clearBrowserProxy = (browserId) => changeLocalBrowser(browserId, () => vms.clearProxy(browserId));
+
+/**
+ * Sets a running browser's screen size, e.g. `{width: 2560, height: 1440}`,
+ * or the default for null (see src/vm/screen-resolution.js). The browser keeps running,
+ * maximized on the new screen. The external fleet API has no such call, so
+ * only local VMs offer it.
+ * @param {string} browserId
+ * @param {{width: number, height: number} | null} screenResolution
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const setBrowserScreenResolution = (browserId, screenResolution) =>
+  changeLocalBrowser(browserId, () => vms.setScreenResolution(browserId, screenResolution));
+
+/**
+ * Sets a running browser's screen scale in percent, e.g. 150, or the default
+ * for null (see src/vm/screen-scale.js). The browser keeps running, and
+ * follows the new scale a moment later. The external fleet API has no such
+ * call, so only local VMs offer it.
+ * @param {string} browserId
+ * @param {number | null} screenScale
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const setBrowserScreenScale = (browserId, screenScale) =>
+  changeLocalBrowser(browserId, () => vms.setScreenScale(browserId, screenScale));
 
 // Only http/https map to a websocket scheme; anything else is a misconfiguration.
 const CDP_SCHEME_FOR = { 'http:': 'ws:', 'https:': 'wss:' };
@@ -414,6 +442,8 @@ export {
   stopBrowser,
   canSuspendBrowsers,
   canSetBrowserProxy,
+  canSetBrowserScreenResolution,
+  canSetBrowserScreenScale,
   suspendBrowser,
   resumeBrowser,
   listSuspendedPreviews,
@@ -423,5 +453,7 @@ export {
   readBrowserScreenshot,
   readAnyBrowserScreenshot,
   setBrowserProxy,
-  clearBrowserProxy
+  clearBrowserProxy,
+  setBrowserScreenResolution,
+  setBrowserScreenScale
 };

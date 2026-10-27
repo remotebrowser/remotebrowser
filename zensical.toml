@@ -23,6 +23,7 @@ nav = [
     { "Setup" = "setup.md" },
     { "Sandboxing" = "sandboxing.md" },
     { "Proxy" = "proxy.md" },
+    { "Display" = "display.md" },
   ] },
 ]
 

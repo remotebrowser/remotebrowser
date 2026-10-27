@@ -12,6 +12,42 @@ include('/partials/breadcrumbs', it) %>
       <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
       <label for="description">Description</label>
       <input type="text" id="description" name="description" value="<%= it.description %>" maxlength="140" />
+      <% if (it.canSetScreenResolution) { %>
+      <span id="screenResolutionLabel" class="field-label">Screen resolution</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="screenResolutionLabel">
+        <% it.screenResolutions.forEach(function (resolution) { %>
+        <label class="radio-label">
+          <% if (resolution.value === it.screenResolution) { %>
+          <input type="radio" name="screenResolution" value="<%= resolution.value %>" checked />
+          <% } else { %>
+          <input type="radio" name="screenResolution" value="<%= resolution.value %>" />
+          <% } %>
+          <span><%= resolution.label %> <span class="radio-detail">(<%= resolution.detail %>)</span></span>
+        </label>
+        <% }) %>
+      </div>
+      <% } %> <% if (it.canSetScreenScale) { %>
+      <label for="screenScale">Screen scale</label>
+      <div class="field-slider">
+        <input
+          type="range"
+          id="screenScale"
+          name="screenScale"
+          min="<%= it.screenScaleRange.min %>"
+          max="<%= it.screenScaleRange.max %>"
+          step="<%= it.screenScaleRange.step %>"
+          value="<%= it.screenScale %>"
+          list="screenScaleStops"
+          aria-valuetext="<%= it.screenScale %>%"
+        />
+        <output id="screenScaleValue" for="screenScale"><%= it.screenScale %>%</output>
+        <datalist id="screenScaleStops">
+          <% it.screenScales.forEach(function (scale) { %>
+          <option value="<%= scale.value %>" label="<%= scale.label %>"></option>
+          <% }) %>
+        </datalist>
+      </div>
+      <% } %>
       <label class="checkbox-label field-checkbox">
         <% if (it.enableScreenRecording) { %>
         <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" checked />
@@ -56,7 +92,16 @@ include('/partials/breadcrumbs', it) %>
     </form>
   </article>
 </main>
-<% if (it.canSetProxy) { %>
+<% if (it.canSetScreenScale) { %>
+<script nonce="<%= it.scriptNonce %>">
+  const screenScale = document.getElementById('screenScale');
+  const screenScaleValue = document.getElementById('screenScaleValue');
+  screenScale.addEventListener('input', () => {
+    screenScaleValue.value = `${screenScale.value}%`;
+    screenScale.setAttribute('aria-valuetext', `${screenScale.value}%`);
+  });
+</script>
+<% } %> <% if (it.canSetProxy) { %>
 <script nonce="<%= it.scriptNonce %>">
   // The server ignores the URL unless the box is checked. The input starts
   // enabled in markup, so the form still works with JavaScript off.

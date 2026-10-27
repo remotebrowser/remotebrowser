@@ -1,0 +1,7 @@
+[Unit]
+Description=Apply the browser's screen size that the host sets
+# The browser keeps running, and openbox keeps it maximized.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/screen-resolution

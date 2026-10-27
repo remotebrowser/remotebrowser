@@ -1,6 +1,5 @@
-import path from 'node:path';
 import { BlockList } from 'node:net';
-import { delay } from './host.js';
+import { writeGuestFile } from './guest-file.js';
 
 // Each VM's tinyproxy can forward the browser's traffic to an upstream proxy,
 // e.g. for a fixed egress IP address. The host writes the proxy URL, or
@@ -132,46 +131,19 @@ const maskProxyUrl = (proxy) => (proxy ? proxy.replace(/^([a-z0-9]+:\/\/[^:@/]*)
 /**
  * Writes the upstream proxy into the guest, which restarts tinyproxy with it.
  * That also ends the browser's open connections, so none keep the old route.
- * The guest agent may not answer yet right after the VM starts, so this
- * retries.
  * @param {{dir: string, proxy: string | null, connectQmp: Function, attempts?: number}} params
  */
 const writeGuestProxy = async ({ dir, proxy, connectQmp, attempts = 20 }) => {
+  // The guest rejects a file without its closing newline, so a partial
+  // write leaves the browser offline, not going out directly.
   const content = Buffer.from(`${normalizeProxyUrl(proxy) ?? DIRECT}\n`);
-  let lastError;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const agent = await connectQmp(path.join(dir, 'qga.sock'), { agent: true, timeoutMs: 3000 });
-      try {
-        // The guest rejects a file without its closing newline, so a partial
-        // write leaves the browser offline, not going out directly.
-        const handle = await agent.execute('guest-file-open', { path: GUEST_PROXY_FILE, mode: 'w' });
-        try {
-          const { count } = await agent.execute('guest-file-write', {
-            handle,
-            'buf-b64': content.toString('base64')
-          });
-          if (count !== content.length) {
-            throw new Error(`wrote ${count} of ${content.length} bytes`);
-          }
-        } finally {
-          await agent.execute('guest-file-close', { handle });
-        }
-        return;
-      } finally {
-        agent.close();
-      }
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts - 1) {
-        await delay(500);
-      }
-    }
+  try {
+    await writeGuestFile({ dir, file: GUEST_PROXY_FILE, content, connectQmp, attempts });
+  } catch (error) {
+    throw new Error(`unable to set the upstream proxy: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error
+    });
   }
-  throw new Error(
-    `unable to set the upstream proxy: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-    { cause: lastError }
-  );
 };
 
 export { GUEST_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy };

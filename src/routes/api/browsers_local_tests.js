@@ -302,7 +302,9 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
   for (let i = 0; i < 100 && launches.length === 0; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.deepEqual(launches, [{ proxy: 'http://u:p@proxy.example.com:8080' }]);
+  assert.deepEqual(launches, [
+    { proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
+  ]);
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
   assert.deepEqual(stored.data.config, { proxy: 'http://u:****@proxy.example.com:8080' });
 });

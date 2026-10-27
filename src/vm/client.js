@@ -9,6 +9,12 @@ import * as host from './host.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
+import {
+  DEFAULT_SCREEN_RESOLUTION,
+  normalizeScreenResolution,
+  writeGuestScreenResolution
+} from './screen-resolution.js';
+import { normalizeScreenScale, writeGuestScreenScale } from './screen-scale.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
 import {
   readAnyScreenshot,
@@ -21,8 +27,12 @@ import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
 import { createSuspender } from './suspend.js';
+import { readVncScreenSize } from './vnc.js';
 
 const { delay, lastLines } = host;
+
+const screenResolutionLabel = (mode) => (mode ? `${mode.width}x${mode.height}` : 'default');
+const screenScaleLabel = (scale) => (scale ? `${scale}%` : 'default');
 
 const LAUNCH_ATTEMPTS = 3;
 const START_TIMEOUT_MS = 15000;
@@ -52,7 +62,8 @@ const createVmClient = ({
   browserStartTimeoutMs = BROWSER_START_TIMEOUT_MS,
   stopGraceMs = STOP_GRACE_MS,
   suspendTimeoutMs = SUSPEND_TIMEOUT_MS,
-  zstd = 'zstd'
+  zstd = 'zstd',
+  readScreenSize = readVncScreenSize
 } = {}) => {
   const { binary } = ARCHES[arch];
   const { snapshot: snapshotDir, machines: machinesDir } = vmLayout(dataDir);
@@ -139,7 +150,7 @@ const createVmClient = ({
 
   // Starts the VM as the snapshot left it, with the browser already up, on
   // a copy of the snapshot's disk.
-  const startFromSnapshot = async ({ name, dir, saved, proxy }) => {
+  const startFromSnapshot = async ({ name, dir, saved, proxy, screenResolution, screenScale }) => {
     // A reflink where the filesystem has them, else a plain copy.
     await copyFile(
       path.join(snapshotDir, 'overlay.qcow2'),
@@ -166,9 +177,16 @@ const createVmClient = ({
         qmp.close();
       }
       // Before the clock, which starts the browser, so its first request
-      // already takes this route.
+      // already takes this route, and its window fills this screen at this scale.
       if (proxy) {
         await writeGuestProxy({ dir, proxy, connectQmp });
+      }
+      if (screenResolution) {
+        await writeGuestScreenResolution({ dir, screenResolution, connectQmp });
+        await waitForScreenResolution(started.vncHostPort, screenResolution);
+      }
+      if (screenScale) {
+        await writeGuestScreenScale({ dir, screenScale, connectQmp });
       }
       // The guest clock stopped when the snapshot was saved. Setting it also
       // starts the browser, which is not in the snapshot (see
@@ -181,6 +199,26 @@ const createVmClient = ({
       throw error;
     }
     return started;
+  };
+
+  // The guest sets the screen size a moment after the host writes it, and a
+  // change while it sets one would be missed, so wait until it shows.
+  const waitForScreenResolution = async (port, { width, height }) => {
+    const deadline = Date.now() + browserStartTimeoutMs;
+    let seen = 'no answer';
+    while (Date.now() < deadline) {
+      try {
+        const size = await readScreenSize(port, cdpRetry.timeoutMs);
+        if (size.width === width && size.height === height) {
+          return;
+        }
+        seen = `${size.width}x${size.height}`;
+      } catch (error) {
+        seen = error instanceof Error ? error.message : String(error);
+      }
+      await delay(100);
+    }
+    throw new Error(`the screen did not change to ${width}x${height} (${seen})`);
   };
 
   const waitForBrowser = async (port) => {
@@ -205,9 +243,13 @@ const createVmClient = ({
   const canLaunchBrowser = async () => Boolean((await usableSnapshot(await getAccel())).saved);
 
   // `proxy` is an upstream proxy URL for the browser's traffic; see proxy.js.
-  const launchBrowser = async ({ proxy = null } = {}) => {
-    // A bad URL fails here, before a VM starts.
+  // `screenResolution` is the screen size; see screen-resolution.js.
+  // `screenScale` is the screen scale in percent; see screen-scale.js.
+  const launchBrowser = async ({ proxy = null, screenResolution = null, screenScale = null } = {}) => {
+    // A bad URL, screen resolution, or scale fails here, before a VM starts.
     const upstreamProxy = normalizeProxyUrl(proxy);
+    const resolution = normalizeScreenResolution(screenResolution);
+    const scale = normalizeScreenScale(screenScale);
     const browserId = generateShortId('Q', 8);
     const name = vmName(browserId);
     const dir = vmDir(browserId);
@@ -238,13 +280,22 @@ const createVmClient = ({
       'rb.vm_snapshot_dir': snapshotDir
     });
     try {
-      const started = await startFromSnapshot({ name, dir, saved, proxy: upstreamProxy });
+      const started = await startFromSnapshot({
+        name,
+        dir,
+        saved,
+        proxy: upstreamProxy,
+        screenResolution: resolution,
+        screenScale: scale
+      });
       consola.log(`QEMU started browser VM ${name}`, {
         'event.domain': 'qemu',
         'rb.runtime': 'qemu',
         'rb.cdp_port': started.cdpHostPort,
         'rb.vnc_port': started.vncHostPort,
-        'rb.upstream_proxy': Boolean(upstreamProxy)
+        'rb.upstream_proxy': Boolean(upstreamProxy),
+        'rb.screen_resolution': screenResolutionLabel(resolution),
+        'rb.screen_scale': screenScaleLabel(scale)
       });
       return { browserId };
     } catch (error) {
@@ -406,6 +457,54 @@ const createVmClient = ({
     throw lastError;
   };
 
+  // Sets a running browser's screen size, or the image's default for null.
+  // The browser keeps running, and the window manager keeps its window
+  // maximized on the new screen.
+  const setScreenResolution = async (browserId, screenResolution) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    const resolution = normalizeScreenResolution(screenResolution);
+    const name = vmName(browserId);
+    const dir = vmDir(browserId);
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${name} is not running`);
+    }
+    const vncPort = await readPort(dir, 'vnc-port');
+    if (!Number.isInteger(vncPort)) {
+      throw new Error(`VNC port not found for ${name}`);
+    }
+    await writeGuestScreenResolution({ dir, screenResolution: resolution, connectQmp });
+    await waitForScreenResolution(vncPort, resolution ?? DEFAULT_SCREEN_RESOLUTION);
+    consola.log(`QEMU set the screen resolution of browser VM ${name}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.screen_resolution': screenResolutionLabel(resolution)
+    });
+  };
+
+  // Sets a running browser's screen scale in percent, or the image's default
+  // for null. The browser keeps running, and follows the new scale a moment
+  // after this returns: unlike the screen size, nothing outside the guest
+  // shows it.
+  const setScreenScale = async (browserId, screenScale) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    const scale = normalizeScreenScale(screenScale);
+    const name = vmName(browserId);
+    const dir = vmDir(browserId);
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${name} is not running`);
+    }
+    await writeGuestScreenScale({ dir, screenScale: scale, connectQmp });
+    consola.log(`QEMU set the screen scale of browser VM ${name}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.screen_scale': screenScaleLabel(scale)
+    });
+  };
+
   return {
     runtime: 'qemu',
     arch,
@@ -425,6 +524,8 @@ const createVmClient = ({
     readAnySavedScreenshot,
     setProxy,
     clearProxy,
+    setScreenResolution,
+    setScreenScale,
     resolveCdpUrl
   };
 };
