@@ -32,7 +32,7 @@ The VM is a small Debian 13 system with systemd. Its services, all in `vm/files`
 | `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot    |
 | `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                     |
 
-The browser has a display rather than running headless. The VM has no GPU, so WebGL renders in software, and complex 3D pages run slowly. Chromium reads its flags from `/etc/remotebrowser/browser.env`. It does not start without `nftables` and `tinyproxy`.
+The browser has a display rather than running headless. The VM has no GPU, and the browser does not render in software, so WebGL and WebGPU are not available. Chromium reads its flags from `/etc/remotebrowser/browser.env`. It does not start without `nftables` and `tinyproxy`.
 
 To change what runs in the VM, edit `vm/Dockerfile` or `vm/files`. The app builds the image again at its next start.
 
