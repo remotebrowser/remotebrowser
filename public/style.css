@@ -630,6 +630,42 @@ a.btn-secondary {
   min-width: 0;
 }
 
+/* A phone is too narrow for a label column, so each label sits above its field. */
+@media (max-width: 40rem) {
+  .page-form {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .page-form label,
+  .page-form .field-label {
+    text-align: left;
+  }
+
+  .page-form input + label,
+  .page-form input + .field-label,
+  .page-form .field-radios + label {
+    margin-top: 0.5rem;
+  }
+
+  .page-form .field-checkbox,
+  .page-form .field-checkbox-input,
+  .page-form button {
+    grid-column: 1;
+    margin-top: 0.5rem;
+  }
+
+  .page-form .field-radios + .field-checkbox,
+  .page-form .field-slider + .field-checkbox {
+    margin-top: 1.5rem;
+  }
+
+  .page-form .field-checkbox-input {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 .icon-caret-right {
   display: inline-block;
   margin-left: 0.25em;
