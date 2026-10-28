@@ -228,10 +228,13 @@ test('POST /api/v1/browsers answers 429 with Retry-After once the workspace is o
     'INSERT INTO browser_launches(workspace_id,user_id,launched_timestamp) SELECT $1,$2,$3 FROM generate_series(1,$4)',
     [workspaceId, userId, Date.now() - 1000, MAX_BROWSER_LAUNCHES_PER_MINUTE]
   );
+  // Without this, a host with no VM snapshot (like CI) answers 503 first.
+  const calls = fakeVms();
   const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
   assert.equal(res.status, 429);
   assert.match(res.headers.get('retry-after'), /^\d+$/);
   assert.match((await res.json()).error, /^This workspace launched too many browsers in the last minute\./);
+  assert.ok(!calls.includes('launchBrowser'));
 });
 
 const statusOf = async (workspaceId, publicId) =>
