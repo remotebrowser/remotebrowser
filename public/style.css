@@ -2296,15 +2296,18 @@ footer {
   }
 }
 
+/* The list and the progress label share one cell, so the label takes the
+   whole width of the list during a run. */
 .playground-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.5rem;
 }
 
 .playground-toolbar select {
-  flex: 1;
+  grid-area: 1 / 1;
   min-width: 0;
   font: inherit;
   padding: 0.3rem;
@@ -2313,17 +2316,21 @@ footer {
   border: 1px solid var(--border-strong);
 }
 
-/* Stays on the right of the drop-down. */
 .playground-toolbar button {
-  margin-left: auto;
+  grid-area: 1 / 2;
 }
 
 /* Out of sight during a run, but still taking its space. */
 .playground-toolbar select.playground-template-running {
-  opacity: 0;
+  visibility: hidden;
 }
 
-.playground-elapsed {
+.playground-progress {
+  grid-area: 1 / 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.85rem;
   color: var(--text-muted);
   white-space: nowrap;
@@ -2399,11 +2406,4 @@ footer {
 
 .playground-result::before {
   content: '← ';
-}
-
-.playground-image {
-  display: block;
-  max-width: 100%;
-  margin: 0.5rem 0;
-  border: 1px solid var(--border);
 }

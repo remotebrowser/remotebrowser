@@ -260,12 +260,6 @@ class Page {
   waitForTimeout(ms) {
     return sleep(ms);
   }
-
-  async screenshot({ fullPage = false } = {}) {
-    const { data } = await this.cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: fullPage });
-    post({ type: 'image', data });
-    return data;
-  }
 }
 
 const openPage = async (connection) => {

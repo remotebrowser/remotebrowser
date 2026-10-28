@@ -10,6 +10,7 @@ import { mountCdpRelay } from './cdp.js';
 import { stopScreenshots } from './screenshots.js';
 import { stopScreencasts } from './screencast.js';
 import { browserMonitors } from './browser.js';
+import { canGenerateCode, startHarness, stopHarness, warmUpChecker } from './llm/harness.js';
 
 // Opens the database and runs migrations in every environment: Postgres when
 // DATABASE_URL is set, PGlite otherwise.
@@ -66,6 +67,9 @@ void browserMonitors
     });
   });
 
+// Every playground run goes through the check, so warm it up even without an LLM.
+void (canGenerateCode() ? startHarness() : warmUpChecker());
+
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     consola.error(`SERVER port ${config.port} is in use. Stop the other process or set PORT.`, {
@@ -90,6 +94,7 @@ const shutdown = async (signal) => {
     cdpRelay.close(),
     stopScreenshots(),
     stopScreencasts(),
+    stopHarness(),
     browserMonitors.stopAllBrowserMonitors(),
     shutdownTelemetry(),
     closeDatabase()

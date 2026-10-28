@@ -14,21 +14,26 @@ import { absoluteOrigin } from '../../origin.js';
 import { listBrowserPages } from '../../cdp.js';
 import { listSuspendedPreviews } from '../../vms.js';
 import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
+import { isLlmWorking } from '../../llm/harness.js';
 
 export const routes = new Hono();
 
 // Starting points for the editor. The code runs in the visitor's own tab
-// (public/playground-worker.js), not on this server.
+// (public/playground-worker.js), not on this server. While the LLM works, the
+// list offers the task in natural language instead (src/llm/harness.js). Raw CDP
+// has none, since the LLM may not use page.cdp, so it stays as code.
 const PLAYGROUND_TEMPLATES = [
   {
     key: 'title',
     label: 'Get the page title',
+    text: 'Go to phys.org and print the page title',
     code: `await page.goto('https://phys.org');
 console.log('Title:', await page.title());`
   },
   {
     key: 'headlines',
     label: 'Extract headlines',
+    text: 'Print the first 7 headlines from text.npr.org',
     code: `await page.goto('https://text.npr.org/');
 const headlines = await page.$$eval('.topic-container a.topic-title', (links) =>
   links.map((link) => link.textContent.trim())
@@ -38,6 +43,7 @@ headlines.slice(0, 7).map((headline, index) => console.log(\`\${index + 1}. \${h
   {
     key: 'search',
     label: 'Fill and submit a form',
+    text: 'Search Wikipedia for "headless browser" and show the top 5 results',
     code: `await page.goto('https://en.wikipedia.org/wiki/Special:Search');
 await page.fill('#ooui-php-1', 'headless browser');
 await page.press('#ooui-php-1', 'Enter');
@@ -55,6 +61,12 @@ console.log(results);`
   returnByValue: true
 });
 console.log(result.value);`
+  },
+  {
+    key: 'custom',
+    label: 'Custom task',
+    text: 'Navigate to Google',
+    code: `await page.goto('https://www.google.com');`
   }
 ];
 
@@ -129,6 +141,8 @@ const renderBrowser = async (c, { error = null } = {}) => {
   // payload - carries the real one.
   const fullInstruction = cdpUrl ? fullInstructionSource(cdpUrl, handle) : null;
   const pages = await listPreviewPages(browser);
+  // Read once, so the preamble and the examples agree.
+  const naturalLanguage = isLlmWorking();
   return eta.render('browsers/show', {
     ...statusBarData(c, browser),
     email: user.email,
@@ -145,7 +159,12 @@ const renderBrowser = async (c, { error = null } = {}) => {
     instructionPreamble: isConnectable ? INSTRUCTION_PREAMBLE : null,
     // Only the playground's worker reads it; the Copy payload above has it too.
     cdpUrl,
-    templates: PLAYGROUND_TEMPLATES,
+    naturalLanguage,
+    templates: PLAYGROUND_TEMPLATES.map(({ key, label, text, code }) => ({
+      key,
+      label,
+      example: naturalLanguage && text ? text : code
+    })),
     pages,
     suspendedPages: await listSuspendedPages(browser),
     // Set by secureHeaders first; the inline script reads it back for CSP.

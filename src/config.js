@@ -91,6 +91,13 @@ const buildConfig = (env) => {
     errors.push('TRUSTED_PROXY_HOPS must be a non-negative integer, e.g. 1 behind a single reverse proxy');
   }
 
+  // Optional OpenAI-compatible LLM service, e.g. https://api.openai.com/v1.
+  // Trailing slashes are stripped so src/llm/chat.js never doubles the API path.
+  const llmApiBaseUrl = (env.LLM_API_BASE_URL || '').replace(/\/+$/, '') || null;
+  // Optional, since a local LLM server often needs no key.
+  const llmApiKey = env.LLM_API_KEY || null;
+  const llmChatModel = env.LLM_CHAT_MODEL || null;
+
   const publicOrigin = PUBLIC_ORIGIN || null;
   // The full sender address, e.g. login@example.com. It is configured rather
   // than derived from PUBLIC_ORIGIN, since the sending domain may differ from
@@ -138,7 +145,10 @@ const buildConfig = (env) => {
     smtpUser,
     smtpPassword,
     mailConfigured,
-    trustedProxyHops
+    trustedProxyHops,
+    llmApiBaseUrl,
+    llmApiKey,
+    llmChatModel
   });
 
   return { config, errors };
