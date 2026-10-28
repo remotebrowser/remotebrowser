@@ -2,9 +2,8 @@
 in src/routes/browsers/show.js). It swaps only then, so a poll never drops the focus or the Resuming spinner. A
 suspended browser shows none: the browser page has Resume in a panel of its own instead. */ %>
 <div id="browser-actions" class="browser-actions">
-  <% if (it.canTerminate && it.isConnectable) { %> <% if (it.canSuspend) { %>
+  <% if (it.canTerminate && it.isConnectable) { %>
   <a href="/browsers/<%= it.browser.publicId %>/suspend" class="btn-secondary">Suspend</a>
-  <% } %>
   <a href="/browsers/<%= it.browser.publicId %>/terminate" class="btn-danger">Terminate</a>
   <% } %>
 </div>

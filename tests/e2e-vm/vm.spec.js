@@ -1,47 +1,24 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
+import {
+  machinesDir,
+  listBrowserVms,
+  qemuPid,
+  isAlive,
+  signIn,
+  launchBrowser,
+  terminateBrowser,
+  useQemuVms
+} from './helpers.js';
 
 // End-to-end against real QEMU VMs. Each test drives the UI to launch a
 // browser, then inspects the VM state dir and the QEMU process directly to
 // prove Chromium is actually running (and, for the CDP test, actually answering).
-// Needs QEMU on PATH and a VM image build from vm/scripts/build.js, which
-// playwright.config.js links into this run's own VM data dir.
-
-const dataDir = process.env.E2E_VM_DATA_DIR || '';
-const machinesDir = join(dataDir, 'machines');
-const qemu = process.arch === 'arm64' ? 'qemu-system-aarch64' : 'qemu-system-x86_64';
-const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-
-const listDir = (dir) => {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-};
-
-// Checked once, so a host without QEMU or the image skips instead of failing.
-let usable;
-const qemuUsable = () => {
-  if (usable === undefined) {
-    try {
-      execFileSync(qemu, ['--version'], { stdio: 'ignore', timeout: 20000 });
-      usable = Boolean(dataDir) && listDir(join(dataDir, 'images')).some((name) => name.startsWith(`${arch}-`));
-    } catch {
-      usable = false;
-    }
-  }
-  return usable;
-};
-
-const listBrowserVms = () => listDir(machinesDir);
-
-const qemuPid = (name) => Number.parseInt(readFileSync(join(machinesDir, name, 'qemu.pid'), 'utf8'), 10);
+// See helpers.js for what the host needs.
 
 // The first bytes a VNC server sends are its RFB protocol version.
 const rfbGreeting = (port) =>
@@ -54,36 +31,6 @@ const rfbGreeting = (port) =>
     socket.once('timeout', () => socket.destroy(new Error('no RFB greeting')));
     socket.once('error', reject);
   });
-
-const isAlive = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const requestSignInLink = async (page, email) => {
-  await page.goto('/signin');
-  await page.getByLabel('Email').fill(email);
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('To sign in, click the link sent to')).toBeVisible();
-};
-
-// Relative to the project's baseURL, so it talks to the app that runs VMs.
-const fetchLatestNonce = async (page, email) => {
-  const response = await page.request.get(`/dev/nonces?email=${encodeURIComponent(email)}`);
-  const { nonce } = await response.json();
-  return nonce;
-};
-
-const signIn = async (page, email) => {
-  await requestSignInLink(page, email);
-  const nonce = await fetchLatestNonce(page, email);
-  await page.goto(`/continue?nonce=${nonce}`);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-};
 
 // The guest cannot reach the host's loopback, but it can reach the host's
 // other addresses, as it would a proxy elsewhere on the network.
@@ -104,48 +51,8 @@ const startUpstreamProxy = (address) =>
     server.listen(0, address, () => resolve({ seen, port: server.address().port, close: () => server.close() }));
   });
 
-// Launches through the real UI and returns the new browser's public id.
-const launchBrowser = async (page, name, { proxy } = {}) => {
-  await page.goto('/browsers/launch');
-  await page.locator('#name').fill(name);
-  if (proxy) {
-    await page.getByLabel('Use proxy').check();
-    await page.getByLabel('Proxy URL').fill(proxy);
-  }
-  await page.getByRole('button', { name: 'Launch' }).click();
-  await expect(page).toHaveURL(/\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
-  return new URL(page.url()).pathname.split('/').pop();
-};
-
-const terminateBrowser = async (page, publicId, name) => {
-  await page.goto(`/browsers/${publicId}/terminate`);
-  await page.locator('#name').fill(name);
-  await page.getByRole('button', { name: 'Terminate' }).click();
-  await expect(page.getByText(`${name} is terminated`)).toBeVisible({ timeout: 60000 });
-};
-
 test.describe('real QEMU VMs', () => {
-  // The app saves its snapshot in the background after it starts, and new
-  // browsers start only from it.
-  test.beforeAll(async () => {
-    test.skip(!qemuUsable(), `requires ${qemu} and a VM image build for ${arch} on this host`);
-    test.setTimeout(300000);
-    await expect
-      .poll(() => existsSync(join(dataDir, 'snapshot', 'machine.json')), { timeout: 280000, intervals: [1000] })
-      .toBe(true);
-  });
-
-  // Safety net: the happy path terminates through the UI, but a failing
-  // assertion must not leak a running VM.
-  test.afterEach(() => {
-    for (const name of listBrowserVms()) {
-      try {
-        process.kill(qemuPid(name), 'SIGKILL');
-      } catch {
-        // Already gone.
-      }
-    }
-  });
+  useQemuVms();
 
   test('launching a browser really starts a Chromium VM, and terminating it removes it', async ({ page }) => {
     await signIn(page, 'e2e-qemu-lifecycle@example.com');
@@ -229,7 +136,9 @@ test.describe('real QEMU VMs', () => {
     try {
       await signIn(page, 'e2e-qemu-proxy@example.com');
       const browserName = 'e2e-qemu-proxied-otter';
-      const publicId = await launchBrowser(page, browserName, { proxy: `http://alice:s3cret@${address}:${upstream.port}` });
+      const publicId = await launchBrowser(page, browserName, {
+        proxy: `http://alice:s3cret@${address}:${upstream.port}`
+      });
       await expect(page.locator('#browser-status')).toContainText('running', { timeout: 150000 });
       // The browser opens a search engine at launch, over HTTPS.
       await expect

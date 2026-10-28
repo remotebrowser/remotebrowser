@@ -11,7 +11,7 @@ import {
 import { generateBrowserName, browsersReady, launchRefusal, startBrowser } from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
-import { canSuspendBrowsers, canSetBrowserProxy, setBrowserProxy, clearBrowserProxy } from '../../fleet.js';
+import { setBrowserProxy, clearBrowserProxy } from '../../vms.js';
 import { normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
 
 // Documented in docs/api.md. A browser_id is the browser's public id, and a key
@@ -62,9 +62,6 @@ const readSettings = async (c) => {
     return { response: c.json({ error: `Unknown setting: ${unknown}.` }, 400) };
   }
   if ('proxy' in body) {
-    if (!canSetBrowserProxy()) {
-      return { response: c.json({ error: 'This server cannot set a proxy for its browsers.' }, 501) };
-    }
     if (body.proxy !== null && typeof body.proxy !== 'string') {
       return { response: c.json({ error: 'The proxy must be a URL, or null to connect directly.' }, 400) };
     }
@@ -154,10 +151,6 @@ routes.delete('/:browserId', async (c) => {
 
 // Loads a browser to suspend or resume, or returns the response that says why not.
 const loadManagedBrowser = async (c) => {
-  // Only local VMs can be suspended; an external fleet has no such call.
-  if (!canSuspendBrowsers()) {
-    return { response: c.json({ error: 'This server cannot suspend or resume browsers.' }, 501) };
-  }
   const browser = await loadBrowser(c);
   if (browser.error) return { response: c.json({ error: 'Unable to read the browser. Please try again.' }, 503) };
   if (!browser.data) return { response: c.json(NOT_FOUND, 404) };

@@ -1,11 +1,5 @@
 import { consola } from 'consola/basic';
-import {
-  browserCdpUrl,
-  canSaveBrowserScreenshots,
-  readAnyBrowserScreenshot,
-  readBrowserScreenshot,
-  saveBrowserScreenshot
-} from './fleet.js';
+import { browserCdpUrl, readAnyBrowserScreenshot, readBrowserScreenshot, saveBrowserScreenshot } from './vms.js';
 import { listBrowserPages } from './cdp.js';
 import { createScreenshotPool } from './workers/screenshot.js';
 
@@ -45,9 +39,7 @@ const capturePage = async (browserId, pageId, url) => {
     data: shot.data,
     timestamp: Date.now()
   });
-  if (canSaveBrowserScreenshots()) {
-    void saveBrowserScreenshot({ browserId, pageId, jpeg: shot.data });
-  }
+  void saveBrowserScreenshot({ browserId, pageId, jpeg: shot.data });
   return { ok: true };
 };
 
@@ -103,9 +95,6 @@ const resolveFirstPage = (browserId) => {
 // picture before its first capture. It keeps the file's time, so a stale one
 // is refreshed as usual.
 const readSavedFrame = async (browserId, pageId) => {
-  if (!canSaveBrowserScreenshots()) {
-    return null;
-  }
   const saved = await readBrowserScreenshot({ browserId, pageId });
   if (!saved) {
     return null;

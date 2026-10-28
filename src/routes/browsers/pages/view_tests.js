@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
-// refreshPage resolves the CDP URL through browserCdpUrl, which needs an http
-// origin; the injected fake pool ignores the URL, so nothing is dialed.
-process.env.BROWSERFLEET_URL = 'http://fleet.test';
+
+// A VM client with no real VMs. refreshPage resolves a CDP URL through it,
+// which the injected fake pool ignores, so nothing is dialed. Nothing is
+// saved on disk.
+const { setVmClient } = await import('../../../vm/index.js');
+setVmClient({
+  resolveCdpUrl: async (browserId) => `ws://vm.test/devtools/browser/${browserId}`,
+  listSuspendedPreviews: async () => [],
+  readSuspendedPreview: async () => null,
+  saveScreenshot: async () => {},
+  readSavedScreenshot: async () => null,
+  readAnySavedScreenshot: async () => null
+});
 
 const FAKE_JPEG = Buffer.from('not a real jpeg, just something to round-trip', 'utf8');
 const BROWSER_ID = 'br-1';

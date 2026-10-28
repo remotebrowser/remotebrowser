@@ -11,7 +11,7 @@ import {
   canTerminateBrowser
 } from '../../middleware/workspace.js';
 import { transitionBrowserInstanceStatus } from '../../models/browsers.js';
-import { canSuspendBrowsers, suspendBrowser, resumeBrowser } from '../../fleet.js';
+import { suspendBrowser, resumeBrowser } from '../../vms.js';
 import { browserMonitors } from '../../browser.js';
 import { captureAllPages } from '../../screenshots.js';
 import { loadBrowser } from './terminate.js';
@@ -35,8 +35,7 @@ const capturePreviews = (browserId) =>
 // second request for the same VM meanwhile would fight over its QEMU.
 const busy = new Set();
 
-// Shared with the REST API. The caller checks canSuspendBrowsers and
-// canTerminateBrowser first. NOT_RUNNING covers a browser busy being suspended.
+// Shared with the REST API. The caller checks canTerminateBrowser first. NOT_RUNNING covers a browser busy being suspended.
 const suspendBrowserInstance = async ({ workspaceId, browser }) => {
   const { browserInstanceId, internalBrowserId } = browser;
   if (browser.status !== 'running' || busy.has(internalBrowserId)) {
@@ -126,8 +125,7 @@ const renderSuspend = async (c, data = {}) => {
 // Loads the browser for a suspend or resume, or answers why not.
 const loadManagedBrowser = async (c) => {
   const browser = await loadBrowser(c);
-  // With an external fleet there is nothing to suspend with, as if the page did not exist.
-  if (!browser || !canSuspendBrowsers()) {
+  if (!browser) {
     return { response: c.text('Not found', 404) };
   }
   if (!canTerminateBrowser(browser, c.get('workspace'), c.get('user'))) {

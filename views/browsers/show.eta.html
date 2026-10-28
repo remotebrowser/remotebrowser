@@ -92,7 +92,7 @@ include('/partials/code-copy', it) %>
         <p>This browser has been stopped and can no longer be reached.</p>
         <% } else if (it.browser.status === 'suspended') { %>
         <section id="suspended-panel" class="browser-panel">
-          <% if (it.canSuspend) { %>
+          <% if (it.canTerminate) { %>
           <div class="browser-panel-action busy-on-request">
             <form
               method="post"
@@ -111,7 +111,7 @@ include('/partials/code-copy', it) %>
           <% } %>
           <p>
             This browser is suspended. Resume it to pick up where you left off. Until then, remote access is
-            unavailable.<% if (!it.canSuspend) { %> Only its creator or a workspace admin can resume it.<% } %>
+            unavailable.<% if (!it.canTerminate) { %> Only its creator or a workspace admin can resume it.<% } %>
           </p>
         </section>
         <% /* What comes back on resume, dimmed and out of reach until then. */ %>

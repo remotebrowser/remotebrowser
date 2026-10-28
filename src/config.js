@@ -83,11 +83,6 @@ const buildConfig = (env) => {
     errors.push('DATABASE_URL must be a postgres connection string, e.g. postgres://user:password@host:5432/dbname');
   }
 
-  // Optional external fleet origin. When unset, the app runs its own Chromium
-  // VMs with QEMU (src/vm/). Trailing slashes are stripped so src/fleet.js
-  // never appends a doubled API path.
-  const BROWSERFLEET_URL = (env.BROWSERFLEET_URL || '').replace(/\/+$/, '');
-
   // Reverse proxies in front of the app, e.g. nginx, a load balancer, or a CDN.
   // X-Forwarded-For is client-controlled, so only this many entries from the
   // right are trusted.
@@ -113,7 +108,6 @@ const buildConfig = (env) => {
   // Idle expiry slides with activity; the absolute cap never does, so a busy leaked cookie still dies.
   const sessionTtlSeconds = 14 * 24 * 60 * 60;
   const sessionIdleTtlSeconds = 24 * 60 * 60;
-  const browserFleetUrl = BROWSERFLEET_URL || null;
   // Local dev/test only, when DATABASE_URL is unset; PGlite is not installed in production.
   const pgliteDataDir = env.PGLITE_DATA_DIR || path.join(__dirname, '..', '.data', 'pglite');
   const databaseUrl = DATABASE_URL || null;
@@ -135,7 +129,6 @@ const buildConfig = (env) => {
     sessionNotBefore,
     sessionTtlSeconds,
     sessionIdleTtlSeconds,
-    browserFleetUrl,
     pgliteDataDir,
     databaseUrl,
     databaseSsl,

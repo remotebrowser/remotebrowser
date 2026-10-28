@@ -12,7 +12,6 @@ include('/partials/breadcrumbs', it) %>
       <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
       <label for="description">Description</label>
       <input type="text" id="description" name="description" value="<%= it.description %>" maxlength="140" />
-      <% if (it.canSetScreenResolution) { %>
       <span id="screenResolutionLabel" class="field-label">Screen resolution</span>
       <div class="field-radios" role="radiogroup" aria-labelledby="screenResolutionLabel">
         <% it.screenResolutions.forEach(function (resolution) { %>
@@ -26,7 +25,6 @@ include('/partials/breadcrumbs', it) %>
         </label>
         <% }) %>
       </div>
-      <% } %> <% if (it.canSetScreenScale) { %>
       <label for="screenScale">Screen scale</label>
       <div class="field-slider">
         <input
@@ -47,7 +45,6 @@ include('/partials/breadcrumbs', it) %>
           <% }) %>
         </datalist>
       </div>
-      <% } %>
       <label class="checkbox-label field-checkbox">
         <% if (it.enableScreenRecording) { %>
         <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" checked />
@@ -62,7 +59,6 @@ include('/partials/breadcrumbs', it) %>
         <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" />
         <% } %> Block ads and trackers
       </label>
-      <% if (it.canSetProxy) { %>
       <div class="field-checkbox-input">
         <label class="checkbox-label">
           <% if (it.useProxy) { %>
@@ -84,7 +80,7 @@ include('/partials/breadcrumbs', it) %>
           autocapitalize="off"
         />
       </div>
-      <% } %> <% if (it.notReady) { %>
+      <% if (it.notReady) { %>
       <button type="submit" class="btn-primary" disabled>Launch</button>
       <% } else { %>
       <button type="submit" class="btn-primary">Launch</button>
@@ -92,7 +88,6 @@ include('/partials/breadcrumbs', it) %>
     </form>
   </article>
 </main>
-<% if (it.canSetScreenScale) { %>
 <script nonce="<%= it.scriptNonce %>">
   const screenScale = document.getElementById('screenScale');
   const screenScaleValue = document.getElementById('screenScaleValue');
@@ -101,7 +96,6 @@ include('/partials/breadcrumbs', it) %>
     screenScale.setAttribute('aria-valuetext', `${screenScale.value}%`);
   });
 </script>
-<% } %> <% if (it.canSetProxy) { %>
 <script nonce="<%= it.scriptNonce %>">
   // The server ignores the URL unless the box is checked. The input starts
   // enabled in markup, so the form still works with JavaScript off.
@@ -118,4 +112,3 @@ include('/partials/breadcrumbs', it) %>
     }
   });
 </script>
-<% } %>

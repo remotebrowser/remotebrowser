@@ -4,8 +4,6 @@ import { Hono } from 'hono';
 import { consola } from 'consola/basic';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
-// Set before ./launch pulls in ../../config, which freezes what it read.
-process.env.BROWSERFLEET_URL = 'http://browserfleet.test';
 
 const { generateBrowserName, startBrowser, INITIAL_URLS } = await import('./launch.js');
 
@@ -34,8 +32,32 @@ const {
   listBrowserInstancesByWorkspace
 } = await import('../../models/browsers.js');
 const { closeDatabase } = await import('../../db/database.js');
+const { setVmClient, createVmClient } = await import('../../vm/index.js');
 
-test.afterEach(async () => closeDatabase());
+// A VM client with no real VMs: a launch gets `foobar`, which has no CDP URL,
+// so nothing is ever dialed. It records the options of each launch.
+const fakeVms = ({
+  launchBrowser = async () => ({ browserId: 'foobar' }),
+  canLaunchBrowser = async () => true
+} = {}) => {
+  const launches = [];
+  setVmClient({
+    canLaunchBrowser,
+    launchBrowser: async (options) => {
+      launches.push(options);
+      return launchBrowser(options);
+    },
+    browserIsRunning: async () => true,
+    resolveCdpUrl: async () => null
+  });
+  return launches;
+};
+
+test.beforeEach(() => fakeVms());
+test.afterEach(async () => {
+  setVmClient(createVmClient());
+  await closeDatabase();
+});
 
 const setupApp = () => {
   const app = new Hono();
@@ -88,16 +110,6 @@ const makeLaunchedInstance = async ({ workspaceId }) => {
   return launched.data.browserInstanceId;
 };
 
-// This app has one real remaining HTTP call: BrowserFleet's /api/v1/browsers,
-// the third-party service that actually provisions the browser. Everything
-// else in these tests runs against a real, in-memory PGlite database.
-const REMOTEBROWSER_CREATE = /\/api\/v1\/browsers$/;
-
-const REMOTEBROWSER_ROUTE = {
-  match: REMOTEBROWSER_CREATE,
-  responses: [() => new Response(JSON.stringify({ browser_id: 'foobar', ws_url: 'ignored' }), { status: 200 })]
-};
-
 // POST starts browser without awaiting; a DB write triggered by it may still
 // be in flight when the request handler returns, so poll for it.
 const settle = async (predicate) => {
@@ -121,77 +133,45 @@ const captureErrors = () => {
   };
 };
 
-const stubFetchByRoute = (routes) => {
-  const original = globalThis.fetch;
-  const calls = [];
-  const counters = new Map();
-  globalThis.fetch = async (url, opts) => {
-    calls.push({ url, opts });
-    const route = routes.find((r) => r.match.test(url));
-    if (!route) throw new Error(`Unstubbed fetch call: ${url}`);
-    const callIndex = counters.get(route) || 0;
-    counters.set(route, callIndex + 1);
-    return route.responses[Math.min(callIndex, route.responses.length - 1)]();
-  };
-  return {
-    calls,
-    restore: () => {
-      globalThis.fetch = original;
-    }
-  };
-};
-
 test('startBrowser records the assigned id and a fresh handle, then indexes the handle', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { calls, restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
-  try {
-    await startBrowser({ workspaceId, browserInstanceId, userId });
-    const start = calls.find((c) => REMOTEBROWSER_CREATE.test(c.url));
-    assert.ok(start, 'the browserfleet server should be asked for a browser');
-    assert.equal(start.opts.method, 'POST');
+  const launches = fakeVms();
+  await startBrowser({ workspaceId, browserInstanceId, userId });
+  assert.equal(launches.length, 1, 'a VM should be asked for a browser');
 
-    const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
-    assert.equal(fetched.data.internalBrowserId, 'foobar');
-    assert.equal(fetched.data.status, 'running');
-    const handle = fetched.data.browserHandle;
-    assert.match(handle, /^H[23456789abcdefghijkmnpqrstuvwxyz]{36}$/, `not a handle: ${handle}`);
+  const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+  assert.equal(fetched.data.internalBrowserId, 'foobar');
+  assert.equal(fetched.data.status, 'running');
+  const handle = fetched.data.browserHandle;
+  assert.match(handle, /^H[23456789abcdefghijkmnpqrstuvwxyz]{36}$/, `not a handle: ${handle}`);
 
-    // Index entry must name the same handle, or the CDP relay could never resolve it.
-    assert.deepEqual(await browserIdForHandle({ handle }), { data: 'foobar' });
-  } finally {
-    restore();
-  }
+  // Index entry must name the same handle, or the CDP relay could never resolve it.
+  assert.deepEqual(await browserIdForHandle({ handle }), { data: 'foobar' });
 });
 
 // navigate is injected, not dialed: the call is fire-and-forget.
 test('startBrowser navigates the new browser to the initial URL', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const navigateCalls = [];
   const navigate = async (params) => {
     navigateCalls.push(params);
     return { data: true };
   };
-  try {
-    await startBrowser({ workspaceId, browserInstanceId, userId, navigate });
-    assert.equal(navigateCalls.length, 1);
-    assert.equal(navigateCalls[0].browserId, 'foobar');
-    assert.ok(
-      INITIAL_URLS.includes(navigateCalls[0].url),
-      `expected one of ${INITIAL_URLS.join(', ')}, got ${navigateCalls[0].url}`
-    );
-  } finally {
-    restore();
-  }
+  await startBrowser({ workspaceId, browserInstanceId, userId, navigate });
+  assert.equal(navigateCalls.length, 1);
+  assert.equal(navigateCalls[0].browserId, 'foobar');
+  assert.ok(
+    INITIAL_URLS.includes(navigateCalls[0].url),
+    `expected one of ${INITIAL_URLS.join(', ')}, got ${navigateCalls[0].url}`
+  );
 });
 
 // Failed navigation is best-effort; must not stop the browser from being recorded.
 test('startBrowser still records the browser when navigation fails', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const errors = captureErrors();
   try {
     await startBrowser({
@@ -206,7 +186,6 @@ test('startBrowser still records the browser when navigation fails', async () =>
     assert.match(errors.messages.join('\n'), /CONNECT_TIMEOUT/);
   } finally {
     errors.restore();
-    restore();
   }
 });
 
@@ -214,7 +193,6 @@ test('startBrowser still records the browser when navigation fails', async () =>
 test('startBrowser never writes the handle to the log', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const logged = [];
   const originals = { log: consola.log, error: consola.error, warn: consola.warn };
   for (const level of ['log', 'error', 'warn']) {
@@ -231,7 +209,6 @@ test('startBrowser never writes the handle to the log', async () => {
     for (const [level, fn] of Object.entries(originals)) {
       consola[level] = fn;
     }
-    restore();
   }
 });
 
@@ -240,7 +217,6 @@ test('startBrowser never writes the handle to the log', async () => {
 test('startBrowser reports a failure to record the browser when the caller does not own the instance', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const errors = captureErrors();
   try {
     // 0 never matches a real serial id, so this can only be a mismatch.
@@ -251,29 +227,26 @@ test('startBrowser reports a failure to record the browser when the caller does 
     assert.equal(fetched.data.internalBrowserId, '', 'an unauthorized caller must not provision the browser');
   } finally {
     errors.restore();
-    restore();
   }
 });
 
 test('startBrowser leaves the instance untouched and reports it when no browser could be started', async () => {
   const workspaceId = await makeUser();
   const browserInstanceId = await makeLaunchedInstance({ workspaceId });
-  const { restore } = stubFetchByRoute([
-    {
-      match: REMOTEBROWSER_CREATE,
-      responses: [() => new Response(JSON.stringify({ detail: 'at capacity' }), { status: 503 })]
+  fakeVms({
+    launchBrowser: async () => {
+      throw new Error('at capacity');
     }
-  ]);
+  });
   const errors = captureErrors();
   try {
     await startBrowser({ workspaceId, browserInstanceId, userId });
     const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
     assert.equal(fetched.data.internalBrowserId, '');
     assert.match(errors.messages.join('\n'), new RegExp(browserInstanceId));
-    assert.match(errors.messages.join('\n'), /HTTP 503/);
+    assert.match(errors.messages.join('\n'), /at capacity/);
   } finally {
     errors.restore();
-    restore();
   }
 });
 
@@ -288,7 +261,6 @@ test('startBrowser reports it when the instance was already provisioned', async 
     internalBrowserId: 'already-there',
     userId
   });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
   const errors = captureErrors();
   try {
     await startBrowser({ workspaceId, browserInstanceId, userId });
@@ -296,7 +268,6 @@ test('startBrowser reports it when the instance was already provisioned', async 
     assert.match(errors.messages.join('\n'), /ALREADY_PROVISIONED/);
   } finally {
     errors.restore();
-    restore();
   }
 });
 
@@ -324,79 +295,6 @@ test("GET /browsers/launch renders the form in the visitor's own workspace", asy
   assert.match(body, /<a href="\/browsers">Browsers<\/a>/);
   assert.match(body, /<span aria-current="page">Launch<\/span>/);
   assert.match(body, new RegExp(`name="workspace" value="${workspaceId}"`));
-});
-
-test('GET /browsers/launch has no proxy or screen fields when an external fleet runs the browsers', async () => {
-  await makeUser();
-  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
-  const body = await res.text();
-  assert.doesNotMatch(body, /name="proxy"/);
-  assert.doesNotMatch(body, /name="screenResolution"/);
-  assert.doesNotMatch(body, /name="screenScale"/);
-});
-
-test('POST /browsers/launch refuses a screen resolution when an external fleet runs the browsers', async () => {
-  const workspaceId = await makeUser();
-  const csrfId = 'a'.repeat(32);
-  const res = await setupApp().request('/browsers/launch', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
-    },
-    body: new URLSearchParams({
-      name: 'calm-otter',
-      screenResolution: 'qhd',
-      workspace: workspaceId,
-      csrf: makeCsrfToken(csrfId)
-    }).toString()
-  });
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /cannot set the screen resolution/);
-  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
-});
-
-test('POST /browsers/launch refuses a screen scale when an external fleet runs the browsers', async () => {
-  const workspaceId = await makeUser();
-  const csrfId = 'a'.repeat(32);
-  const res = await setupApp().request('/browsers/launch', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
-    },
-    body: new URLSearchParams({
-      name: 'calm-otter',
-      screenScale: '200',
-      workspace: workspaceId,
-      csrf: makeCsrfToken(csrfId)
-    }).toString()
-  });
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /cannot set the screen scale/);
-  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
-});
-
-test('POST /browsers/launch refuses a proxy when an external fleet runs the browsers', async () => {
-  const workspaceId = await makeUser();
-  const csrfId = 'a'.repeat(32);
-  const res = await setupApp().request('/browsers/launch', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
-    },
-    body: new URLSearchParams({
-      name: 'calm-otter',
-      useProxy: 'on',
-      proxy: 'http://proxy.example.com:8080',
-      workspace: workspaceId,
-      csrf: makeCsrfToken(csrfId)
-    }).toString()
-  });
-  assert.equal(res.status, 400);
-  assert.match(await res.text(), /cannot set a proxy/);
-  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
 test('GET /browsers/launch redirects to / and clears a stale active workspace', async () => {
@@ -492,43 +390,38 @@ test('POST /browsers/launch rejects a blank name and preserves the description',
 
 test('POST /browsers/launch writes a browser instance and redirects to its browser page', async () => {
   const workspaceId = await makeUser();
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
-  try {
-    const app = setupApp();
-    const csrfId = 'a'.repeat(32);
-    const cookie = makeSessionCookie();
-    const res = await app.request('/browsers/launch', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        'cookie': `session=${cookie}; csrf_id=${csrfId}`
-      },
-      body: new URLSearchParams({
-        name: 'calm-otter',
-        description: 'For QA testing',
-        enableScreenRecording: 'on',
-        workspace: workspaceId,
-        csrf: makeCsrfToken(csrfId)
-      }).toString()
-    });
-    assert.equal(res.status, 303);
-    assert.match(res.headers.get('location'), /^\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
-    const publicId = res.headers.get('location').split('/').pop();
+  const app = setupApp();
+  const csrfId = 'a'.repeat(32);
+  const cookie = makeSessionCookie();
+  const res = await app.request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${cookie}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      description: 'For QA testing',
+      enableScreenRecording: 'on',
+      workspace: workspaceId,
+      csrf: makeCsrfToken(csrfId)
+    }).toString()
+  });
+  assert.equal(res.status, 303);
+  assert.match(res.headers.get('location'), /^\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+  const publicId = res.headers.get('location').split('/').pop();
 
-    const fetched = await getBrowserInstanceByPublicId({ workspaceId, publicId });
-    assert.equal(fetched.data.browserName, 'calm-otter');
-    // browserDescription isn't part of the model getter's shape (see
-    // src/models/browsers.js's map()), so it isn't asserted here.
+  const fetched = await getBrowserInstanceByPublicId({ workspaceId, publicId });
+  assert.equal(fetched.data.browserName, 'calm-otter');
+  // browserDescription isn't part of the model getter's shape (see
+  // src/models/browsers.js's map()), so it isn't asserted here.
 
-    const settled = await settle(async () => {
-      const r = await getBrowserInstanceByPublicId({ workspaceId, publicId });
-      return r.data.internalBrowserId !== '' ? r : null;
-    });
-    assert.ok(settled, 'launching a browser should start one on the browserfleet server and record its id');
-    assert.equal(settled.data.status, 'running');
-  } finally {
-    restore();
-  }
+  const settled = await settle(async () => {
+    const r = await getBrowserInstanceByPublicId({ workspaceId, publicId });
+    return r.data.internalBrowserId !== '' ? r : null;
+  });
+  assert.ok(settled, 'launching a browser should start one in a VM and record its id');
+  assert.equal(settled.data.status, 'running');
 });
 
 // Deleting a Workspace/Collaborator while the pointer still named the
@@ -549,38 +442,33 @@ test('POST /browsers/launch writes a browser instance and redirects to its brows
 test('POST /browsers/launch writes a browser instance scoped to the active workspace and redirects there', async () => {
   await makeUser();
   await makeSharedWorkspace({ workspaceId: 3333 });
-  const { restore } = stubFetchByRoute([REMOTEBROWSER_ROUTE]);
-  try {
-    const app = setupApp();
-    const csrfId = 'a'.repeat(32);
-    const cookie = makeSessionCookie({ activeWorkspaceId: 3333 });
-    const res = await app.request('/browsers/launch', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        'cookie': `session=${cookie}; csrf_id=${csrfId}`
-      },
-      body: new URLSearchParams({
-        name: 'calm-otter',
-        blockAdsAndTrackers: 'on',
-        workspace: 3333,
-        csrf: makeCsrfToken(csrfId)
-      }).toString()
-    });
-    assert.equal(res.status, 303);
-    assert.match(res.headers.get('location'), /^\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
-    const publicId = res.headers.get('location').split('/').pop();
-    const fetched = await getBrowserInstanceByPublicId({ workspaceId: 3333, publicId });
-    assert.ok(fetched.data, 'the recorded instance should land on the workspace-scoped row');
+  const app = setupApp();
+  const csrfId = 'a'.repeat(32);
+  const cookie = makeSessionCookie({ activeWorkspaceId: 3333 });
+  const res = await app.request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${cookie}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      blockAdsAndTrackers: 'on',
+      workspace: 3333,
+      csrf: makeCsrfToken(csrfId)
+    }).toString()
+  });
+  assert.equal(res.status, 303);
+  assert.match(res.headers.get('location'), /^\/browsers\/B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
+  const publicId = res.headers.get('location').split('/').pop();
+  const fetched = await getBrowserInstanceByPublicId({ workspaceId: 3333, publicId });
+  assert.ok(fetched.data, 'the recorded instance should land on the workspace-scoped row');
 
-    const settled = await settle(async () => {
-      const r = await getBrowserInstanceByPublicId({ workspaceId: 3333, publicId });
-      return r.data.internalBrowserId !== '' ? r : null;
-    });
-    assert.ok(settled, 'the id should be recorded on the workspace-scoped instance');
-  } finally {
-    restore();
-  }
+  const settled = await settle(async () => {
+    const r = await getBrowserInstanceByPublicId({ workspaceId: 3333, publicId });
+    return r.data.internalBrowserId !== '' ? r : null;
+  });
+  assert.ok(settled, 'the id should be recorded on the workspace-scoped instance');
 });
 
 // Fills the workspace's rate with launches made a moment ago, so the next is over it.
@@ -614,4 +502,264 @@ test('POST /browsers/launch answers 429 with Retry-After once the workspace is o
     /This workspace launched too many browsers in the last minute\. Please try again in \d+ seconds?\./
   );
   assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
+});
+
+const postLaunch = (workspaceId, fields) => {
+  const csrfId = 'a'.repeat(32);
+  return setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({
+      name: 'calm-otter',
+      workspace: workspaceId,
+      csrf: makeCsrfToken(csrfId),
+      ...fields
+    }).toString()
+  });
+};
+
+test('GET /browsers/launch renders an enabled form when a VM can be launched', async () => {
+  fakeVms();
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /class="btn-primary">Launch<\/button>/);
+  assert.doesNotMatch(body, /still being prepared/);
+});
+
+test('GET /browsers/launch says to come back later while there is no snapshot yet', async () => {
+  fakeVms({ canLaunchBrowser: async () => false });
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  assert.equal(res.status, 503);
+  const body = await res.text();
+  assert.match(body, /role="alert"[^>]*>Browsers are still being prepared/);
+  assert.match(body, /class="btn-primary" disabled>Launch<\/button>/);
+});
+
+test('GET /browsers/launch logs a failed check and says to come back later', async (t) => {
+  const errors = [];
+  t.mock.method(consola, 'error', (message) => errors.push(message));
+  fakeVms({
+    canLaunchBrowser: async () => {
+      throw new Error('no accel');
+    }
+  });
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  assert.equal(res.status, 503);
+  assert.match(await res.text(), /still being prepared/);
+  assert.match(errors.join('\n'), /no accel/);
+});
+
+test('POST /browsers/launch refuses, without writing an instance, while there is no snapshot yet', async () => {
+  const launches = fakeVms({ canLaunchBrowser: async () => false });
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, { description: 'For QA' });
+  assert.equal(res.status, 503);
+  const body = await res.text();
+  assert.match(body, /still being prepared/);
+  assert.match(body, /id="name" name="name" value="calm-otter"/);
+  assert.match(body, /id="description" name="description" value="For QA"/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+  assert.deepEqual(launches, []);
+});
+
+test('GET /browsers/launch offers an unchecked proxy box after the checkboxes, with the URL input next to it', async () => {
+  fakeVms();
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /<input type="checkbox" id="useProxy" name="useProxy" \/>\s*Use proxy\s*<\/label>/);
+  assert.match(body, /id="proxy"\s+name="proxy"\s+value=""/);
+  const at = (text) => body.indexOf(text);
+  assert.ok(at('name="blockAdsAndTrackers"') < at('name="useProxy"'));
+  assert.ok(at('name="useProxy"') < at('name="proxy"'));
+  assert.ok(at('name="proxy"') < at('>Launch</button>'));
+  // Enabled in markup, for a visitor without JavaScript; the script disables it.
+  assert.doesNotMatch(body, /id="proxy"[^>]*disabled/);
+  assert.match(body, /proxyInput\.disabled = !useProxy\.checked/);
+});
+
+test('GET /browsers/launch offers the screen resolutions after the description, with Full HD chosen', async () => {
+  fakeVms();
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /<span id="screenResolutionLabel" class="field-label">Screen resolution<\/span>/);
+  assert.match(body, /role="radiogroup" aria-labelledby="screenResolutionLabel"/);
+  const options = [
+    ...body.matchAll(
+      /<input type="radio" name="screenResolution" value="([^"]+)"( checked)? \/>\s*<span>([^<]*) <span class="radio-detail">\(([^<]*)\)<\/span>/g
+    )
+  ].map((m) => m.slice(1));
+  assert.deepEqual(options, [
+    ['full-hd', ' checked', 'Full HD', '1920×1080'],
+    ['wuxga', undefined, 'WUXGA', '1920×1200'],
+    ['qhd', undefined, 'QHD', '2560×1440'],
+    ['4k', undefined, '4K', '3840×2160']
+  ]);
+  const at = (text) => body.indexOf(text);
+  assert.ok(at('name="description"') < at('name="screenResolution"'));
+  assert.ok(at('name="screenResolution"') < at('name="enableScreenRecording"'));
+});
+
+test('GET /browsers/launch offers a screen scale slider after the screen resolutions, at 150%', async () => {
+  fakeVms();
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /<label for="screenScale">Screen scale<\/label>/);
+  assert.match(
+    body,
+    /<input\s+type="range"\s+id="screenScale"\s+name="screenScale"\s+min="100"\s+max="200"\s+step="25"\s+value="150"\s+list="screenScaleStops"\s+aria-valuetext="150%"\s+\/>/
+  );
+  assert.match(body, /<output id="screenScaleValue" for="screenScale">150%<\/output>/);
+  const stops = [...body.matchAll(/<option value="(\d+)" label="([^"]+)"><\/option>/g)].map((m) => m.slice(1));
+  assert.deepEqual(stops, [
+    ['100', '100%'],
+    ['125', '125%'],
+    ['150', '150%'],
+    ['175', '175%'],
+    ['200', '200%']
+  ]);
+  const at = (text) => body.indexOf(text);
+  assert.ok(at('name="screenResolution"') < at('name="screenScale"'));
+  assert.ok(at('name="screenScale"') < at('name="enableScreenRecording"'));
+});
+
+test('POST /browsers/launch sets the chosen screen scale, and nothing for 150%', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  for (const screenScale of ['175', '150']) {
+    assert.equal((await postLaunch(workspaceId, { screenScale })).status, 303);
+    assert.ok(await settle(() => launches.length > 0));
+  }
+  assert.ok(await settle(() => launches.length > 1));
+  assert.deepEqual(launches, [
+    { proxy: null, screenResolution: null, screenScale: 175 },
+    { proxy: null, screenResolution: null, screenScale: null }
+  ]);
+});
+
+test('POST /browsers/launch refuses a screen scale off the slider, and keeps the choices', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  const res = await postLaunch(workspaceId, { screenScale: '110', screenResolution: 'qhd' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /Choose a screen scale from 100% to 200%, in steps of 25%\./);
+  assert.match(body, /name="screenScale"[^>]*value="150"/);
+  assert.match(body, /value="qhd" checked/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+  assert.deepEqual(launches, []);
+});
+
+test('POST /browsers/launch keeps the chosen screen scale when it shows an error', async () => {
+  fakeVms();
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, { screenScale: '200', useProxy: 'on', proxy: '' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /name="screenScale"[^>]*value="200"/);
+  assert.match(body, /<output id="screenScaleValue" for="screenScale">200%<\/output>/);
+});
+
+test('POST /browsers/launch sets the chosen screen resolution', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  for (const screenResolution of ['wuxga', '4k']) {
+    assert.equal((await postLaunch(workspaceId, { screenResolution })).status, 303);
+  }
+  assert.ok(await settle(() => launches.length > 1));
+  assert.deepEqual(launches, [
+    { proxy: null, screenResolution: { width: 1920, height: 1200 }, screenScale: null },
+    { proxy: null, screenResolution: { width: 3840, height: 2160 }, screenScale: null }
+  ]);
+});
+
+test('POST /browsers/launch keeps the image default for Full HD', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  assert.equal((await postLaunch(workspaceId, { screenResolution: 'full-hd' })).status, 303);
+  assert.ok(await settle(() => launches.length > 0));
+  assert.deepEqual(launches, [{ proxy: null, screenResolution: null, screenScale: null }]);
+});
+
+test('POST /browsers/launch refuses a screen resolution not in the list, and creates nothing', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  const res = await postLaunch(workspaceId, { screenResolution: '8k', description: 'For QA' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /Choose a screen resolution from the list\./);
+  assert.match(body, /value="full-hd" checked/);
+  assert.match(body, /value="For QA"/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+  assert.deepEqual(launches, []);
+});
+
+test('POST /browsers/launch keeps the chosen screen resolution when it shows an error', async () => {
+  fakeVms();
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, { screenResolution: 'qhd', useProxy: 'on', proxy: '' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /value="qhd" checked/);
+  assert.doesNotMatch(body, /value="full-hd" checked/);
+});
+
+test('POST /browsers/launch passes the proxy to the new VM when the box is checked', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  const res = await postLaunch(workspaceId, { useProxy: 'on', proxy: ' http://u:p@Proxy.example.com:8080 ' });
+  assert.equal(res.status, 303);
+  assert.ok(await settle(() => launches.length > 0));
+  assert.deepEqual(launches, [
+    { proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
+  ]);
+  // Kept with the browser, so the REST API can report it, but never with the password.
+  const [browser] = (await listBrowserInstancesByWorkspace({ workspaceId })).data;
+  assert.deepEqual(browser.config, { proxy: 'http://u:****@proxy.example.com:8080' });
+});
+
+test('POST /browsers/launch ignores the proxy URL when the box is not checked', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  // As a visitor without JavaScript can send it: the input is never disabled.
+  assert.equal((await postLaunch(workspaceId, { proxy: 'not a url' })).status, 303);
+  assert.ok(await settle(() => launches.length > 0));
+  assert.deepEqual(launches, [{ proxy: null, screenResolution: null, screenScale: null }]);
+});
+
+test('POST /browsers/launch asks for the URL when the box is checked but the input is empty', async () => {
+  fakeVms();
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, { useProxy: 'on', proxy: '  ' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /Enter the proxy URL, or uncheck Use proxy\./);
+  assert.match(body, /id="useProxy" name="useProxy" checked/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /browsers/launch refuses a bad proxy URL, keeps what was typed, and creates nothing', async () => {
+  fakeVms();
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, {
+    useProxy: 'on',
+    proxy: 'https://proxy.example.com',
+    description: 'For QA'
+  });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /The proxy URL must start with http:\/\/, socks4:\/\/, or socks5:\/\/\./);
+  assert.match(body, /id="useProxy" name="useProxy" checked/);
+  assert.match(body, /value="https:\/\/proxy.example.com"/);
+  assert.match(body, /value="For QA"/);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });

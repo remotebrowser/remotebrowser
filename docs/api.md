@@ -89,7 +89,7 @@ _Example_: `curl -X POST -H "Authorization: Bearer $API_KEY" http://localhost:30
 { "browser_id": "B5xqk2m", "status": "running" }
 ```
 
-For both calls, the same people may act as for terminating: the person who launched the browser, or a workspace Admin. A browser that is not in the right state (for example, resuming one that is already running) gets HTTP 409, with its `browser_id` and current `status`. A server that uses an external browser fleet cannot suspend browsers, and returns HTTP 501.
+For both calls, the same people may act as for terminating: the person who launched the browser, or a workspace Admin. A browser that is not in the right state (for example, resuming one that is already running) gets HTTP 409, with its `browser_id` and current `status`.
 
 ## Configure a browser
 
@@ -113,7 +113,7 @@ The only setting for now is `proxy`, the upstream proxy that the browser's traff
 
 Changing the proxy ends the browser's open connections, so none of them keep the old route, and requests in flight at that moment fail. The call returns once the new proxy is in use.
 
-Only a running browser can be configured; any other gets HTTP 409, with its `browser_id` and current `status`. The same people may configure a browser as may terminate it. A setting that is unknown, or a proxy URL that is not valid, gets HTTP 400. A server that uses an external browser fleet cannot set a proxy, and returns HTTP 501.
+Only a running browser can be configured; any other gets HTTP 409, with its `browser_id` and current `status`. The same people may configure a browser as may terminate it. A setting that is unknown, or a proxy URL that is not valid, gets HTTP 400.
 
 ## List all browsers
 

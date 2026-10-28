@@ -11,7 +11,7 @@ import {
   canTerminateBrowser
 } from '../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId, deleteBrowserInstance } from '../../models/browsers.js';
-import { stopBrowser } from '../../fleet.js';
+import { stopBrowser } from '../../vms.js';
 import { browserMonitors } from '../../browser.js';
 import { formString } from '../../form.js';
 
@@ -36,7 +36,7 @@ const loadBrowser = async (c) => {
 
 // Shared with the REST API. The caller checks canTerminateBrowser first.
 const terminateBrowser = async ({ user, workspace, browser }) => {
-  // Keep watching until the fleet confirms the stop; if it fails, the browser is still running.
+  // Keep watching until the VM confirms the stop; if it fails, the browser is still running.
   const stopped = await stopBrowser({ browserId: browser.internalBrowserId });
   if (stopped.error) {
     consola.error('stopBrowser failed:', stopped.error);

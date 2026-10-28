@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { consola } from 'consola/basic';
 import { WebSocketServer } from 'ws';
 
-process.env.BROWSERFLEET_URL = 'http://browserfleet.test';
-
+const { setVmClient } = await import('./vm/index.js');
 const { nextFrame, stopScreencasts, cache, SCREENCAST_OPTIONS } = await import('./screencast.js');
 
 consola.level = -999;
+
+// Frames are saved through the VM client; keep them off the disk.
+setVmClient({ saveScreenshot: async () => {} });
 
 const SEED = Buffer.from('seed frame');
 const NEXT = Buffer.from('next frame');

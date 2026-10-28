@@ -1,6 +1,6 @@
 import { consola } from 'consola/basic';
 import { WebSocket, WebSocketServer } from 'ws';
-import { browserCdpUrl, browserExists } from './fleet.js';
+import { browserCdpUrl, browserExists } from './vms.js';
 import { isWellFormedBrowserHandle } from './handle.js';
 import { browserIdForHandle as resolveBrowserHandle, getBrowserInstanceByPublicId } from './models/browsers.js';
 import { authenticateApiKey } from './middleware/apikey.js';
@@ -121,7 +121,7 @@ const forward = (from, to) => {
   from.on('error', () => {});
 };
 
-/** Relays a CDP websocket to a browser, whether it runs in a local container or on an external fleet; `server` is typed narrowly because @hono/node-server's serve() returns a union covering an HTTP/2 server too. @param {{server: {on: (event: 'upgrade', listener: (req: import('node:http').IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => void) => unknown}, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>, browserIdForHandle?: (params: {handle: string}) => Promise<{data?: string | null, error?: string}>, browserExists?: (params: {browserId: string}) => Promise<{data?: boolean, error?: string}>}} params @returns {{close: () => Promise<void>}} */
+/** Relays a CDP websocket to a browser in a local VM; `server` is typed narrowly because @hono/node-server's serve() returns a union covering an HTTP/2 server too. @param {{server: {on: (event: 'upgrade', listener: (req: import('node:http').IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => void) => unknown}, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>, browserIdForHandle?: (params: {handle: string}) => Promise<{data?: string | null, error?: string}>, browserExists?: (params: {browserId: string}) => Promise<{data?: boolean, error?: string}>}} params @returns {{close: () => Promise<void>}} */
 const mountCdpRelay = ({
   server,
   cdpUrlFor = browserCdpUrl,
@@ -293,7 +293,7 @@ const mountCdpRelay = ({
   };
 
   // The handle path: an unguessable handle in the URL is the only credential.
-  // Returns the fleet's browser id, or null once the upgrade has been refused.
+  // Returns the internal browser id, or null once the upgrade has been refused.
   const resolveHandle = async (socket, handle) => {
     // The public path carries an unguessable handle, never the bare id; the local MAC check rejects foreign handles with no database read.
     if (!isWellFormedBrowserHandle(handle)) {
@@ -451,7 +451,7 @@ const mountCdpRelay = ({
 
 // --- A CDP client for driving a browser directly ------------------------------
 // Unlike the relay above, which only forwards bytes, this speaks the protocol
-// itself, using the fleet's browserId (never the public handle).
+// itself, using the internal browserId (never the public handle).
 
 const openCdpConnection = (url) =>
   new Promise((resolve, reject) => {

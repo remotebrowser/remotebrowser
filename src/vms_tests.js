@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
-// No external fleet: the facade must drive the in-process QEMU VM manager.
-process.env.BROWSERFLEET_URL = '';
 
 const { setVmClient } = await import('./vm/index.js');
 const {
@@ -13,16 +11,14 @@ const {
   browserCdpUrl,
   stopBrowser,
   isWellFormedBrowserId,
-  canSuspendBrowsers,
   suspendBrowser,
   resumeBrowser,
   setBrowserProxy,
   clearBrowserProxy,
   setBrowserScreenResolution,
   setBrowserScreenScale,
-  canSaveBrowserScreenshots,
   saveBrowserScreenshot
-} = await import('./fleet.js');
+} = await import('./vms.js');
 
 // A fake VM client that records calls and can be told to fail. Swapped in
 // for the real singleton so no QEMU is needed here.
@@ -261,7 +257,6 @@ test('isWellFormedBrowserId is re-exported from the facade', () => {
 test('suspendBrowser and resumeBrowser drive the local VM', async () => {
   const { calls, client } = fakeVms();
   setVmClient(client);
-  assert.equal(canSuspendBrowsers(), true);
   assert.deepEqual(await suspendBrowser({ browserId: 'Pabc12345' }), { data: true });
   assert.deepEqual(await resumeBrowser({ browserId: 'Pabc12345' }), { data: true });
   assert.deepEqual(
@@ -294,7 +289,6 @@ test('saveBrowserScreenshot hands the frame to the local VM and ignores a failur
   const jpeg = Buffer.from('jpeg');
   const { calls, client } = fakeVms({ saveScreenshot: async (...args) => void calls.push(args) });
   setVmClient(client);
-  assert.equal(canSaveBrowserScreenshots(), true);
   await saveBrowserScreenshot({ browserId: 'Pabc12345', pageId: 'page1', jpeg });
   await saveBrowserScreenshot({ browserId: '../etc', pageId: 'page1', jpeg });
   assert.deepEqual(calls, [['Pabc12345', 'page1', jpeg]]);

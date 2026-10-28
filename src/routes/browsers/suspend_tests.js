@@ -2,9 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 
-// Set before the routes pull in ../../config, which freezes what it read. No
-// external fleet: suspend and resume exist only for local VMs.
-process.env.BROWSERFLEET_URL = '';
+// Set before the routes pull in ../../config, which freezes what it read.
 process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { sign } = await import('../../auth/signing.js');

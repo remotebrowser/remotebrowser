@@ -11,7 +11,6 @@ const BASE_ENV = {
   RESOURCE_HMAC_SECRET: 'y'.repeat(32),
   PUBLIC_ORIGIN: 'https://example.com',
   SIGNIN_SENDER_EMAIL: 'login@example.com',
-  BROWSERFLEET_URL: 'https://browsers.example.com',
   DATABASE_URL: 'postgres://user:pass@localhost:5432/test',
   SMTP_HOST: 'smtp.example.com',
   SMTP_USER: 'smtp-user',
@@ -249,34 +248,6 @@ describe('sessionSecret', () => {
 
   test('ignores secrets beyond the first two', () => {
     assert.deepEqual(readSessionSecrets({ SESSION_SECRET: 'alpha,beta,gamma' }), ['alpha', 'beta']);
-  });
-});
-
-describe('browserFleetUrl', () => {
-  const readBrowserFleetUrl = (env) => {
-    const result = spawnSync(
-      process.execPath,
-      ['-e', "process.stdout.write(String(require('./config').config.browserFleetUrl))"],
-      { cwd: __dirname, env: { ...process.env, ...BASE_ENV, ...env } }
-    );
-    assert.equal(result.status, 0);
-    return result.stdout.toString().trim();
-  };
-
-  test('starts in production without BROWSERFLEET_URL, since the app manages VMs itself', () => {
-    const result = runConfig({ NODE_ENV: 'production', BROWSERFLEET_URL: '' });
-    assert.equal(result.status, 0);
-  });
-
-  test('trims trailing slashes so the appended API path is not doubled', () => {
-    assert.equal(
-      readBrowserFleetUrl({ BROWSERFLEET_URL: 'https://browsers.example.com//' }),
-      'https://browsers.example.com'
-    );
-  });
-
-  test('is null outside production when unset', () => {
-    assert.equal(readBrowserFleetUrl({ NODE_ENV: 'development', BROWSERFLEET_URL: '' }), 'null');
   });
 });
 
