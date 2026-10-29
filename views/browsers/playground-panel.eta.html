@@ -1,28 +1,38 @@
 <% /* The code runs in the visitor's own tab (public/playground.js), and the sidebar shows what it does: the previews,
-and the output under them (show.eta.html). With "disabled", a copy for a browser that cannot run now, to show what comes
-back; show.eta.html dims it and makes it inert. It has no CDP URL, and playground.js leaves it alone, as it looks only
-for #playground. Without JavaScript nothing can run, so it starts hidden and show.eta.html reveals it. */ %>
+and the output under them (show.eta.html). Each run goes first to the server's harness (src/routes/harness.js), which
+checks the code, or has the LLM write it from natural language. With "disabled", a copy for a browser that cannot run
+now, to show what comes back; show.eta.html dims it and makes it inert. It has no CDP URL, and playground.js leaves it
+alone, as it looks only for #playground. Without JavaScript nothing can run, so it starts hidden and show.eta.html
+reveals it. */ %>
 <section id="playground-panel" class="browser-panel hidden" aria-label="Playground">
   <div
     id="<%= it.disabled ? 'playground-disabled' : 'playground' %>"
     data-cdp-url="<%= it.disabled ? '' : it.cdpUrl %>"
     data-pages-url="<%= it.pagesUrl %>"
+    data-harness-url="/harness"
   >
+    <%~ include('/partials/csrf', it) %> <% if (it.naturalLanguage) { %>
+    <p>
+      Try this browser right now, with no setup. Pick a ready-made task, or describe your own in natural language or
+      write it as code, run it, and watch the result live in the previews.
+    </p>
+    <% } else { %>
     <p>
       Try this browser right now, with no setup. Pick a ready-made script or write your own, run it, and watch the
       result live in the previews.
     </p>
+    <% } %>
     <div class="playground-toolbar">
       <label for="playground-template" class="visually-hidden">Template</label>
       <select id="playground-template">
         <% it.templates.forEach(function(template) { %>
-        <option value="<%= template.key %>" data-code="<%= template.code %>"><%= template.label %></option>
+        <option value="<%= template.key %>" data-example="<%= template.example %>"><%= template.label %></option>
         <% }) %>
       </select>
-      <span id="playground-elapsed" class="playground-elapsed hidden"></span>
+      <span id="playground-progress" class="playground-progress hidden"></span>
       <button type="button" id="playground-run" class="btn-primary" disabled>Run</button>
     </div>
-    <label for="playground-editor" class="visually-hidden">Code</label>
+    <label for="playground-editor" class="visually-hidden"><%= it.naturalLanguage ? 'Task or code' : 'Code' %></label>
     <textarea
       id="playground-editor"
       class="playground-editor"
@@ -31,9 +41,10 @@ for #playground. Without JavaScript nothing can run, so it starts hidden and sho
       autocapitalize="off"
       rows="8"
     >
-<%= it.disabled ? it.templates[0].code : '' %></textarea>
+<%= it.disabled ? it.templates[0].example : '' %></textarea>
     <p class="form-note">
-      For a detailed guide, refer to the
+      <% if (it.naturalLanguage) { %> Each run does one short task, so avoid long, multi-step jobs. <% } %> For a
+      detailed guide, refer to the
       <a href="https://remotebrowser.ai/playground/" target="_blank" rel="noopener">Playground documentation</a>.
     </p>
   </div>

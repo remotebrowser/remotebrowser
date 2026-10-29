@@ -9,8 +9,8 @@
     const output = document.querySelector('#playground-output');
     const outputBlock = document.querySelector('#playground-output-block');
     const status = document.querySelector('#playground-status');
-    const elapsedLabel = root.querySelector('#playground-elapsed');
-    const { pagesUrl } = root.dataset;
+    const progressLabel = root.querySelector('#playground-progress');
+    const { pagesUrl, harnessUrl } = root.dataset;
     const cdpUrl = new URL(root.dataset.cdpUrl);
     cdpUrl.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 
@@ -30,12 +30,23 @@
       }
     };
 
-    const selectedTemplate = () => templates.selectedOptions[0]?.dataset.code ?? '';
-    editor.value = loadDraft() ?? selectedTemplate();
+    const selectedTemplate = () => templates.selectedOptions[0]?.dataset.example ?? '';
+    // Edited text becomes a Custom task, so the examples never change.
+    const syncTemplate = () => {
+      const match = [...templates.options].find((option) => option.dataset.example === editor.value);
+      templates.value = match ? match.value : 'custom';
+    };
+    const draft = loadDraft();
+    editor.value = draft ?? selectedTemplate();
+    if (draft !== null) syncTemplate();
 
     /** @type {Worker | null} */
     let worker = null;
+    /** @type {AbortController | null} */
+    let request = null;
     let startedAt = 0;
+
+    const isRunning = () => Boolean(worker || request);
 
     const append = (className, text) => {
       const line = document.createElement('div');
@@ -45,20 +56,11 @@
       output.scrollTop = output.scrollHeight;
     };
 
-    const appendImage = (data) => {
-      const image = document.createElement('img');
-      image.className = 'playground-image';
-      image.alt = 'Screenshot taken by the script';
-      image.src = `data:image/png;base64,${data}`;
-      output.append(image);
-      output.scrollTop = output.scrollHeight;
-    };
-
     const hasCode = () => editor.value.trim() !== '';
 
     // Stop must always work, but there is nothing to run in an empty editor.
     const updateRunButton = () => {
-      runButton.disabled = !worker && !hasCode();
+      runButton.disabled = !isRunning() && !hasCode();
     };
 
     // One button: it stops the script while one runs.
@@ -76,27 +78,33 @@
 
     const elapsed = () => `${((performance.now() - startedAt) / 1000).toFixed(1)} s`;
 
-    // A short run ends before anyone needs it, so the label waits 2 seconds.
+    // A short run ends before anyone needs the count, so it waits 2 seconds.
     const SHOW_ELAPSED_AFTER = 2000;
     let elapsedTimer = null;
+
+    const showProgress = (text) => {
+      progressLabel.textContent = text;
+      progressLabel.classList.remove('hidden');
+    };
 
     const updateElapsed = () => {
       const ms = performance.now() - startedAt;
       if (ms > SHOW_ELAPSED_AFTER) {
-        elapsedLabel.textContent = `Running for ${Math.floor(ms / 1000)} seconds...`;
-        elapsedLabel.classList.remove('hidden');
+        showProgress(`${worker ? 'Running' : 'Checking'} for ${Math.floor(ms / 1000)} seconds...`);
       }
     };
 
     const stopElapsed = () => {
       clearInterval(elapsedTimer);
       elapsedTimer = null;
-      elapsedLabel.classList.add('hidden');
-      elapsedLabel.textContent = '';
+      progressLabel.classList.add('hidden');
+      progressLabel.textContent = '';
     };
 
     // Output shows only once a run ends, so a quiet run still says so.
     const finish = (text) => {
+      request?.abort();
+      request = null;
       worker?.terminate();
       worker = null;
       stopElapsed();
@@ -107,23 +115,14 @@
       outputBlock.classList.remove('hidden');
     };
 
-    const run = () => {
-      if (worker || !hasCode()) {
-        return;
-      }
-      saveDraft();
-      output.replaceChildren();
-      outputBlock.classList.add('hidden');
-      startedAt = performance.now();
-      // Checks often, so the count moves on close to each whole second.
-      elapsedTimer = setInterval(updateElapsed, 250);
+    const runCode = (code) => {
       setRunning(true, 'Running...');
       worker = new Worker('/playground-worker.js');
+      showProgress('Running...');
+      updateElapsed();
       worker.onmessage = ({ data }) => {
         if (data.type === 'log') {
           append(`playground-${data.level}`, data.text);
-        } else if (data.type === 'image') {
-          appendImage(data.data);
         } else if (data.type === 'done') {
           if (data.result !== undefined) {
             append('playground-result', data.result);
@@ -138,18 +137,70 @@
         append('playground-error', event.message || 'The script could not start.');
         finish(`Failed after ${elapsed()}.`);
       };
-      worker.postMessage({ type: 'run', code: editor.value, cdpUrl: cdpUrl.href });
+      worker.postMessage({ type: 'run', code, cdpUrl: cdpUrl.href });
+    };
+
+    // The harness checks the code, or has the LLM write it from natural
+    // language. Returns the code, or null once it has shown why there is none.
+    const prepareCode = async () => {
+      request = new AbortController();
+      const { signal } = request;
+      setRunning(true, 'Checking...');
+      showProgress('Checking...');
+      const body = new FormData();
+      body.set('csrf', root.querySelector('input[name="csrf"]').value);
+      const input = editor.value;
+      body.set('input', input);
+      let answer;
+      try {
+        const response = await fetch(harnessUrl, { method: 'POST', body, signal });
+        // A signed-out user is redirected to an HTML page.
+        answer = await response.json().catch(() => ({ error: 'Please sign in again.' }));
+      } catch {
+        answer = { error: 'Unable to reach the server. Please try again.' };
+      }
+      // Stopped while it waited; stop() has already reported it.
+      if (signal.aborted) return null;
+      request = null;
+      if (typeof answer.code !== 'string') {
+        append('playground-error', answer.error || 'Something went wrong. Please try again.');
+        finish(`Failed after ${elapsed()}.`);
+        return null;
+      }
+      // Shows what the LLM wrote, unless the user typed during the wait.
+      if (answer.generated && editor.value === input) {
+        editor.value = answer.code;
+        saveDraft();
+        syncTemplate();
+      }
+      return answer.code;
+    };
+
+    const run = async () => {
+      if (isRunning() || !hasCode()) {
+        return;
+      }
+      saveDraft();
+      output.replaceChildren();
+      outputBlock.classList.add('hidden');
+      startedAt = performance.now();
+      // Checked 4 times a second, so the count changes near each whole second.
+      elapsedTimer = setInterval(updateElapsed, 250);
+      const code = await prepareCode();
+      if (code !== null) {
+        runCode(code);
+      }
     };
 
     const stop = () => {
-      if (!worker) {
+      if (!isRunning()) {
         return;
       }
       append('playground-warn', 'Stopped.');
       finish(`Stopped after ${elapsed()}.`);
     };
 
-    runButton.addEventListener('click', () => (worker ? stop() : run()));
+    runButton.addEventListener('click', () => (isRunning() ? stop() : void run()));
 
     templates.addEventListener('change', () => {
       editor.value = selectedTemplate();
@@ -158,13 +209,14 @@
     });
 
     editor.addEventListener('input', () => {
+      syncTemplate();
       saveDraft();
       updateRunButton();
     });
     editor.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        run();
+        void run();
         return;
       }
       // Tab indents below, so Escape is the way out of the editor by keyboard.

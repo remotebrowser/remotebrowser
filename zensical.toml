@@ -18,6 +18,7 @@ nav = [
     { "Sign-in" = "sign-in.md" },
     { "Database" = "database.md" },
     { "Instrumentation" = "instrumentation.md" },
+    { "Harness" = "harness.md" },
   ] },
   { "Development" = [
     { "Setup" = "setup.md" },

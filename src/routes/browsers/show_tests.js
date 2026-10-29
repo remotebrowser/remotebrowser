@@ -62,6 +62,7 @@ after(() => new Promise((resolve) => cdpStub.close(resolve)));
 
 const { createSessionCookie } = await import('../../auth/session.js');
 const { routes, PLAYGROUND_TEMPLATES } = await import('./show.js');
+const { checkLlm, stopChecker } = await import('../../llm/harness.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { createWorkspace, createCollaborator, ensurePersonalWorkspace } = await import('../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus, getBrowserInstanceByPublicId } =
@@ -249,15 +250,15 @@ test('GET /browsers/:browserId renders the playground for a running browser', as
   assert.match(
     body,
     new RegExp(
-      `<div\\s+id="playground"\\s+data-cdp-url="ws://localhost/cdp/${handle}"\\s+data-pages-url="/browsers/${browserPublicId}/pages"\\s*>`
+      `<div\\s+id="playground"\\s+data-cdp-url="ws://localhost/cdp/${handle}"\\s+data-pages-url="/browsers/${browserPublicId}/pages"\\s+data-harness-url="/harness"\\s*>`
     )
   );
   assert.match(body, /<textarea\s+id="playground-editor"/);
-  // Hidden until a run takes longer than 2 seconds; playground.js fills it in.
+  // Hidden until a run starts; playground.js shows it over the list.
   // The same button stops a run, so there is no separate Stop button.
   assert.match(
     body,
-    /<\/select>\s*<span id="playground-elapsed" class="playground-elapsed hidden"><\/span>\s*<button type="button" id="playground-run" class="btn-primary" disabled>Run<\/button>/
+    /<\/select>\s*<span id="playground-progress" class="playground-progress hidden"><\/span>\s*<button type="button" id="playground-run" class="btn-primary" disabled>Run<\/button>/
   );
   assert.doesNotMatch(body, /id="playground-stop"/);
   // In the sidebar under the previews, hidden until a run ends.
@@ -268,11 +269,45 @@ test('GET /browsers/:browserId renders the playground for a running browser', as
   const sidebar = body.slice(body.indexOf('id="browser-sidebar"'));
   assert.ok(sidebar.indexOf('id="browser-preview"') < sidebar.indexOf('id="playground-output-block"'));
   for (const template of PLAYGROUND_TEMPLATES) {
-    assert.match(body, new RegExp(`<option value="${template.key}" data-code="[^"]*">${template.label}</option>`));
+    assert.match(body, new RegExp(`<option value="${template.key}" data-example="[^"]*">${template.label}</option>`));
   }
-  assert.match(body, /data-code="[^"]*page\.title\(\)/);
+  assert.match(body, /data-example="[^"]*page\.title\(\)/);
+  // Every run posts to the harness, which needs the CSRF token.
+  assert.match(body, /id="playground"[^>]*>\s*<input type="hidden" name="csrf" value="[^"]+"/);
+  assert.match(body, /Pick a ready-made script or write your own/);
+  assert.doesNotMatch(body, /one short task/);
   // The playground leads, and the coding assistant follows.
   assert.ok(body.indexOf('id="playground-panel"') < body.indexOf('id="coding-panel"'));
+});
+
+test('GET /browsers/:browserId offers natural language too, once the LLM check passes', async (t) => {
+  const answer = (data) => async () => (data ? { data } : { error: 'HTTP 500' });
+  t.after(async () => {
+    await checkLlm({ chat: answer(null) });
+    await stopChecker();
+  });
+  assert.deepEqual(await checkLlm({ chat: answer("await page.goto('https://example.com');") }), { data: true });
+
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId);
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  // Still the one playground, with the same editor.
+  assert.match(body, /<section id="playground-panel" class="browser-panel hidden" aria-label="Playground">/);
+  assert.match(
+    body,
+    /<div\s+id="playground"\s+data-cdp-url="ws:\/\/localhost\/cdp\/[^"]+"[^>]*data-harness-url="\/harness"/
+  );
+  assert.match(body, /describe your own in natural language or\s+write it as code/);
+  assert.match(body, /Each run does one short task, so avoid long, multi-step jobs\./);
+  // The examples are tasks, not code, apart from raw CDP, which the LLM may not use.
+  for (const template of PLAYGROUND_TEMPLATES.filter(({ text }) => text)) {
+    const text = template.text.replaceAll('"', '&quot;');
+    assert.match(body, new RegExp(`<option value="${template.key}" data-example="${text}">${template.label}</option>`));
+  }
+  assert.doesNotMatch(body, /data-example="[^"]*page\.goto/);
+  assert.match(body, /<option value="cdp" data-example="[^"]*page\.cdp/);
 });
 
 // The sidebar opens with the status and the controls that act on it, side by
