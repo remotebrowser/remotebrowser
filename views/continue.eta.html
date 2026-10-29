@@ -17,6 +17,8 @@
     <form method="post" action="/continue" class="signin-form">
       <%~ include('partials/csrf', it) %>
       <input type="hidden" name="nonce" value="<%= it.nonce %>" />
+      <% /* A pre-filled email skips the input's autofocus, which would pop up the browser's password manager; the
+      button's autofocus applies instead. */ %> <% if (it.email) { %>
       <input
         type="email"
         id="email"
@@ -26,9 +28,20 @@
         placeholder="email"
         aria-label="Email"
         required
+      />
+      <% } else { %>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        autocomplete="email"
+        placeholder="email"
+        aria-label="Email"
+        required
         autofocus
       />
-      <button type="submit" class="btn-primary">
+      <% } %> <% /* Only the first autofocus element in the page takes focus. */ %>
+      <button type="submit" class="btn-primary" autofocus>
         Sign In <span class="icon-caret-right" aria-hidden="true">&#9656;</span>
       </button>
     </form>
