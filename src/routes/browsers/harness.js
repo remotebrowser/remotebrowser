@@ -1,8 +1,12 @@
 import { Hono } from 'hono';
 import { consola } from 'consola/basic';
-import { requireUser } from '../middleware/auth.js';
-import { verifyCsrfToken } from '../auth/csrf.js';
-import { formString } from '../form.js';
+import { requireUser } from '../../middleware/auth.js';
+import { requireWorkspaceRole } from '../../middleware/workspace.js';
+import { verifyCsrfToken } from '../../auth/csrf.js';
+import { formString } from '../../form.js';
+import { getBrowserInstanceByPublicId } from '../../models/browsers.js';
+import { readPageAccessibility } from '../../cdp.js';
+import { describePage } from '../../llm/page.js';
 import {
   checkCode,
   generateCode,
@@ -10,7 +14,7 @@ import {
   MAX_CODE_LENGTH,
   MAX_INSTRUCTION_LENGTH,
   taskComment
-} from '../llm/harness.js';
+} from '../../llm/harness.js';
 
 export const routes = new Hono();
 
@@ -29,12 +33,34 @@ const allowRequest = (userId, now = Date.now()) => {
   return true;
 };
 
+// The LLM writes code for the page that is open now. Without it, the LLM can
+// still write code that starts with page.goto.
+const readPage = async (browser) => {
+  if (browser.status !== 'running' || !browser.internalBrowserId) return undefined;
+  const read = await readPageAccessibility({ browserId: browser.internalBrowserId });
+  if (read.error) {
+    consola.warn('HARNESS could not read the page', { 'event.domain': 'harness', 'error.type': read.error });
+    return undefined;
+  }
+  return describePage(read.data);
+};
+
 // The playground sends every run here, code or natural language. The answer is
 // always code that passed src/llm/harness.js, or an error to show.
-routes.post('/', requireUser, async (c) => {
+routes.post('/:browserId/harness', requireUser, requireWorkspaceRole('User'), async (c) => {
   const body = await c.req.parseBody();
   if (!verifyCsrfToken(c, body.csrf)) {
     return c.json({ error: 'Your session expired. Please reload the page.' }, 403);
+  }
+  const user = c.get('user');
+  const workspace = c.get('workspace');
+  const found = await getBrowserInstanceByPublicId({
+    workspaceId: workspace.id,
+    publicId: c.req.param('browserId'),
+    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+  });
+  if (found.error || !found.data) {
+    return c.json({ error: 'This browser no longer exists.' }, 404);
   }
   const input = formString(body.input);
   if (!input.trim()) {
@@ -55,11 +81,10 @@ routes.post('/', requireUser, async (c) => {
   if (input.length > MAX_INSTRUCTION_LENGTH) {
     return c.json({ error: `Keep a task under ${MAX_INSTRUCTION_LENGTH} characters.` }, 400);
   }
-  const user = c.get('user');
   if (!allowRequest(user.id)) {
     return c.json({ error: 'Too many requests. Please wait a minute.' }, 429);
   }
-  const result = await generateCode(input);
+  const result = await generateCode(input, { page: await readPage(found.data) });
   if (result.refusal) {
     return c.json({ error: result.refusal }, 422);
   }

@@ -1,15 +1,15 @@
 <% /* The code runs in the visitor's own tab (public/playground.js), and the sidebar shows what it does: the previews,
-and the output under them (show.eta.html). Each run goes first to the server's harness (src/routes/harness.js), which
-checks the code, or has the LLM write it from natural language. With "disabled", a copy for a browser that cannot run
-now, to show what comes back; show.eta.html dims it and makes it inert. It has no CDP URL, and playground.js leaves it
-alone, as it looks only for #playground. Without JavaScript nothing can run, so it starts hidden and show.eta.html
+and the output under them (show.eta.html). Each run goes first to the server's harness (src/routes/browsers/harness.js),
+which checks the code, or has the LLM write it from natural language. With "disabled", a copy for a browser that cannot
+run now, to show what comes back; show.eta.html dims it and makes it inert. It has no CDP URL, and playground.js leaves
+it alone, as it looks only for #playground. Without JavaScript nothing can run, so it starts hidden and show.eta.html
 reveals it. */ %>
 <section id="playground-panel" class="browser-panel hidden" aria-label="Playground">
   <div
     id="<%= it.disabled ? 'playground-disabled' : 'playground' %>"
     data-cdp-url="<%= it.disabled ? '' : it.cdpUrl %>"
     data-pages-url="<%= it.pagesUrl %>"
-    data-harness-url="/harness"
+    data-harness-url="<%= it.harnessUrl %>"
   >
     <%~ include('/partials/csrf', it) %> <% if (it.naturalLanguage) { %>
     <p>

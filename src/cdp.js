@@ -621,6 +621,40 @@ const navigateBrowserToUrl = async ({ browserId, url, cdpUrlFor = browserCdpUrl 
   }
 };
 
+/** Reads the accessibility tree of the browser's current page (its first `type: 'page'` target, as the playground uses), so the LLM knows what is on it. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data?: {url: string, title: string, nodes: any[]}, error?: string}>} */
+const readPageAccessibility = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
+  const url = await cdpUrlFor({ browserId });
+  if (!url) {
+    return { error: 'CDP_URL_UNAVAILABLE' };
+  }
+  /** @type {{socket: WebSocket, send: (method: string, params: any, sessionId?: string) => Promise<any>}} */
+  let session;
+  try {
+    session = await withCdpSession(url);
+  } catch (error) {
+    return { error: cdpErrorMessage(error) };
+  }
+  try {
+    const { targetInfos } = await session.send('Target.getTargets', {});
+    const page = Array.isArray(targetInfos) ? targetInfos.find((target) => target.type === 'page') : undefined;
+    if (!page) {
+      return { error: 'NO_PAGE_TARGET' };
+    }
+    const { sessionId } = await session.send('Target.attachToTarget', { targetId: page.targetId, flatten: true });
+    const { nodes } = await session.send('Accessibility.getFullAXTree', {}, sessionId);
+    return { data: { url: page.url, title: page.title, nodes: Array.isArray(nodes) ? nodes : [] } };
+  } catch (error) {
+    consola.error('CDP command failed while reading the accessibility tree', {
+      'event.domain': 'cdp',
+      'rb.browser_id': browserId,
+      'error.type': cdpErrorMessage(error)
+    });
+    return { error: cdpErrorMessage(error) };
+  } finally {
+    session.socket.terminate();
+  }
+};
+
 /** Liveness probe: true if the CDP handshake opens; an unconfigured origin counts as false, like any failure. @param {{browserId: string, cdpUrlFor?: (params: {browserId: string}) => string | null | Promise<string | null>}} params @returns {Promise<{data: boolean}>} */
 const checkCdpConnection = async ({ browserId, cdpUrlFor = browserCdpUrl }) => {
   const url = await cdpUrlFor({ browserId });
@@ -648,6 +682,7 @@ export {
   capturePageScreenshot,
   listBrowserPages,
   navigateBrowserToUrl,
+  readPageAccessibility,
   checkCdpConnection,
   withCdpSession
 };

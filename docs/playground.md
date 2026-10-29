@@ -34,8 +34,8 @@ The `page` object has these methods:
 
 All selectors are CSS selectors.
 
-A script has the same full control of the browser as the CDP URL. Run only scripts
-that you trust.
+The script runs in a web worker in your browser tab. It has the same full
+control of the browser as the CDP URL. Run only scripts that you trust.
 
 If Remote Browser is configured to connect to an LLM, [the harness](harness.md) lets
 the playground accept a task in natural language. In that case, the ready-made

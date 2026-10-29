@@ -63,6 +63,7 @@ const {
   capturePageScreenshot,
   listBrowserPages,
   navigateBrowserToUrl,
+  readPageAccessibility,
   checkCdpConnection
 } = await import('./cdp.js');
 
@@ -1217,6 +1218,52 @@ describe('navigateBrowserToUrl', () => {
       url: 'https://google.com',
       cdpUrlFor: () => null
     });
+    assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
+  });
+});
+
+describe('readPageAccessibility', () => {
+  test('reads the tree of the first page target, in its own session', async () => {
+    const sessions = [];
+    const nodes = [{ nodeId: '1', role: { value: 'RootWebArea' }, name: { value: 'Example' } }];
+    const stub = await startCdpStub({
+      'Target.getTargets': () => ({
+        targetInfos: [
+          { targetId: 'worker1', type: 'service_worker' },
+          { targetId: 'page1', type: 'page', url: 'https://example.com/', title: 'Example' },
+          { targetId: 'page2', type: 'page', url: 'https://example.org/', title: 'Other' }
+        ]
+      }),
+      'Target.attachToTarget': (params) => ({ sessionId: `session-${params.targetId}` }),
+      'Accessibility.getFullAXTree': () => ({ nodes })
+    });
+    stub.wss.on('connection', (socket) =>
+      socket.on('message', (raw) => {
+        const { method, sessionId } = JSON.parse(raw.toString());
+        if (method === 'Accessibility.getFullAXTree') sessions.push(sessionId);
+      })
+    );
+    try {
+      const result = await readPageAccessibility({ browserId: 'anything', cdpUrlFor: cdpUrlForPort(stub.port) });
+      assert.deepEqual(result, { data: { url: 'https://example.com/', title: 'Example', nodes } });
+      assert.deepEqual(sessions, ['session-page1']);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  test('reports an error when the browser has no page target', async () => {
+    const stub = await startCdpStub({ 'Target.getTargets': () => ({ targetInfos: [] }) });
+    try {
+      const result = await readPageAccessibility({ browserId: 'anything', cdpUrlFor: cdpUrlForPort(stub.port) });
+      assert.equal(result.error, 'NO_PAGE_TARGET');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  test('reports an error rather than dialing when there is no CDP URL', async () => {
+    const result = await readPageAccessibility({ browserId: 'anything', cdpUrlFor: () => null });
     assert.equal(result.error, 'CDP_URL_UNAVAILABLE');
   });
 });

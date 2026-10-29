@@ -250,7 +250,7 @@ test('GET /browsers/:browserId renders the playground for a running browser', as
   assert.match(
     body,
     new RegExp(
-      `<div\\s+id="playground"\\s+data-cdp-url="ws://localhost/cdp/${handle}"\\s+data-pages-url="/browsers/${browserPublicId}/pages"\\s+data-harness-url="/harness"\\s*>`
+      `<div\\s+id="playground"\\s+data-cdp-url="ws://localhost/cdp/${handle}"\\s+data-pages-url="/browsers/${browserPublicId}/pages"\\s+data-harness-url="/browsers/${browserPublicId}/harness"\\s*>`
     )
   );
   assert.match(body, /<textarea\s+id="playground-editor"/);
@@ -297,7 +297,7 @@ test('GET /browsers/:browserId offers natural language too, once the LLM check p
   assert.match(body, /<section id="playground-panel" class="browser-panel hidden" aria-label="Playground">/);
   assert.match(
     body,
-    /<div\s+id="playground"\s+data-cdp-url="ws:\/\/localhost\/cdp\/[^"]+"[^>]*data-harness-url="\/harness"/
+    /<div\s+id="playground"\s+data-cdp-url="ws:\/\/localhost\/cdp\/[^"]+"[^>]*data-harness-url="\/browsers\/\w+\/harness"/
   );
   assert.match(body, /describe your own in natural language or\s+write it as code/);
   assert.match(body, /Each run does one short task, so avoid long, multi-step jobs\./);
