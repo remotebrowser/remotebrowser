@@ -1,5 +1,5 @@
 #!/bin/sh
-# Sets the X screen, with xrandr, to the size that the host sets in
+# Sets the labwc output to the size that the host sets in
 # /etc/remotebrowser/screen-resolution (see src/vm/screen-resolution.js).
 #
 # The file holds one line: the size, e.g. 1920x1080, or "default". Only
@@ -27,28 +27,10 @@ fi
 width=${screen%x*}
 height=${screen#*x}
 
-export DISPLAY=:99
-# Xorg may still be starting, e.g. when this runs right after it.
-tries=0
-until [ -S /tmp/.X11-unix/X99 ]; do
-  tries=$((tries + 1))
-  if [ "$tries" -gt 100 ]; then
-    echo 'Xorg is not running' >&2
-    exit 1
-  fi
-  sleep 0.1
-done
-output=$(xrandr | awk '$2 == "connected" { print $1; exit }')
-output=${output:-Virtual-1}
-# The virtual GPU takes any size, but lists only a few, so others need a mode
-# of their own. Its timings mean nothing to it; the kernel only checks that
-# they are in order. The clock makes it 60 Hz.
-if ! xrandr | grep -q "^   $screen "; then
-  khz=$(((width + 3) * (height + 3) * 60 / 1000))
-  clock=$(printf '%d.%03d' $((khz / 1000)) $((khz % 1000)))
-  xrandr --newmode "$screen" "$clock" \
-    "$width" $((width + 1)) $((width + 2)) $((width + 3)) \
-    "$height" $((height + 1)) $((height + 2)) $((height + 3))
-  xrandr --addmode "$output" "$screen"
-fi
-xrandr --output "$output" --mode "$screen"
+/usr/local/bin/wait-for-display
+export XDG_RUNTIME_DIR=/run/display WAYLAND_DISPLAY=wayland-0
+# The VM has one output: the first word that wlr-randr prints.
+output=$(wlr-randr | awk 'NR == 1 { print $1 }')
+# The virtual GPU takes any size, but offers only a few, so set it as a
+# custom mode.
+wlr-randr --output "$output" --custom-mode "${width}x${height}@60Hz"

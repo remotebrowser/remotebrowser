@@ -5,17 +5,14 @@ Description=Chromium
 # must not start when nftables fails. All its traffic goes through tinyproxy,
 # so it needs that too, with the upstream proxy that the host may set at launch.
 Requires=display.service nftables.service tinyproxy.service
-# Openbox maximizes the window, and xsettingsd sets its scale, so the browser
-# starts after them.
-Wants=openbox.service xsettingsd.service
-After=display.service openbox.service xsettingsd.service nftables.service tinyproxy.service tinyproxy-upstream.service network.target
+After=display.service nftables.service tinyproxy.service tinyproxy-upstream.service network.target
 
 [Service]
 User=browser
-Environment=DISPLAY=:99 HOME=/home/browser
+Environment=HOME=/home/browser XDG_RUNTIME_DIR=/run/display WAYLAND_DISPLAY=wayland-0
 EnvironmentFile=/etc/remotebrowser/browser.env
-# Xorg takes a moment to create its socket, and the browser exits without it.
-ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X99 ]; do sleep 0.1; done'
+# The browser exits without the Wayland socket.
+ExecStartPre=/usr/local/bin/wait-for-display
 ExecStart=/usr/bin/chromium $BROWSER_FLAGS about:blank
 # Shown on the serial console too, which the app saves as console.log.
 StandardOutput=journal+console

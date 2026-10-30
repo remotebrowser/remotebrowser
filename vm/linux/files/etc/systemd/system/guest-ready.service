@@ -7,8 +7,7 @@ After=display.service nftables.service tinyproxy.service cdp-proxy.service netwo
 
 [Service]
 Type=oneshot
-# Xorg takes a moment to create its socket.
-ExecStartPre=/bin/sh -c 'until [ -S /tmp/.X11-unix/X99 ]; do sleep 0.1; done'
+ExecStartPre=/usr/local/bin/wait-for-display
 ExecStart=/bin/echo remotebrowser: guest ready
 StandardOutput=journal+console
 
