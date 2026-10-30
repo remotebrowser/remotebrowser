@@ -171,6 +171,8 @@ const renderBrowser = async (c, { error = null } = {}) => {
     scriptNonce: c.get('secureHeadersNonce'),
     // GET /browsers/:browserId/pages (src/routes/browsers/pages/index.js).
     pagesUrl: `/browsers/${browser.publicId}/pages`,
+    // POST /browsers/:browserId/harness (src/routes/browsers/harness.js).
+    harnessUrl: `/browsers/${browser.publicId}/harness`,
     // ?t= freshens each <img> URL so browsers don't skip re-fetching.
     screenshotCacheBust: Math.floor(Date.now() / 1000),
     // Only htmx asks with this header, so JavaScript is on and the previews

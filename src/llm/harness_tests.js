@@ -207,38 +207,50 @@ const fakeChat = (replies) => {
   return { calls, send };
 };
 
-test('sends the instruction as delimited data after the system prompt and examples', async () => {
+test('sends only the system prompt, the page, and the request', async () => {
   const { calls, send } = fakeChat([
     { data: "await page.goto('https://www.cnn.com');\nconsole.log(await page.title());" }
   ]);
-  const result = await generateCode('Go to CNN and get the page title', { chat: send });
+  const page = 'URL: https://example.com/\nTitle: Example\n- heading "Example Domain" [level=1]';
+  const result = await generateCode('Go to CNN and get the page title', { page, chat: send });
   assert.equal(result.data, "await page.goto('https://www.cnn.com');\nconsole.log(await page.title());");
   const messages = calls[0];
-  assert.equal(messages[0].role, 'system');
-  const last = messages.at(-1);
-  assert.equal(last.role, 'user');
-  const match = /^<request-([0-9a-f]{16})>\nGo to CNN and get the page title\n<\/request-\1>$/.exec(last.content);
-  assert.ok(match, last.content);
-  // A fresh id each time, so a request cannot close its own tag.
-  const ids = messages.filter((m) => m.role === 'user').map((m) => /^<request-(\w+)>/.exec(m.content)[1]);
-  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(
+    messages.map((m) => m.role),
+    ['system', 'user', 'user']
+  );
+  // The examples are part of the system prompt, not a past conversation.
+  assert.match(
+    messages[0].content,
+    /Request: Get the first 5 headlines from text\.npr\.org\nAnswer:\nawait page\.goto/
+  );
+  const pageMatch = /^<page-([0-9a-f]{16})>\n([\s\S]*)\n<\/page-\1>$/.exec(messages[1].content);
+  assert.ok(pageMatch, messages[1].content);
+  assert.equal(pageMatch[2], page);
+  const requestMatch = /^<request-([0-9a-f]{16})>\nGo to CNN and get the page title\n<\/request-\1>$/.exec(
+    messages[2].content
+  );
+  assert.ok(requestMatch, messages[2].content);
+  // A fresh id each time, so the text inside cannot close its own tag.
+  assert.notEqual(pageMatch[1], requestMatch[1]);
 });
 
-test('asks once more with the reason, then gives up', async () => {
+test('without a page, tells the model the page is empty', async () => {
+  const { calls, send } = fakeChat([{ data: 'console.log(await page.title());' }]);
+  await generateCode('Print the title', { chat: send });
+  assert.match(calls[0][1].content, /URL: about:blank\nTitle: \n\(The page is empty\.\)/);
+});
+
+test('gives up at once when the answer is refused', async () => {
   const { calls, send } = fakeChat([
     { data: "await page.cdp('Browser.close');" },
     { data: 'console.log(await page.title());' }
   ]);
   assert.deepEqual(await generateCode('Close the browser', { chat: send }), {
-    data: 'console.log(await page.title());'
+    error: 'INVALID_CODE',
+    reason: 'page.cdp is not part of the playground API'
   });
-  assert.equal(calls.length, 2);
-  assert.match(calls[1].at(-1).content, /refused: page\.cdp is not part of the playground API/);
-
-  const stubborn = fakeChat([{ data: 'Sure, here is a poem.' }]);
-  const result = await generateCode('Write a poem', { chat: stubborn.send });
-  assert.equal(result.error, 'INVALID_CODE');
-  assert.equal(stubborn.calls.length, 2);
+  assert.equal(calls.length, 1);
 });
 
 test('never calls the model for an empty or overlong instruction, and passes on its failure', async () => {

@@ -2,6 +2,8 @@
 
 The harness lets the [Playground](playground.md) accept a task in natural language, for example "Go to CNN and get the page title". The harness sends the task to an LLM, which writes the script. The server verifies that script before it runs.
 
+Together with the task, the harness sends the accessibility tree of the page that is open in the browser. Thus, the LLM can write a script for that page, for example "Click the Sign in button". Each request has only the system prompt, the page, and the task, not the earlier tasks.
+
 Without an LLM, the playground still works, but it accepts only scripts.
 
 ## Configuration
@@ -20,11 +22,9 @@ At startup, the server asks the LLM to write a simple script. If the script is c
 
 The quality of the scripts depends on the model. A fast model that writes good JavaScript works best, because the user waits for the answer before the script runs.
 
-The text that a user types goes to the LLM service. If that is a problem, use a local LLM server.
+The text that a user types, and the content of the page that is open, go to the LLM service. If that is a problem, use a local LLM server.
 
-The server does not trust the LLM. A task can contain a prompt injection, for example text that the user pasted from a different site. Thus, a script from the LLM must also obey stricter rules, as described in [Verification](#verification).
-
-Each LLM request costs money with a managed service. Thus, each user can send 10 tasks a minute to the LLM. Scripts that pass verification run without the LLM, so they do not count.
+The server does not trust the LLM. A task can contain a prompt injection, for example text that the user pasted from a different site. The page can also contain one. Thus, a script from the LLM must also obey stricter rules, as described in [Verification](#verification).
 
 ## Verification
 
@@ -44,7 +44,7 @@ A task can contain text that tries to control the LLM (a prompt injection), for 
 - It does not use `page.cdp`.
 - It uses an index only with a literal value, for example `items[0]`. A variable index could make a name that is not permitted.
 
-If the server refuses the first script from the LLM, the LLM gets one more attempt with the reason.
+If the server refuses the script from the LLM, the task fails. The LLM does not get another attempt.
 
 Verification is not a sandbox. A script that passes verification still controls the browser. Give the LLM only tasks that you also run as a script.
 
