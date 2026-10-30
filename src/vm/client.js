@@ -137,7 +137,7 @@ const createVmClient = ({
     }
   };
 
-  // The snapshot fits only the machine it was saved from, and only
+  // The snapshot of an OS fits only the machine it was saved from, and only
   // loads under the accelerator it was saved with. If not, says why.
   const usableSnapshot = async (os, vmAccel) => {
     const snapshotDir = snapshotDirOf(os);
@@ -245,8 +245,8 @@ const createVmClient = ({
     );
   };
 
-  // The OS, when it has a usable snapshot for new browsers. The server
-  // saves the snapshot in the background at startup.
+  // The OSes with a usable snapshot, which new browsers can run on. The
+  // server saves the snapshots in the background at startup.
   const launchableOses = async () => {
     const vmAccel = await getAccel();
     const oses = [];
@@ -258,8 +258,8 @@ const createVmClient = ({
     return oses;
   };
 
-  // Lets the app refuse a launch up front, when there is no usable
-  // snapshot.
+  // Lets the app refuse a launch up front, when `os`, or every OS, has no
+  // usable snapshot.
   const canLaunchBrowser = async (os) =>
     os ? isOs(os) && Boolean((await usableSnapshot(os, await getAccel())).saved) : (await launchableOses()).length > 0;
 

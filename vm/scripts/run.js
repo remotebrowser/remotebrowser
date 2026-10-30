@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Starts a copy of the snapshot that vm/scripts/build.js saved, to
+// Starts a copy of the snapshot of an OS that vm/scripts/build.js saved, to
 // test the browser VM without the app. The browser answers in a few seconds,
 // as it was when the snapshot was saved. The guest console is this terminal,
 // with a root shell; press Ctrl-A then X to quit QEMU.
 //
-//   vm/scripts/run.js [debian-13]
+//   vm/scripts/run.js [os]     the OS defaults to debian-13; see src/vm/os.js
 //
 // CDP is forwarded to 127.0.0.1:$CDP_PORT (default 9222), and the display to
 // a VNC viewer at 127.0.0.1:$VNC_PORT (default 5900). Writes go to a copy of

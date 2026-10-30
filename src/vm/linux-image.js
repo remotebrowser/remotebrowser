@@ -9,9 +9,9 @@ import { hasImageFiles } from './image.js';
 import { OSES } from './os.js';
 import { step } from './step.js';
 
-// The Linux image: vm/debian-13/Dockerfile, built with Docker, and turned
-// into a disk with a kernel and initrd for direct boot. Its services are in
-// vm/linux/files.
+// The Linux images: vm/<os>/Dockerfile, built with Docker, and turned into
+// a disk with a kernel and initrd for direct boot. They share the services
+// in vm/linux/files, and an OS may add its own in vm/<os>/files.
 
 // The Docker build context, so each Dockerfile can copy vm/linux/files.
 const VM_DIR = fileURLToPath(new URL('../../vm', import.meta.url));
@@ -78,7 +78,9 @@ const UNPACK_SCRIPT = `
   mkdir /rootfs /out
   tar -x -C /rootfs -f -
   rm -f /rootfs/.dockerenv
-  # Docker manages these during the build; set what the VM needs.
+  # Docker manages these during the build; set what the VM needs. The
+  # resolv.conf may be a link to systemd-resolved, which the VM does not run.
+  rm -f /rootfs/etc/resolv.conf
   printf "nameserver 10.0.2.3\\n" >/rootfs/etc/resolv.conf
   printf "browser\\n" >/rootfs/etc/hostname
   printf "127.0.0.1 localhost browser\\n::1 localhost\\n" >/rootfs/etc/hosts

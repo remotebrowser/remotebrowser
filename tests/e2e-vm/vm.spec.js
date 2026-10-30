@@ -1,10 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
+  dataDir,
+  arch,
   machinesDir,
   listBrowserVms,
   qemuPid,
@@ -19,6 +21,14 @@ import {
 // browser, then inspects the VM state dir and the QEMU process directly to
 // prove Chromium is actually running (and, for the CDP test, actually answering).
 // See helpers.js for what the host needs.
+
+const readdirSafe = (dir) => {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+};
 
 // The first bytes a VNC server sends are its RFB protocol version.
 const rfbGreeting = (port) =>
@@ -80,6 +90,32 @@ test.describe('real QEMU VMs', () => {
     await terminateBrowser(page, publicId, browserName);
     await expect.poll(() => listBrowserVms().includes(vm), { timeout: 30000 }).toBe(false);
     await expect.poll(() => isAlive(pid), { timeout: 30000 }).toBe(false);
+  });
+
+  test('a browser launched on Ubuntu 26.04 runs on its own snapshot and answers over CDP', async ({ page }) => {
+    const ubuntuBuilt = readdirSafe(join(dataDir, 'images', 'ubuntu-26.04')).some((name) =>
+      name.startsWith(`${arch}-`)
+    );
+    test.skip(!ubuntuBuilt, 'requires an Ubuntu 26.04 image build from vm/build-ubuntu-26.04.sh');
+    test.setTimeout(300000);
+    // The app saves this snapshot in the background too, after Debian's or alongside it.
+    await expect
+      .poll(() => existsSync(join(dataDir, 'snapshots', 'ubuntu-26.04', 'machine.json')), {
+        timeout: 120000,
+        intervals: [1000]
+      })
+      .toBe(true);
+
+    await signIn(page, 'e2e-qemu-ubuntu@example.com');
+    const browserName = 'e2e-qemu-ubuntu-otter';
+    const publicId = await launchBrowser(page, browserName, { os: 'Ubuntu 26.04' });
+    await expect(page.locator('#browser-status')).toContainText('running', { timeout: 150000 });
+    await expect(page.locator('a.page-preview-link').first()).toBeVisible({ timeout: 60000 });
+
+    const [vm] = listBrowserVms();
+    expect(JSON.parse(readFileSync(join(machinesDir, vm, 'machine.json'), 'utf8')).os).toBe('ubuntu-26.04');
+
+    await terminateBrowser(page, publicId, browserName);
   });
 
   test('the running browser answers over CDP and streams a real screenshot', async ({ page }) => {

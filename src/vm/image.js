@@ -5,7 +5,8 @@ import { osLayout, vmLayout } from './layout.js';
 import { imageFiles } from './qemu.js';
 import { LOG_ATTRIBUTES } from './step.js';
 
-// Shared image helpers; linux-image.js builds the image itself.
+// Shared by the images of every OS. Each OS builds its image in its own
+// file, such as linux-image.js.
 
 // Size and modification time, which change when a file is built again.
 const fileStamp = async (file) => {

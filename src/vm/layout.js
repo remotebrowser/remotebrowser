@@ -5,9 +5,9 @@ import { MAX_SOCKET_PATH } from './qemu.js';
 // Everything for the VMs lives in one dir, VM_DATA_DIR. One dir means one
 // filesystem, so files move there with a rename, never a copy:
 //
-//   images/<os>/<arch>-<source>/  one build of the image (os.js),
+//   images/<os>/<arch>-<source>/  one build of the image of an OS (os.js),
 //                                 never changed once written (image.js)
-//   snapshots/<os>/               the VM that new VMs start from
+//   snapshots/<os>/               the VM that new VMs of that OS start from
 //                                 (snapshot.js)
 //   machines/<browser-id>/        one VM per browser (client.js)
 //   run/                          the VM that vm/scripts/run.js starts

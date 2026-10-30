@@ -81,7 +81,7 @@ test('a snapshot of an older QEMU machine is not current', async () => {
   assert.match((await snapshotStatus(wanted)).reason, /older QEMU machine/);
 });
 
-test('a snapshot whose machine.json names a different OS is not current', async () => {
+test('a snapshot of another OS is not current', async () => {
   const { wanted } = await savedSnapshot();
   assert.equal(
     (await snapshotStatus({ ...wanted, os: 'other-os' })).reason,

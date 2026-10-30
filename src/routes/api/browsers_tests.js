@@ -73,6 +73,7 @@ const fakeVms = (overrides = {}) => {
   };
   setVmClient({
     canLaunchBrowser: record('canLaunchBrowser', true),
+    launchableOses: record('launchableOses', ['debian-13', 'ubuntu-26.04']),
     launchBrowser: record('launchBrowser', { browserId: 'Qabc12345' }),
     browserExists: record('browserExists', true),
     stopBrowser: record('stopBrowser', undefined),
@@ -398,6 +399,7 @@ test('PATCH /:id/config refuses a bad body or proxy URL, and changes nothing', a
     ['not json', 'The request body must be JSON.'],
     ['[1]', 'The request body must be a JSON object.'],
     [{ denylist: [] }, 'Unknown setting: denylist.'],
+    [{ os: 'ubuntu' }, 'Unknown setting: os.'],
     [{ proxy: 42 }, 'The proxy must be a URL, or null to connect directly.'],
     [{ proxy: 'https://proxy.example.com' }, 'The proxy URL must start with http://, socks4://, or socks5://.']
   ]) {
@@ -472,10 +474,65 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   assert.deepEqual(launches, [
-    { proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
+    { os: 'debian-13', proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
   ]);
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
   assert.deepEqual(stored.data.config, { proxy: 'http://u:****@proxy.example.com:8080' });
+});
+
+// Waits for the launches that the API starts after it answers.
+const launchesOf = async (apiKey, os) => {
+  const launches = [];
+  fakeVms({
+    launchBrowser: async (options) => {
+      launches.push(options.os);
+      throw new Error('no VM in tests');
+    }
+  });
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, os === undefined ? {} : { os });
+  assert.equal(res.status, 200, String(os));
+  for (let i = 0; i < 100 && launches.length === 0; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return launches;
+};
+
+test('POST /api/v1/browsers launches on Debian 13 by default, or the os it names, in any case', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  assert.deepEqual(await launchesOf(apiKey, undefined), ['debian-13']);
+  for (const os of ['debian-13', 'Debian13', 'DEBIAN-13']) {
+    assert.deepEqual(await launchesOf(apiKey, os), ['debian-13'], os);
+  }
+  for (const os of ['ubuntu-26.04', 'Ubuntu', 'ubuntu26.04', 'UBUNTU-26.04']) {
+    assert.deepEqual(await launchesOf(apiKey, os), ['ubuntu-26.04'], os);
+  }
+});
+
+test('POST /api/v1/browsers refuses an unknown os, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  for (const os of ['windows-11', 'debian', 'ubuntu-24.04', '', 13, null]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { os });
+    assert.equal(res.status, 400, String(os));
+    assert.deepEqual(await res.json(), { error: 'The os must be one of debian-13, ubuntu-26.04.' });
+  }
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /api/v1/browsers answers 503 for an os whose snapshot is not ready, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms({ launchableOses: async () => ['debian-13'] });
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, { os: 'ubuntu' });
+  assert.equal(res.status, 503);
+  assert.deepEqual(await res.json(), {
+    error: 'Ubuntu 26.04 browsers are not available here yet. Please try again later.'
+  });
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
 test('POST /api/v1/browsers with a bad proxy launches nothing', async () => {
