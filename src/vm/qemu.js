@@ -4,14 +4,14 @@ import path from 'node:path';
 import { run } from './host.js';
 
 const CDP_PORT = 9222;
-// The guest's display over RFB, for any VNC viewer on the host.
+// QEMU's VNC display 0 is on this port, so display N is on 5900 + N.
 const VNC_PORT = 5900;
 
 // A saved state loads only into the same devices. Bump this whenever
 // buildQemuArgs changes them, or snapshots change how they are kept, so older
-// snapshots are saved again. Version 4 runs snapshots on a build in
-// VM_DATA_DIR/images (image.js).
-const MACHINE_VERSION = 4;
+// snapshots are saved again. Version 5 adds a virtual GPU, which QEMU's VNC
+// server shows, in place of Xvnc.
+const MACHINE_VERSION = 5;
 
 // Every VM started from a snapshot has the same memory, random number state
 // included. vmgenid tells the guest kernel that it is a new copy, so it
@@ -19,9 +19,21 @@ const MACHINE_VERSION = 4;
 const ARCHES = {
   // Without the HPET, the RTC ticks, which hwclock in the guest needs to set
   // the clock after a resume.
-  x86_64: { binary: 'qemu-system-x86_64', machine: 'q35,hpet=off', console: 'ttyS0', vmgenid: true },
+  // The guest takes input only from the virtio keyboard and tablet: QEMU
+  // would send a VNC viewer's pointer to the PS/2 or VMware mouse instead.
+  x86_64: {
+    binary: 'qemu-system-x86_64',
+    machine: 'q35,hpet=off,vmport=off,i8042=off',
+    console: 'ttyS0',
+    vmgenid: true
+  },
   // The best GIC the host offers, so the same args work under KVM, HVF, and TCG.
-  aarch64: { binary: 'qemu-system-aarch64', machine: 'virt,gic-version=max', console: 'ttyAMA0', vmgenid: false }
+  aarch64: {
+    binary: 'qemu-system-aarch64',
+    machine: 'virt,gic-version=max',
+    console: 'ttyAMA0',
+    vmgenid: false
+  }
 };
 
 const hostArch = (nodeArch = process.arch) => (nodeArch === 'arm64' ? 'aarch64' : 'x86_64');
@@ -42,10 +54,53 @@ const detectAccel = async ({ platform = process.platform, kvmDevice = '/dev/kvm'
   }
 };
 
-// The kernel and initrd sit next to the root disk image, as vm/scripts/build.js writes them.
+// The kernel and initrd sit next to the root disk image, as linux-image.js
+// writes them.
 const imageFiles = (image) => {
   const base = image.replace(/\.qcow2$/, '');
   return { disk: image, kernel: `${base}.kernel`, initrd: `${base}.initrd` };
+};
+
+// QEMU itself serves the screen over VNC, on host loopback, so no guest needs
+// a VNC server.
+const vncDisplay = (vncHostPort) => {
+  if (vncHostPort < VNC_PORT) {
+    throw new Error(`QEMU serves VNC only on port ${VNC_PORT} or above, not ${vncHostPort}`);
+  }
+  return ['-vnc', `127.0.0.1:${vncHostPort - VNC_PORT}`];
+};
+
+const linuxDevices = ({ arch, image, overlay, cdpHostPort, vncHostPort }) => {
+  const { kernel, initrd } = imageFiles(image);
+  return [
+    '-kernel',
+    kernel,
+    '-initrd',
+    initrd,
+    '-append',
+    `root=/dev/vda rw console=${ARCHES[arch].console} net.ifnames=0 noresume panic=-1`,
+    '-drive',
+    `file=${overlay},format=qcow2,if=none,id=root,discard=unmap`,
+    '-device',
+    'virtio-blk-pci,drive=root',
+    // Without restrict=on, so Chromium can browse. hostfwd binds only to
+    // loopback. No IPv6: its fec0::2 also leads to the host's loopback, and
+    // the guest firewall covers IPv4 only.
+    '-netdev',
+    `user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${cdpHostPort}-:${CDP_PORT}`,
+    '-device',
+    'virtio-net-pci,netdev=net0,romfile=',
+    // Xorg draws on this GPU, which takes any screen size, and starts at the
+    // default. Unlike virtio-vga, it is on aarch64 too. The keyboard and
+    // tablet take a VNC viewer's input.
+    '-device',
+    'virtio-gpu-pci,xres=1920,yres=1080',
+    '-device',
+    'virtio-keyboard-pci',
+    '-device',
+    'virtio-tablet-pci',
+    ...vncDisplay(vncHostPort)
+  ];
 };
 
 // Unix socket paths have a hard length limit: 108 bytes on Linux, and 104 on
@@ -68,8 +123,7 @@ const buildQemuArgs = ({
   // QEMU has seccomp only on Linux.
   seccomp = process.platform === 'linux'
 }) => {
-  const { machine, console: tty, vmgenid } = ARCHES[arch];
-  const { kernel, initrd } = imageFiles(image);
+  const { machine, vmgenid } = ARCHES[arch];
   return [
     '-name',
     name,
@@ -86,23 +140,7 @@ const buildQemuArgs = ({
     memory,
     '-smp',
     String(cpus),
-    '-kernel',
-    kernel,
-    '-initrd',
-    initrd,
-    '-append',
-    `root=/dev/vda rw console=${tty} net.ifnames=0 noresume panic=-1`,
-    '-drive',
-    `file=${overlay},format=qcow2,if=none,id=root,discard=unmap`,
-    '-device',
-    'virtio-blk-pci,drive=root',
-    // Without restrict=on, so Chromium can browse. hostfwd binds only to
-    // loopback. No IPv6: its fec0::2 also leads to the host's loopback, and
-    // the guest firewall covers IPv4 only.
-    '-netdev',
-    `user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${cdpHostPort}-:${CDP_PORT},hostfwd=tcp:127.0.0.1:${vncHostPort}-:${VNC_PORT}`,
-    '-device',
-    'virtio-net-pci,netdev=net0,romfile=',
+    ...linuxDevices({ arch, image, overlay, cdpHostPort, vncHostPort }),
     // Chromium and TLS need entropy early in boot.
     '-device',
     'virtio-rng-pci',

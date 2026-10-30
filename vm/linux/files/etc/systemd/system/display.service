@@ -1,0 +1,29 @@
+[Unit]
+Description=X display for the browser, on the VM's virtual GPU
+# QEMU shows this screen over VNC on the host's loopback, so the guest runs
+# no VNC server of its own.
+
+[Service]
+User=browser
+# The GPU and the virtual keyboard and tablet, for Xorg only: the browser
+# runs without these groups.
+SupplementaryGroups=video input
+# Xorg needs a VT, which it can only switch to as its controlling terminal.
+# Nothing else uses tty1.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+Environment=HOME=/home/browser
+# The GPU driver loads a moment after boot.
+ExecStartPre=/bin/sh -c 'until [ -e /dev/dri/card0 ]; do sleep 0.1; done'
+# No screen saver, nor power saving, which would blank the screen.
+ExecStart=/usr/bin/Xorg :99 vt1 -keeptty -novtswitch -nolisten tcp -s 0 -dpms
+# The screen size that the host may set (see screen-resolution). Xorg starts
+# at the size QEMU offers, 1920x1080, e.g. after a crash, so it is set again
+# here. A failure leaves that size, and keeps the display up.
+ExecStartPost=-/usr/local/bin/screen-resolution
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

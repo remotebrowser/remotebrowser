@@ -7,11 +7,13 @@ import { generateShortId } from '../id.js';
 import { fetchWebSocketDebuggerUrl, rewriteWsUrl } from './cdp.js';
 import * as host from './host.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
-import { vmLayout } from './layout.js';
+import { osLayout, vmLayout } from './layout.js';
+import { DEFAULT_OS, OSES, isOs } from './os.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
 import {
   DEFAULT_SCREEN_RESOLUTION,
   normalizeScreenResolution,
+  vncScreenSize,
   writeGuestScreenResolution
 } from './screen-resolution.js';
 import { normalizeScreenScale, writeGuestScreenScale } from './screen-scale.js';
@@ -66,7 +68,8 @@ const createVmClient = ({
   readScreenSize = readVncScreenSize
 } = {}) => {
   const { binary } = ARCHES[arch];
-  const { snapshot: snapshotDir, machines: machinesDir } = vmLayout(dataDir);
+  const { machines: machinesDir } = vmLayout(dataDir);
+  const snapshotDirOf = (os) => osLayout(dataDir, os).snapshot;
   const vmDir = (browserId) => path.join(machinesDir, browserId);
   let accelPromise = accel ? Promise.resolve(accel) : null;
   const getAccel = () => (accelPromise ??= detectAccel());
@@ -134,10 +137,11 @@ const createVmClient = ({
     }
   };
 
-  // The snapshot fits only the machine it was saved from, and only loads
-  // under the accelerator it was saved with. If it does not fit, says why.
-  const usableSnapshot = async (vmAccel) => {
-    const status = await snapshotStatus({ snapshotDir, arch, memory, cpus });
+  // The snapshot fits only the machine it was saved from, and only
+  // loads under the accelerator it was saved with. If not, says why.
+  const usableSnapshot = async (os, vmAccel) => {
+    const snapshotDir = snapshotDirOf(os);
+    const status = await snapshotStatus({ snapshotDir, os, arch, memory, cpus });
     if (!status.current) {
       return { reason: status.reason };
     }
@@ -150,7 +154,8 @@ const createVmClient = ({
 
   // Starts the VM as the snapshot left it, with the browser already up, on
   // a copy of the snapshot's disk.
-  const startFromSnapshot = async ({ name, dir, saved, proxy, screenResolution, screenScale }) => {
+  const startFromSnapshot = async ({ name, dir, os, saved, proxy, screenResolution, screenScale }) => {
+    const snapshotDir = snapshotDirOf(os);
     // A reflink where the filesystem has them, else a plain copy.
     await copyFile(
       path.join(snapshotDir, 'overlay.qcow2'),
@@ -160,6 +165,7 @@ const createVmClient = ({
     // The image build, and its stamp, so a resume can check that it is
     // still the same.
     const machine = {
+      os,
       arch: saved.arch,
       accel: saved.accel,
       image: saved.image,
@@ -190,7 +196,7 @@ const createVmClient = ({
       }
       // The guest clock stopped when the snapshot was saved. Setting it also
       // starts the browser, which is not in the snapshot (see
-      // chromium-start.timer in vm/files).
+      // chromium-start.timer in vm/linux/files).
       await setGuestClock({ dir, name, connectQmp });
       await waitForBrowser(started.cdpHostPort);
     } catch (error) {
@@ -203,7 +209,8 @@ const createVmClient = ({
 
   // The guest sets the screen size a moment after the host writes it, and a
   // change while it sets one would be missed, so wait until it shows.
-  const waitForScreenResolution = async (port, { width, height }) => {
+  const waitForScreenResolution = async (port, mode) => {
+    const { width, height } = vncScreenSize(mode);
     const deadline = Date.now() + browserStartTimeoutMs;
     let seen = 'no answer';
     while (Date.now() < deadline) {
@@ -218,7 +225,7 @@ const createVmClient = ({
       }
       await delay(100);
     }
-    throw new Error(`the screen did not change to ${width}x${height} (${seen})`);
+    throw new Error(`the screen did not change to ${mode.width}x${mode.height} (${seen})`);
   };
 
   const waitForBrowser = async (port) => {
@@ -238,14 +245,32 @@ const createVmClient = ({
     );
   };
 
-  // Lets the app refuse a launch up front while the server is still saving
-  // the snapshot at startup.
-  const canLaunchBrowser = async () => Boolean((await usableSnapshot(await getAccel())).saved);
+  // The OS, when it has a usable snapshot for new browsers. The server
+  // saves the snapshot in the background at startup.
+  const launchableOses = async () => {
+    const vmAccel = await getAccel();
+    const oses = [];
+    for (const os of Object.keys(OSES)) {
+      if ((await usableSnapshot(os, vmAccel)).saved) {
+        oses.push(os);
+      }
+    }
+    return oses;
+  };
 
+  // Lets the app refuse a launch up front, when there is no usable
+  // snapshot.
+  const canLaunchBrowser = async (os) =>
+    os ? isOs(os) && Boolean((await usableSnapshot(os, await getAccel())).saved) : (await launchableOses()).length > 0;
+
+  // `os` is the guest OS; see os.js.
   // `proxy` is an upstream proxy URL for the browser's traffic; see proxy.js.
   // `screenResolution` is the screen size; see screen-resolution.js.
   // `screenScale` is the screen scale in percent; see screen-scale.js.
-  const launchBrowser = async ({ proxy = null, screenResolution = null, screenScale = null } = {}) => {
+  const launchBrowser = async ({ os = DEFAULT_OS, proxy = null, screenResolution = null, screenScale = null } = {}) => {
+    if (!isOs(os)) {
+      throw new Error(`Unknown OS ${os}`);
+    }
     // A bad URL, screen resolution, or scale fails here, before a VM starts.
     const upstreamProxy = normalizeProxyUrl(proxy);
     const resolution = normalizeScreenResolution(screenResolution);
@@ -257,16 +282,17 @@ const createVmClient = ({
     // New VMs start only from the snapshot, never by booting the image: the
     // snapshot has the browser already up, and the app does not wait for a
     // boot. The server saves one at startup (src/vm/bootstrap.js).
-    const { saved, reason } = await usableSnapshot(vmAccel);
+    const { saved, reason } = await usableSnapshot(os, vmAccel);
     if (!saved) {
       consola.error(`QEMU unable to start browser VM ${name}: no usable snapshot`, {
         'event.domain': 'qemu',
         'rb.runtime': 'qemu',
-        'rb.vm_snapshot_dir': snapshotDir,
+        'rb.vm_os': os,
+        'rb.vm_snapshot_dir': snapshotDirOf(os),
         'error.type': reason
       });
       throw new Error(
-        `Unable to launch the browser for ${name}: ${reason}; the server saves a snapshot at startup, or run vm/scripts/build.js`
+        `Unable to launch the browser for ${name}: ${reason}; the server saves a snapshot at startup, or run vm/build-${os}.sh`
       );
     }
     // Only the app's user may read the overlay, which holds the browser profile.
@@ -276,13 +302,15 @@ const createVmClient = ({
       'event.domain': 'qemu',
       'rb.runtime': 'qemu',
       'rb.accel': vmAccel,
+      'rb.vm_os': os,
       'rb.vm_image': saved.image,
-      'rb.vm_snapshot_dir': snapshotDir
+      'rb.vm_snapshot_dir': snapshotDirOf(os)
     });
     try {
       const started = await startFromSnapshot({
         name,
         dir,
+        os,
         saved,
         proxy: upstreamProxy,
         screenResolution: resolution,
@@ -509,6 +537,7 @@ const createVmClient = ({
     runtime: 'qemu',
     arch,
     getAccel,
+    launchableOses,
     canLaunchBrowser,
     launchBrowser,
     browserExists,

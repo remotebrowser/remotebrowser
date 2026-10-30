@@ -4,4 +4,4 @@ Description=Apply the browser's screen scale that the host sets
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/screen-scale
+ExecStart=/usr/local/bin/screen-scale
