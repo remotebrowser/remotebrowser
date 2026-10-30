@@ -19,8 +19,8 @@ import { LOG_ATTRIBUTES, step } from './step.js';
 //   vm.state        the memory and devices at that moment
 //   console.log     the serial console until then
 //
-// It lives in snapshots/<os> (layout.js). It is saved with the app's own
-// QEMU args, so the app, and vm/scripts/run.js, can start VMs from it. See
+// Each OS has its own (layout.js). It is saved with the app's own QEMU args,
+// so the app, and vm/scripts/run.js, can start VMs from it. See
 // startFromSnapshot in local.js.
 
 // The machine a snapshot was saved with, or null when there is no complete

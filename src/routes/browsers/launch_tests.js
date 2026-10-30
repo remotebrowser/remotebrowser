@@ -38,11 +38,13 @@ const { setVmClient, createVmClient } = await import('../../vm/index.js');
 // so nothing is ever dialed. It records the options of each launch.
 const fakeVms = ({
   launchBrowser = async () => ({ browserId: 'foobar' }),
-  canLaunchBrowser = async () => true
+  canLaunchBrowser = async () => true,
+  launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : [])
 } = {}) => {
   const launches = [];
   setVmClient({
     canLaunchBrowser,
+    launchableOses,
     launchBrowser: async (options) => {
       launches.push(options);
       return launchBrowser(options);
@@ -641,8 +643,8 @@ test('POST /browsers/launch sets the chosen screen scale, and nothing for 150%',
   }
   assert.ok(await settle(() => launches.length > 1));
   assert.deepEqual(launches, [
-    { proxy: null, screenResolution: null, screenScale: 175 },
-    { proxy: null, screenResolution: null, screenScale: null }
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 175 },
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null }
   ]);
 });
 
@@ -677,8 +679,8 @@ test('POST /browsers/launch sets the chosen screen resolution', async () => {
   }
   assert.ok(await settle(() => launches.length > 1));
   assert.deepEqual(launches, [
-    { proxy: null, screenResolution: { width: 1920, height: 1200 }, screenScale: null },
-    { proxy: null, screenResolution: { width: 3840, height: 2160 }, screenScale: null }
+    { os: 'debian-13', proxy: null, screenResolution: { width: 1920, height: 1200 }, screenScale: null },
+    { os: 'debian-13', proxy: null, screenResolution: { width: 3840, height: 2160 }, screenScale: null }
   ]);
 });
 
@@ -687,7 +689,7 @@ test('POST /browsers/launch keeps the image default for Full HD', async () => {
   const launches = fakeVms();
   assert.equal((await postLaunch(workspaceId, { screenResolution: 'full-hd' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
-  assert.deepEqual(launches, [{ proxy: null, screenResolution: null, screenScale: null }]);
+  assert.deepEqual(launches, [{ os: 'debian-13', proxy: null, screenResolution: null, screenScale: null }]);
 });
 
 test('POST /browsers/launch refuses a screen resolution not in the list, and creates nothing', async () => {
@@ -720,7 +722,7 @@ test('POST /browsers/launch passes the proxy to the new VM when the box is check
   assert.equal(res.status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
+    { os: 'debian-13', proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
   ]);
   // Kept with the browser, so the REST API can report it, but never with the password.
   const [browser] = (await listBrowserInstancesByWorkspace({ workspaceId })).data;
@@ -733,7 +735,7 @@ test('POST /browsers/launch ignores the proxy URL when the box is not checked', 
   // As a visitor without JavaScript can send it: the input is never disabled.
   assert.equal((await postLaunch(workspaceId, { proxy: 'not a url' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
-  assert.deepEqual(launches, [{ proxy: null, screenResolution: null, screenScale: null }]);
+  assert.deepEqual(launches, [{ os: 'debian-13', proxy: null, screenResolution: null, screenScale: null }]);
 });
 
 test('POST /browsers/launch asks for the URL when the box is checked but the input is empty', async () => {
@@ -762,4 +764,52 @@ test('POST /browsers/launch refuses a bad proxy URL, keeps what was typed, and c
   assert.match(body, /value="https:\/\/proxy.example.com"/);
   assert.match(body, /value="For QA"/);
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('GET /browsers/launch offers the OSes that have a snapshot, after the description, with Debian 13 chosen', async () => {
+  fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04'] });
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /<span id="osLabel" class="field-label">Operating system<\/span>/);
+  const options = [
+    ...body.matchAll(/<input type="radio" name="os" value="([^"]+)"( checked)? \/>\s*<span>([^<]*)<\/span>/g)
+  ].map((m) => m.slice(1));
+  assert.deepEqual(options, [
+    ['debian-13', ' checked', 'Debian 13'],
+    ['ubuntu-26.04', undefined, 'Ubuntu 26.04']
+  ]);
+  const at = (text) => body.indexOf(text);
+  assert.ok(at('name="description"') < at('name="os"'));
+  assert.ok(at('name="os"') < at('name="screenResolution"'));
+});
+
+test('GET /browsers/launch chooses the only OS with a snapshot', async () => {
+  fakeVms({ launchableOses: async () => ['ubuntu-26.04'] });
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /value="ubuntu-26.04" checked/);
+  assert.doesNotMatch(body, /value="debian-13"/);
+});
+
+test('POST /browsers/launch starts the chosen OS, with its settings', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04'] });
+  const ubuntu = { os: 'ubuntu-26.04', useProxy: 'on', proxy: 'http://proxy.example:8080', screenScale: '200' };
+  assert.equal((await postLaunch(workspaceId, ubuntu)).status, 303);
+  assert.ok(await settle(() => launches.length > 0));
+  assert.deepEqual(launches, [
+    { os: 'ubuntu-26.04', proxy: 'http://proxy.example:8080', screenResolution: null, screenScale: 200 }
+  ]);
+});
+
+test('POST /browsers/launch refuses an OS without a snapshot, and creates nothing', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  const res = await postLaunch(workspaceId, { os: 'ubuntu-26.04' });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /Choose an operating system from the list\./);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+  assert.deepEqual(launches, []);
 });

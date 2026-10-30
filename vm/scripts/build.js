@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Builds the Debian 13 image, then boots it once and saves the running
+// Builds the image of one guest OS, then boots it once and saves the running
 // VM as a snapshot, which vm/scripts/run.js starts in seconds. Each step runs
 // only when its result is missing or out of date, so running this again is
-// cheap. vm/build-debian-13.sh runs this, and vm/build-image.sh runs that.
+// cheap. vm/build-<os>.sh runs this, and vm/build-image.sh runs those.
 //
-//   vm/scripts/build.js debian-13
+//   vm/scripts/build.js <os>     debian-13 or ubuntu-26.04; see src/vm/os.js
 //
 // It reads the same settings as the app:
 //

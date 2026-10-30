@@ -70,9 +70,12 @@ const signIn = async (page, email) => {
 };
 
 // Launches through the real UI and returns the new browser's public id.
-const launchBrowser = async (page, name, { proxy } = {}) => {
+const launchBrowser = async (page, name, { proxy, os } = {}) => {
   await page.goto('/browsers/launch');
   await page.locator('#name').fill(name);
+  if (os) {
+    await page.getByLabel(os, { exact: true }).check();
+  }
   if (proxy) {
     await page.getByLabel('Use proxy').check();
     await page.getByLabel('Proxy URL').fill(proxy);
@@ -120,4 +123,15 @@ const useQemuVms = () => {
   });
 };
 
-export { machinesDir, listBrowserVms, qemuPid, isAlive, signIn, launchBrowser, terminateBrowser, useQemuVms };
+export {
+  dataDir,
+  arch,
+  machinesDir,
+  listBrowserVms,
+  qemuPid,
+  isAlive,
+  signIn,
+  launchBrowser,
+  terminateBrowser,
+  useQemuVms
+};

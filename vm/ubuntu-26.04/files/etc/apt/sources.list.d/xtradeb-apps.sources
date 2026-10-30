@@ -1,0 +1,8 @@
+# Ubuntu ships Chromium only as a snap, which does not install in a Docker
+# build. This PPA has it as a .deb; preferences.d/xtradeb-apps takes only
+# Chromium from it.
+Types: deb
+URIs: https://ppa.launchpadcontent.net/xtradeb/apps/ubuntu
+Suites: resolute
+Components: main
+Signed-By: /etc/apt/keyrings/xtradeb-apps.asc

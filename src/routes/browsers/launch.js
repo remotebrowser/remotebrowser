@@ -12,8 +12,15 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canStartBrowser, startBrowser as startBrowserVm } from '../../vms.js';
-import { DEFAULT_SCREEN_RESOLUTION, DEFAULT_SCREEN_SCALE, normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
+import { canStartBrowser, listLaunchableOses, startBrowser as startBrowserVm } from '../../vms.js';
+import {
+  DEFAULT_OS,
+  DEFAULT_SCREEN_RESOLUTION,
+  DEFAULT_SCREEN_SCALE,
+  OSES,
+  normalizeProxyUrl,
+  maskProxyUrl
+} from '../../vm/index.js';
 import { navigateBrowserToUrl } from '../../cdp.js';
 import { formString } from '../../form.js';
 
@@ -70,10 +77,23 @@ const launchRefusal = (launched) => {
 
 const generateBrowserName = () => `${randomItem(ADJECTIVES)}-${randomItem(SOLITARY_ANIMALS)}`;
 
+// The OSes with a snapshot, which a browser can start on now. A failed check
+// offers none, as a launch would fail the same way.
+const launchableOses = async () => {
+  const listed = await listLaunchableOses();
+  if (listed.error) {
+    consola.error(`Unable to list the OSes a browser can start on: ${listed.error}`);
+  }
+  return listed.data ?? [];
+};
+
+const defaultOsChoice = (oses) => (oses.includes(DEFAULT_OS) ? DEFAULT_OS : (oses[0] ?? DEFAULT_OS));
+
 // Toggles default checked; error re-renders instead keep submitted values.
 const renderBrowserLaunch = async (c, data = {}) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
+  const oses = await launchableOses();
   return eta.render('browsers/launch', {
     email: user.email,
     csrfToken: createCsrfToken(c),
@@ -86,6 +106,8 @@ const renderBrowserLaunch = async (c, data = {}) => {
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
     notReady: false,
+    oses: oses.map((os) => ({ value: os, label: OSES[os].label })),
+    os: defaultOsChoice(oses),
     screenResolutions: SCREEN_RESOLUTIONS,
     screenResolution: DEFAULT_SCREEN_RESOLUTION_CHOICE,
     screenScales: SCREEN_SCALES,
@@ -117,6 +139,7 @@ const renderBrowserLaunchError = (c, body, error, data = {}) =>
     description: formString(body.description).trim(),
     enableScreenRecording: Boolean(body.enableScreenRecording),
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers),
+    ...(formString(body.os) && { os: formString(body.os) }),
     screenResolution: parseScreenResolution(body)?.value ?? DEFAULT_SCREEN_RESOLUTION_CHOICE,
     screenScale: parseScreenScale(body)?.value ?? DEFAULT_SCREEN_SCALE_CHOICE,
     useProxy: Boolean(body.useProxy),
@@ -136,13 +159,14 @@ const startBrowser = async ({
   workspaceId,
   browserInstanceId,
   userId,
+  os = DEFAULT_OS,
   proxy = null,
   screenResolution = null,
   screenScale = null,
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserVm({ proxy, screenResolution, screenScale });
+  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -237,6 +261,13 @@ const handleLaunch = async (c) => {
   }
   const screenScale = scaleChoice.value === DEFAULT_SCREEN_SCALE_CHOICE ? null : scaleChoice.scale;
 
+  // Without the field, e.g. from an older form, the default.
+  const oses = await launchableOses();
+  const os = formString(body.os) || defaultOsChoice(oses);
+  if (!oses.includes(os)) {
+    return c.html(renderBrowserLaunchError(c, body, 'Choose an operating system from the list.'), 400);
+  }
+
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -262,6 +293,7 @@ const handleLaunch = async (c) => {
     workspaceId: workspace.id,
     browserInstanceId: launched.data.browserInstanceId,
     userId: user.id,
+    os,
     proxy,
     screenResolution,
     screenScale
@@ -272,4 +304,4 @@ const handleLaunch = async (c) => {
 
 routes.post('/launch', requireUser, requireWorkspaceRole('User'), requireSubmittedWorkspace, handleLaunch);
 
-export { generateBrowserName, browsersReady, launchRefusal, startBrowser, INITIAL_URLS };
+export { generateBrowserName, browsersReady, launchRefusal, launchableOses, startBrowser, INITIAL_URLS };

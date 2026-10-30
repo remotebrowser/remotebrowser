@@ -8,11 +8,11 @@ import {
   getBrowserInstanceByPublicId,
   setBrowserInstanceConfig
 } from '../../models/browsers.js';
-import { generateBrowserName, browsersReady, launchRefusal, startBrowser } from '../browsers/launch.js';
+import { generateBrowserName, browsersReady, launchRefusal, launchableOses, startBrowser } from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
 import { setBrowserProxy, clearBrowserProxy } from '../../vms.js';
-import { normalizeProxyUrl, maskProxyUrl } from '../../vm/index.js';
+import { DEFAULT_OS, OSES, normalizeProxyUrl, maskProxyUrl, resolveOs } from '../../vm/index.js';
 
 // Documented in docs/api.md. A browser_id is the browser's public id, and a key
 // reaches only the browsers of its own workspace.
@@ -39,12 +39,13 @@ const loadBrowser = async (c) => {
 };
 
 // The settings a launch or a config change may carry. More will join proxy,
-// e.g. the allow and deny lists.
+// e.g. the allow and deny lists. The OS is only for a launch.
 const SETTINGS = new Set(['proxy']);
+const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os']);
 
 // Returns the settings, or the response that says what is wrong with them. An
 // empty body means no settings, so a bare POST still launches a browser.
-const readSettings = async (c) => {
+const readSettings = async (c, { launch = false } = {}) => {
   const text = await c.req.text();
   if (text.trim() === '') return { settings: {} };
   /** @type {any} */
@@ -57,9 +58,16 @@ const readSettings = async (c) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { response: c.json({ error: 'The request body must be a JSON object.' }, 400) };
   }
-  const unknown = Object.keys(body).find((key) => !SETTINGS.has(key));
+  const unknown = Object.keys(body).find((key) => !(launch ? LAUNCH_SETTINGS : SETTINGS).has(key));
   if (unknown) {
     return { response: c.json({ error: `Unknown setting: ${unknown}.` }, 400) };
+  }
+  const settings = {};
+  if ('os' in body) {
+    settings.os = resolveOs(body.os);
+    if (!settings.os) {
+      return { response: c.json({ error: `The os must be one of ${Object.keys(OSES).join(', ')}.` }, 400) };
+    }
   }
   if ('proxy' in body) {
     if (body.proxy !== null && typeof body.proxy !== 'string') {
@@ -67,22 +75,26 @@ const readSettings = async (c) => {
     }
     try {
       // Normalized here, so a bad URL is refused before anything changes.
-      return { settings: { proxy: normalizeProxyUrl(body.proxy) } };
+      settings.proxy = normalizeProxyUrl(body.proxy);
     } catch (error) {
       return { response: c.json({ error: `${error.message}.` }, 400) };
     }
   }
-  return { settings: {} };
+  return { settings };
 };
 
 // Secrets in the stored config are masked already.
 const configResponse = (browser, config) => ({ browser_id: browser.publicId, proxy: config.proxy ?? null });
 
 routes.post('/', async (c) => {
-  const { settings, response } = await readSettings(c);
+  const { settings, response } = await readSettings(c, { launch: true });
   if (response) return response;
   if (!(await browsersReady())) {
     return c.json({ error: 'Browsers are still being prepared. Please try again in a few minutes.' }, 503);
+  }
+  const os = settings.os ?? DEFAULT_OS;
+  if (!(await launchableOses()).includes(os)) {
+    return c.json({ error: `${OSES[os].label} browsers are not available here yet. Please try again later.` }, 503);
   }
   const user = c.get('user');
   const workspace = c.get('workspace');
@@ -107,6 +119,7 @@ routes.post('/', async (c) => {
     workspaceId: workspace.id,
     browserInstanceId: launched.data.browserInstanceId,
     userId: user.id,
+    os,
     proxy: settings.proxy ?? null
   });
   logAction(c, 'API browser launched', launched.data);

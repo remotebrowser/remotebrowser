@@ -7,6 +7,7 @@ const { setVmClient } = await import('./vm/index.js');
 const {
   startBrowser,
   canStartBrowser,
+  listLaunchableOses,
   browserExists,
   browserCdpUrl,
   stopBrowser,
@@ -31,6 +32,7 @@ const fakeVms = (overrides = {}) => {
   };
   const client = {
     canLaunchBrowser: record('canLaunchBrowser', true),
+    launchableOses: record('launchableOses', ['debian-13', 'ubuntu-26.04']),
     launchBrowser: record('launchBrowser', { browserId: 'Pabc12345' }),
     browserIsRunning: record('browserIsRunning', true),
     browserExists: record('browserExists', true),
@@ -56,7 +58,7 @@ test('startBrowser passes the upstream proxy to the VM launch', async () => {
   await startBrowser({ proxy: 'http://proxy.example.com:8080' });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { proxy: 'http://proxy.example.com:8080', screenResolution: null, screenScale: null }
+    args: { os: 'debian-13', proxy: 'http://proxy.example.com:8080', screenResolution: null, screenScale: null }
   });
 });
 
@@ -66,7 +68,7 @@ test('startBrowser passes the screen resolution to the VM launch', async () => {
   await startBrowser({ screenResolution: { width: 1280, height: 720 } });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { proxy: null, screenResolution: { width: 1280, height: 720 }, screenScale: null }
+    args: { os: 'debian-13', proxy: null, screenResolution: { width: 1280, height: 720 }, screenScale: null }
   });
 });
 
@@ -76,7 +78,7 @@ test('startBrowser passes the screen scale to the VM launch', async () => {
   await startBrowser({ screenScale: 150 });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { proxy: null, screenResolution: null, screenScale: 150 }
+    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 150 }
   });
 });
 
@@ -152,6 +154,26 @@ test('startBrowser reports a failed VM launch', async () => {
     }).client
   );
   assert.deepEqual(await startBrowser(), { error: 'Unable to launch Chromium' });
+});
+
+test('startBrowser launches the chosen OS', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  await startBrowser({ os: 'ubuntu-26.04' });
+  assert.deepEqual(calls[0].args, { os: 'ubuntu-26.04', proxy: null, screenResolution: null, screenScale: null });
+});
+
+test('listLaunchableOses asks the local VM manager, and turns a failure into an error', async () => {
+  setVmClient(fakeVms().client);
+  assert.deepEqual(await listLaunchableOses(), { data: ['debian-13', 'ubuntu-26.04'] });
+  setVmClient(
+    fakeVms({
+      launchableOses: async () => {
+        throw new Error('no accel');
+      }
+    }).client
+  );
+  assert.deepEqual(await listLaunchableOses(), { error: 'no accel' });
 });
 
 test('canStartBrowser asks the local VM manager', async () => {
