@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- labwc for the browser: every window maximized and without a title bar,
+     so each page gets the whole screen, also when the host changes its size. -->
+<labwc_config>
+  <windowRules>
+    <windowRule identifier="*" serverDecoration="no">
+      <action name="Maximize" />
+    </windowRule>
+  </windowRules>
+  <!-- One key binding stops labwc from loading its defaults, which could
+       unmaximize or move the browser. -->
+  <keyboard>
+    <keybind key="W-a">
+      <action name="None" />
+    </keybind>
+  </keyboard>
+</labwc_config>
