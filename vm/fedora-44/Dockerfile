@@ -63,11 +63,21 @@ COPY fedora-44/files/ /
 RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path \
         screen-resolution.path screen-scale.path seatd display cdp-proxy guest-ready \
         chromium-start.timer \
-    # Nothing in the VM needs these, and each one slows the boot.
+    # Nothing in the VM needs these, and each one slows the boot. Fedora's
+    # presets enable the rest, and they would be in the snapshot's memory.
     && systemctl mask systemd-networkd-wait-online dnf-makecache.timer getty@tty1 \
+        avahi-daemon.service avahi-daemon.socket systemd-homed.service systemd-homed-activate.service \
+        systemd-userdbd.socket systemd-oomd.service systemd-oomd.socket \
+        authselect-apply-changes selinux-autorelabel-mark rpmdb-rebuild fips-crypto-policy-overlay \
+        systemd-pstore systemd-tpm2-clear systemd-boot-clear-sysfail systemd-confext systemd-sysext \
+        systemd-network-generator fstrim.timer \
     # Fedora's nftables reads its rules from here.
     && ln -sf ../nftables.conf /etc/sysconfig/nftables.conf \
     # A random machine id per boot, instead of one baked into the image.
     && truncate -s 0 /etc/machine-id \
     # The upstream proxy may hold a password, which the browser must not read.
-    && install -d -m 0700 /etc/remotebrowser/proxy
+    && install -d -m 0700 /etc/remotebrowser/proxy \
+    # Mark /etc and /var as up to date with /usr. Otherwise each boot rebuilds
+    # the linker cache and the hwdb, which the packages already built, and
+    # ldconfig leaves most libraries in the snapshot's page cache.
+    && /usr/lib/systemd/systemd-update-done
