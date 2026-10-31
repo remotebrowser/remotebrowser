@@ -9,7 +9,7 @@ import { createVmClient } from './client.js';
 // detached, with a pidfile there, so browsers outlive an app restart, as they
 // did with containers.
 //
-//   os.js       the guest OS a browser runs on
+//   os.js       the guest OSes a browser can run on
 //   qemu.js     QEMU command line, arch, and accel
 //   host.js     processes, ports, and pids on the host
 //   qmp.js      QMP and guest agent sessions
@@ -30,7 +30,7 @@ const setVmClient = (client) => {
 
 export { createVmClient } from './client.js';
 export { buildQemuArgs, detectAccel, hostArch, imageFiles } from './qemu.js';
-export { DEFAULT_OS, OSES, isOs } from './os.js';
+export { DEFAULT_OS, OSES, isOs, resolveOs } from './os.js';
 export { DEFAULT_SCREEN_RESOLUTION, normalizeScreenResolution } from './screen-resolution.js';
 export { DEFAULT_SCREEN_SCALE, normalizeScreenScale } from './screen-scale.js';
 export { normalizeProxyUrl, maskProxyUrl } from './proxy.js';
