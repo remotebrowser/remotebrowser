@@ -58,7 +58,13 @@ test('startBrowser passes the upstream proxy to the VM launch', async () => {
   await startBrowser({ proxy: 'http://proxy.example.com:8080' });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { os: 'debian-13', proxy: 'http://proxy.example.com:8080', screenResolution: null, screenScale: null }
+    args: {
+      os: 'debian-13',
+      proxy: 'http://proxy.example.com:8080',
+      screenResolution: null,
+      screenScale: null,
+      webgl: false
+    }
   });
 });
 
@@ -68,7 +74,13 @@ test('startBrowser passes the screen resolution to the VM launch', async () => {
   await startBrowser({ screenResolution: { width: 1280, height: 720 } });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { os: 'debian-13', proxy: null, screenResolution: { width: 1280, height: 720 }, screenScale: null }
+    args: {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: { width: 1280, height: 720 },
+      screenScale: null,
+      webgl: false
+    }
   });
 });
 
@@ -78,7 +90,17 @@ test('startBrowser passes the screen scale to the VM launch', async () => {
   await startBrowser({ screenScale: 150 });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 150 }
+    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 150, webgl: false }
+  });
+});
+
+test('startBrowser passes WebGL to the VM launch', async () => {
+  const { calls, client } = fakeVms();
+  setVmClient(client);
+  await startBrowser({ webgl: true });
+  assert.deepEqual(calls[0], {
+    name: 'launchBrowser',
+    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true }
   });
 });
 
@@ -160,7 +182,13 @@ test('startBrowser launches the chosen OS', async () => {
   const { calls, client } = fakeVms();
   setVmClient(client);
   await startBrowser({ os: 'ubuntu-26.04' });
-  assert.deepEqual(calls[0].args, { os: 'ubuntu-26.04', proxy: null, screenResolution: null, screenScale: null });
+  assert.deepEqual(calls[0].args, {
+    os: 'ubuntu-26.04',
+    proxy: null,
+    screenResolution: null,
+    screenScale: null,
+    webgl: false
+  });
 });
 
 test('listLaunchableOses asks the local VM manager, and turns a failure into an error', async () => {

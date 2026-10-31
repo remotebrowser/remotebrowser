@@ -11,9 +11,11 @@ After=display.service nftables.service tinyproxy.service tinyproxy-upstream.serv
 User=browser
 Environment=HOME=/home/browser XDG_RUNTIME_DIR=/run/display WAYLAND_DISPLAY=wayland-0
 EnvironmentFile=/etc/remotebrowser/browser.env
+# Optional, written by the host at launch (see src/vm/webgl.js).
+EnvironmentFile=-/etc/remotebrowser/webgl.env
 # The browser exits without the Wayland socket.
 ExecStartPre=/usr/local/bin/wait-for-display
-ExecStart=/usr/bin/chromium $BROWSER_FLAGS about:blank
+ExecStart=/usr/bin/chromium $BROWSER_FLAGS $WEBGL_FLAGS about:blank
 # Shown on the serial console too, which the app saves as console.log.
 StandardOutput=journal+console
 StandardError=journal+console
