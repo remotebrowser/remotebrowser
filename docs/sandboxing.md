@@ -21,18 +21,17 @@ Until a snapshot exists, browsers cannot be launched on its OS, and the app logs
 
 The VM is a small Debian 13 system with systemd. Its services, all in `vm/linux/files`, are:
 
-| Service            | What it does                                                                                                                |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `systemd-networkd` | Gets the guest address from QEMU user-mode networking by DHCP (`10.0.2.15`, gateway `10.0.2.2`, DNS `10.0.2.3`)             |
-| `nftables`         | Refuses new connections to `10.0.2.2`, which leads to the host's loopback interface                                         |
-| `tinyproxy`        | The HTTP proxy that all of the browser's traffic goes through, on `127.0.0.1:8119`. See [Proxy](proxy.md)                   |
-| `display`          | Xorg on the VM's virtual GPU, which QEMU shows over VNC. It runs as the `browser` user, not root. See [Display](display.md) |
-| `openbox`          | A window manager that keeps the browser window maximized, also when the screen size changes                                 |
-| `xsettingsd`       | Gives the display its DPI, which sets the browser's screen scale. See [Display](display.md)                                 |
-| `chromium`         | The distro's Chromium on that display, as the unprivileged `browser` user, with CDP on `127.0.0.1:9221`                     |
-| `chromium-start`   | A timer that starts `chromium` when the host sets the clock, after a VM starts from the snapshot                            |
-| `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot                |
-| `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                                 |
+| Service            | What it does                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `systemd-networkd` | Gets the guest address from QEMU user-mode networking by DHCP (`10.0.2.15`, gateway `10.0.2.2`, DNS `10.0.2.3`)                                                      |
+| `nftables`         | Refuses new connections to `10.0.2.2`, which leads to the host's loopback interface                                                                                  |
+| `tinyproxy`        | The HTTP proxy that all of the browser's traffic goes through, on `127.0.0.1:8119`. See [Proxy](proxy.md)                                                            |
+| `seatd`            | Opens the GPU and the input devices for labwc, so labwc needs no root                                                                                                |
+| `display`          | [labwc](https://labwc.github.io), a Wayland compositor, on the VM's virtual GPU, which QEMU shows over VNC. It runs as the `browser` user. See [Display](display.md) |
+| `chromium`         | The distro's Chromium on that display, as the unprivileged `browser` user, with CDP on `127.0.0.1:9221`                                                              |
+| `chromium-start`   | A timer that starts `chromium` when the host sets the clock, after a VM starts from the snapshot                                                                     |
+| `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot                                                         |
+| `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                                                                          |
 
 The browser has a display rather than running headless. The VM has no GPU, and the browser does not render in software, so WebGL and WebGPU are not available. Chromium reads its flags from `/etc/remotebrowser/browser.env`. It does not start without `nftables` and `tinyproxy`.
 

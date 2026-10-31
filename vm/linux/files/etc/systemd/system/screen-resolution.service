@@ -1,6 +1,6 @@
 [Unit]
 Description=Apply the browser's screen size that the host sets
-# The browser keeps running, and openbox keeps it maximized.
+# The browser keeps running, and labwc keeps it filling the screen.
 
 [Service]
 Type=oneshot

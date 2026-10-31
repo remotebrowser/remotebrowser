@@ -1,6 +1,6 @@
 # The guest image for the QEMU browser VMs: a Debian system with a kernel and
 # initrd for direct boot, systemd as init, and services for a headful Chromium
-# on Xorg that serves CDP on port 9222. QEMU shows its screen over VNC.
+# on labwc that serves CDP on port 9222. QEMU shows its screen over VNC.
 # The browser reaches the internet only through tinyproxy.
 # vm/build-debian-13.sh turns this into a disk image; it never runs as a
 # container. The services are in vm/linux/files, for any Linux image.
@@ -25,12 +25,11 @@ RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime \
     && echo America/Los_Angeles >/etc/timezone
 
 # Debian's Chromium, for amd64 and arm64, plus fonts that most sites expect,
-# Xorg on the virtual GPU, xrandr to resize the screen, openbox to keep the
-# browser maximized, and xsettingsd to set the screen scale (Xft/DPI), which
-# Chromium follows live.
+# and labwc on the virtual GPU, which sets the screen size and scale live.
+# seatd lets labwc open the GPU and the input devices without root.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        chromium xserver-xorg-core xserver-xorg-input-libinput x11-xserver-utils openbox xsettingsd \
+        chromium labwc wlr-randr seatd xkb-data \
         fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
@@ -42,7 +41,7 @@ COPY linux/files/ /
 # Chromium is not enabled: chromium-start.timer starts it, once a VM starts
 # from the snapshot.
 RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path \
-        screen-resolution.path screen-scale.path display openbox xsettingsd cdp-proxy guest-ready \
+        screen-resolution.path screen-scale.path seatd display cdp-proxy guest-ready \
         chromium-start.timer \
     # Nothing in the VM needs these, and each one slows the boot.
     && systemctl mask systemd-networkd-wait-online apt-daily.timer apt-daily-upgrade.timer \
