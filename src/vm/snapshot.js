@@ -5,6 +5,7 @@ import { fetchWebSocketDebuggerUrl } from './cdp.js';
 import * as host from './host.js';
 import { ARCHES, MACHINE_VERSION, buildQemuArgs, detectAccel } from './qemu.js';
 import { checkImage, fileStamp } from './image.js';
+import { DEFAULT_OS, machineOs } from './os.js';
 import { openQmp } from './qmp.js';
 import { saveState } from './save.js';
 import { LOG_ATTRIBUTES, step } from './step.js';
@@ -18,8 +19,9 @@ import { LOG_ATTRIBUTES, step } from './step.js';
 //   vm.state        the memory and devices at that moment
 //   console.log     the serial console until then
 //
-// It is saved with the app's own QEMU args, so the app, and vm/scripts/run.js,
-// can start VMs from it. See startFromSnapshot in local.js.
+// It lives in snapshots/<os> (layout.js). It is saved with the app's own
+// QEMU args, so the app, and vm/scripts/run.js, can start VMs from it. See
+// startFromSnapshot in local.js.
 
 // The machine a snapshot was saved with, or null when there is no complete
 // snapshot.
@@ -37,7 +39,7 @@ const readSnapshot = async (snapshotDir) => {
 // Whether the snapshot fits this machine, and, when `image` is given, was
 // saved from that build of the image; if not, why not. A snapshot of an
 // older build still works, as long as that build is there.
-const snapshotStatus = async ({ snapshotDir, image, arch, memory, cpus }) => {
+const snapshotStatus = async ({ snapshotDir, image, os = DEFAULT_OS, arch, memory, cpus }) => {
   const saved = await readSnapshot(snapshotDir);
   if (!saved) {
     return { current: false, reason: `No snapshot in ${snapshotDir}` };
@@ -55,8 +57,8 @@ const snapshotStatus = async ({ snapshotDir, image, arch, memory, cpus }) => {
   if (saved.version !== MACHINE_VERSION) {
     return { current: false, reason: 'The snapshot is of an older QEMU machine' };
   }
-  const have = `${saved.arch} ${saved.memory} ${saved.cpus}`;
-  const want = `${arch} ${memory} ${cpus}`;
+  const have = `${machineOs(saved)} ${saved.arch} ${saved.memory} ${saved.cpus}`;
+  const want = `${os} ${arch} ${memory} ${cpus}`;
   if (have !== want) {
     return { current: false, reason: `The snapshot has ${have}; asked for ${want}` };
   }
@@ -68,13 +70,14 @@ const GUEST_READY = 'remotebrowser: guest ready';
 
 // Boots the image, waits until the guest is ready, and saves the VM. The
 // browser is not running yet: it starts in each VM after the VM starts from
-// the snapshot (see chromium-start.timer in vm/files), so it gets random
+// the snapshot (see chromium-start.timer in vm/linux/files), so it gets random
 // numbers of its own.
 // The new snapshot is built next to the old one, which stays usable until
 // the new one is complete.
 const takeSnapshot = async ({
   snapshotDir,
   image,
+  os = DEFAULT_OS,
   arch,
   memory,
   cpus,
@@ -90,6 +93,7 @@ const takeSnapshot = async ({
     consola.warn(`QEMU VMs from an ${arch} snapshot share the guest kernel's random number state`, LOG_ATTRIBUTES);
   }
   const machine = {
+    os,
     arch,
     accel,
     image: path.resolve(image),

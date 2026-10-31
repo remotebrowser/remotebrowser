@@ -15,26 +15,52 @@ const captureLogs = () => {
   return { lines, restore: () => Object.assign(consola, saved) };
 };
 
-test('the VM bootstrap logs the build before and after, with its duration', async () => {
+test('the VM bootstrap builds the image and snapshot, and logs each build before and after, with its duration', async () => {
   const logs = captureLogs();
+  const built = [];
   try {
-    assert.equal(await bootstrapVm({ build: async () => {} }), true);
+    const build = async ({ os }) => {
+      built.push(os);
+    };
+    assert.equal(await bootstrapVm({ build, oses: async () => ['debian-13'] }), true);
   } finally {
     logs.restore();
   }
-  assert.equal(logs.lines[0].message, 'QEMU preparing the browser VM image and snapshot...');
-  assert.match(logs.lines[1].message, /^QEMU preparing the browser VM image and snapshot: done in \d+\.\ds$/);
-  assert.equal(typeof logs.lines[1].attributes['rb.duration_ms'], 'number');
+  assert.deepEqual(built, ['debian-13']);
+  const messages = logs.lines.map((line) => line.message);
+  assert.ok(messages.includes('QEMU preparing the Debian 13 image and snapshot...'));
+  const done = logs.lines.find((line) =>
+    /^QEMU preparing the Debian 13 image and snapshot: done in \d+\.\ds$/.test(line.message)
+  );
+  assert.equal(typeof done.attributes['rb.duration_ms'], 'number');
+});
+
+test('the VM bootstrap skips a build that cannot run here', async () => {
+  const logs = captureLogs();
+  const built = [];
+  try {
+    const build = async ({ os }) => {
+      built.push(os);
+    };
+    assert.equal(await bootstrapVm({ build, oses: async () => [] }), true);
+  } finally {
+    logs.restore();
+  }
+  assert.deepEqual(built, []);
+  assert.equal(logs.lines[0].message, 'QEMU skipping Debian 13, which cannot be built here');
 });
 
 test('a failed build is logged, and does not reject', async () => {
   const logs = captureLogs();
   try {
-    assert.equal(await bootstrapVm({ build: async () => Promise.reject(new Error('no Docker')) }), false);
+    const build = async () => {
+      throw new Error('no docker');
+    };
+    assert.equal(await bootstrapVm({ build, oses: async () => ['debian-13'] }), false);
   } finally {
     logs.restore();
   }
-  assert.match(logs.lines[1].message, /failed after \d+\.\ds$/);
-  assert.equal(logs.lines.at(-1).message, 'QEMU unable to prepare the browser VM image and snapshot');
-  assert.equal(logs.lines.at(-1).attributes['error.type'], 'no Docker');
+  const failed = logs.lines.find((line) => line.level === 'error' && line.attributes?.['rb.vm_os']);
+  assert.equal(failed.message, 'QEMU unable to prepare the Debian 13 image and snapshot');
+  assert.equal(failed.attributes['error.type'], 'no docker');
 });

@@ -32,7 +32,7 @@ The table below lists the environment variables that the app uses in production:
 | `SMTP_USER`                   | Yes      | SMTP username                                               |
 | `TRUSTED_PROXY_HOPS`          | No       | Reverse proxies in front of the app (default: `0`)          |
 | `VM_CPUS`                     | No       | Virtual CPUs per browser VM (default: `2`)                  |
-| `VM_DATA_DIR`                 | No       | VM images, snapshot, and VMs (default: `.data/vm`)          |
+| `VM_DATA_DIR`                 | No       | VM images, snapshots, VMs (default: `.data/vm`)             |
 | `VM_MEMORY`                   | No       | Memory per browser VM (default: `2G`)                       |
 
 See [Controls](controls.md), [Sign-in](sign-in.md), [Sandboxing](sandboxing.md), [Database](database.md), [Instrumentation](instrumentation.md), and [Harness](harness.md) for details.

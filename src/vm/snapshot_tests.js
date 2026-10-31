@@ -12,16 +12,17 @@ const { fileStamp, snapshotStatus } = await import('./snapshot.js');
 // An image build and a snapshot saved from it, as takeSnapshot leaves them.
 const savedSnapshot = async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'rb-snapshot-tests-'));
-  const build = path.join(dir, 'images', 'x86_64-aaaa');
+  const build = path.join(dir, 'images', 'debian-13', 'x86_64-aaaa');
   mkdirSync(build, { recursive: true });
   for (const ext of ['qcow2', 'kernel', 'initrd']) {
     writeFileSync(path.join(build, `chromium.${ext}`), ext);
   }
   const image = path.join(build, 'chromium.qcow2');
-  const snapshotDir = path.join(dir, 'snapshot');
-  mkdirSync(snapshotDir);
+  const snapshotDir = path.join(dir, 'snapshots', 'debian-13');
+  mkdirSync(snapshotDir, { recursive: true });
   writeFileSync(path.join(snapshotDir, 'vm.state'), 'state');
   const machine = {
+    os: 'debian-13',
     arch: 'x86_64',
     accel: 'kvm',
     image,
@@ -70,7 +71,7 @@ test('a snapshot of another machine size is not current', async () => {
   const { wanted } = await savedSnapshot();
   const status = await snapshotStatus({ ...wanted, memory: '4G' });
   assert.equal(status.current, false);
-  assert.equal(status.reason, 'The snapshot has x86_64 2G 2; asked for x86_64 4G 2');
+  assert.equal(status.reason, 'The snapshot has debian-13 x86_64 2G 2; asked for debian-13 x86_64 4G 2');
 });
 
 test('a snapshot of an older QEMU machine is not current', async () => {
@@ -78,4 +79,12 @@ test('a snapshot of an older QEMU machine is not current', async () => {
   const saved = JSON.parse(readFileSync(path.join(snapshotDir, 'machine.json'), 'utf8'));
   writeFileSync(path.join(snapshotDir, 'machine.json'), JSON.stringify({ ...saved, version: MACHINE_VERSION - 1 }));
   assert.match((await snapshotStatus(wanted)).reason, /older QEMU machine/);
+});
+
+test('a snapshot whose machine.json names a different OS is not current', async () => {
+  const { wanted } = await savedSnapshot();
+  assert.equal(
+    (await snapshotStatus({ ...wanted, os: 'other-os' })).reason,
+    'The snapshot has debian-13 x86_64 2G 2; asked for other-os x86_64 2G 2'
+  );
 });

@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 
 // Shared by the specs that launch real QEMU VMs. They need QEMU on PATH and a
-// VM image build from vm/scripts/build.js, which playwright.config.js links
-// into this run's own VM data dir.
+// Debian 13 image build from vm/build-debian-13.sh, which playwright.config.js
+// links into this run's own VM data dir.
 
 const dataDir = process.env.E2E_VM_DATA_DIR || '';
 const machinesDir = join(dataDir, 'machines');
@@ -26,7 +26,8 @@ const qemuUsable = () => {
   if (usable === undefined) {
     try {
       execFileSync(qemu, ['--version'], { stdio: 'ignore', timeout: 20000 });
-      usable = Boolean(dataDir) && listDir(join(dataDir, 'images')).some((name) => name.startsWith(`${arch}-`));
+      usable =
+        Boolean(dataDir) && listDir(join(dataDir, 'images', 'debian-13')).some((name) => name.startsWith(`${arch}-`));
     } catch {
       usable = false;
     }
@@ -98,7 +99,10 @@ const useQemuVms = () => {
     test.skip(!qemuUsable(), `requires ${qemu} and a VM image build for ${arch} on this host`);
     test.setTimeout(300000);
     await expect
-      .poll(() => existsSync(join(dataDir, 'snapshot', 'machine.json')), { timeout: 280000, intervals: [1000] })
+      .poll(() => existsSync(join(dataDir, 'snapshots', 'debian-13', 'machine.json')), {
+        timeout: 280000,
+        intervals: [1000]
+      })
       .toBe(true);
   });
 

@@ -76,9 +76,9 @@ const portsFrom = (ports) => {
 
 const valueAfter = (args, flag) => args[args.indexOf(flag) + 1];
 
-// An image build, as buildImage leaves it.
-const savedImage = (dataDir, { content = '' } = {}) => {
-  const build = path.join(dataDir, 'images', 'x86_64-aaaa');
+// An image build of `os`, as its buildImage leaves it.
+const savedImage = (dataDir, { content = '', os = 'debian-13' } = {}) => {
+  const build = path.join(dataDir, 'images', os, 'x86_64-aaaa');
   mkdirSync(build, { recursive: true });
   for (const ext of ['qcow2', 'kernel', 'initrd']) {
     writeFileSync(path.join(build, `chromium.${ext}`), content);
@@ -323,8 +323,12 @@ test('resumeBrowser starts the same machine from its state, on its old ports, an
   assert.equal(valueAfter(args, '-incoming'), `file:${path.join(dir, 'suspended.state')}`);
   assert.equal(valueAfter(args, '-m'), '3G');
   assert.equal(valueAfter(args, '-smp'), '4');
-  assert.equal(valueAfter(args, '-kernel'), path.join(dataDir, 'images', 'x86_64-aaaa', 'chromium.kernel'));
-  assert.match(valueAfter(args, '-netdev'), /:40100-:9222,hostfwd=tcp:127\.0\.0\.1:40101-:5900$/);
+  assert.equal(
+    valueAfter(args, '-kernel'),
+    path.join(dataDir, 'images', 'debian-13', 'x86_64-aaaa', 'chromium.kernel')
+  );
+  assert.match(valueAfter(args, '-netdev'), /:40100-:9222$/);
+  assert.equal(valueAfter(args, '-vnc'), '127.0.0.1:34201');
   assert.deepEqual(names(commands), ['query-status', 'query-status', 'query-status', 'cont', 'guest-set-time']);
   assert.deepEqual(commands.at(-1), { socket: 'qga.sock', agent: true, command: 'guest-set-time', args: undefined });
   // The state now lags the running VM; it must not be resumed from again.
@@ -402,17 +406,27 @@ const fakeQmp = (answers = {}) => {
 
 const names = (commands) => commands.map(({ command }) => command);
 
-// An image build and a snapshot of it in `dataDir`, as takeSnapshot leaves them.
-const savedSnapshot = async (dataDir, { accel = 'kvm', memory = '2G', cpus = 2 } = {}) => {
-  const image = savedImage(dataDir, { content: 'disk' });
-  const snapshotDir = path.join(dataDir, 'snapshot');
-  mkdirSync(snapshotDir);
+// An image build of `os` and a snapshot of it in `dataDir`, as takeSnapshot
+// leaves them.
+const savedSnapshot = async (dataDir, { os = 'debian-13', accel = 'kvm', memory = '2G', cpus = 2 } = {}) => {
+  const image = savedImage(dataDir, { content: 'disk', os });
+  const snapshotDir = path.join(dataDir, 'snapshots', os);
+  mkdirSync(snapshotDir, { recursive: true });
   writeFileSync(path.join(snapshotDir, 'overlay.qcow2'), 'snapshot disk');
   writeFileSync(path.join(snapshotDir, 'vm.state'), 'state');
   const imageStamp = await fileStamp(image);
   writeFileSync(
     path.join(snapshotDir, 'machine.json'),
-    JSON.stringify({ arch: 'x86_64', accel, image, imageStamp, memory, cpus, version: MACHINE_VERSION })
+    JSON.stringify({
+      os,
+      arch: 'x86_64',
+      accel,
+      image,
+      imageStamp,
+      memory,
+      cpus,
+      version: MACHINE_VERSION
+    })
   );
   return { image, snapshotDir };
 };
@@ -547,7 +561,7 @@ test('launchBrowser sets the screen before the clock, which starts the browser',
   const looks = [];
   const readScreenSize = async (port) => {
     looks.push(port);
-    return looks.length > 1 ? { width: 1366, height: 768 } : { width: 1920, height: 1080 };
+    return looks.length > 1 ? { width: 1376, height: 768 } : { width: 1920, height: 1080 };
   };
   const { vm } = await launcher({ start, portOpen, connectQmp, readScreenSize, browserStartTimeoutMs: 2000 });
   await vm.launchBrowser({ screenResolution: { width: 1366, height: 768 } });
@@ -593,7 +607,8 @@ test('launchBrowser refuses a bad screen resolution before it starts a VM', asyn
 });
 
 // A running VM whose guest sets the screen to the size last written.
-const runningVm = () => {
+// `pad` is how wide VNC shows the screen, as the GPU pads it.
+const runningVm = ({ pad = (width) => width, ...overrides } = {}) => {
   const dataDir = tempDataDir();
   const dir = fakeVmDir(dataDir, 'Qabc12345');
   writeFileSync(path.join(dir, 'vnc-port'), '34568');
@@ -605,10 +620,11 @@ const runningVm = () => {
     browserStartTimeoutMs: 1000,
     readScreenSize: async (port) => {
       assert.equal(port, 34568);
-      const screen = guestWrites(qmp.commands).findLast(([file]) => file.endsWith('/screen-resolution'));
+      const screen = guestWrites(qmp.commands).findLast(([file]) => file.endsWith('screen-resolution'));
       const [width, height] = (screen?.[1] ?? '1920x1080').replace('default', '1920x1080').trim().split('x');
-      return { width: Number(width), height: Number(height) };
-    }
+      return { width: pad(Number(width)), height: Number(height) };
+    },
+    ...overrides
   });
   return { vm, commands: qmp.commands };
 };
@@ -679,7 +695,7 @@ test('launchBrowser records the machine, so a resume starts the same one', async
   const { browserId } = await vm.launchBrowser();
   const machine = JSON.parse(readFileSync(path.join(dataDir, 'machines', browserId, 'machine.json'), 'utf8'));
   // Without the snapshot's stamp and version.
-  assert.deepEqual(Object.keys(machine), ['arch', 'accel', 'image', 'imageStamp', 'memory', 'cpus']);
+  assert.deepEqual(Object.keys(machine), ['os', 'arch', 'accel', 'image', 'imageStamp', 'memory', 'cpus']);
   assert.deepEqual([machine.memory, machine.cpus], ['3G', 4]);
 });
 
@@ -688,7 +704,7 @@ test('launchBrowser refuses, and logs why, when there is no usable snapshot', as
   t.mock.method(consola, 'error', (message, attributes) => errors.push({ message, attributes }));
   const cases = [
     [{}, null, /No snapshot in/],
-    [{}, { cpus: 4 }, /The snapshot has x86_64 2G 4; asked for x86_64 2G 2/],
+    [{}, { cpus: 4 }, /The snapshot has debian-13 x86_64 2G 4; asked for debian-13 x86_64 2G 2/],
     [{}, { accel: 'tcg' }, /saved under tcg, but VMs here run under kvm/]
   ];
   for (const [overrides, snapshot, reason] of cases) {
@@ -706,9 +722,12 @@ test('launchBrowser refuses, and logs why, when there is no usable snapshot', as
   }
 });
 
-test('canLaunchBrowser is true only with a usable snapshot', async () => {
+test('canLaunchBrowser is true only with a usable snapshot, of the OS when one is named', async () => {
   const { vm } = await launcher();
   assert.equal(await vm.canLaunchBrowser(), true);
+  assert.equal(await vm.canLaunchBrowser('debian-13'), true);
+  assert.equal(await vm.canLaunchBrowser('macos-15'), false);
+  assert.deepEqual(await vm.launchableOses(), ['debian-13']);
   assert.equal(await client({ dataDir: tempDataDir() }).canLaunchBrowser(), false);
   assert.equal(await (await launcher({}, { accel: 'tcg' })).vm.canLaunchBrowser(), false);
 });
@@ -738,7 +757,8 @@ test('launchBrowser never gives CDP and VNC the same port', async () => {
   const { starts, start, portOpen } = startStub();
   const { vm } = await launcher({ start, portOpen, freePort: portsFrom([40000, 40000, 40001]) });
   await vm.launchBrowser();
-  assert.match(valueAfter(starts[0], '-netdev'), /:40000-:9222,hostfwd=tcp:127\.0\.0\.1:40001-:5900$/);
+  assert.match(valueAfter(starts[0], '-netdev'), /:40000-:9222$/);
+  assert.equal(valueAfter(starts[0], '-vnc'), '127.0.0.1:34101');
 });
 
 test('launchBrowser retries with a new port when QEMU cannot bind one', async () => {
@@ -908,4 +928,17 @@ test('readSavedScreenshot reads back the frame of a page with when it was saved,
   assert.equal(await vm.readSavedScreenshot('Qabc12345', 'PAGE2'), null);
   assert.equal(await vm.readSavedScreenshot('Qabc12345', '../qemu.pid'), null);
   assert.equal(await vm.readSavedScreenshot('../etc', 'PAGE1'), null);
+});
+
+test('launchBrowser refuses an unknown OS', async () => {
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen });
+  await assert.rejects(vm.launchBrowser({ os: 'macos-15' }), /Unknown OS macos-15/);
+  assert.equal(starts.length, 0);
+});
+
+test('setScreenResolution waits for the screen that VNC shows padded to 16 pixels', async () => {
+  const { vm, commands } = runningVm({ pad: (width) => Math.ceil(width / 16) * 16 });
+  await vm.setScreenResolution('Qabc12345', { width: 1366, height: 768 });
+  assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/screen-resolution', '1366x768\n']]);
 });

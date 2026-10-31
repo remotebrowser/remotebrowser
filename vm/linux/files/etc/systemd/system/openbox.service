@@ -2,8 +2,8 @@
 Description=Window manager for the browser
 # Keeps the browser maximized, also when the host changes the screen size.
 # Without it, --start-maximized does nothing.
-Requires=xvnc.service
-After=xvnc.service
+Requires=display.service
+After=display.service
 
 [Service]
 User=browser
