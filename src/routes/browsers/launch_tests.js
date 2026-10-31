@@ -767,7 +767,7 @@ test('POST /browsers/launch refuses a bad proxy URL, keeps what was typed, and c
 });
 
 test('GET /browsers/launch offers the OSes that have a snapshot, after the description, with Debian 13 chosen', async () => {
-  fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04'] });
+  fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04', 'fedora-44'] });
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
   const body = await res.text();
@@ -777,7 +777,8 @@ test('GET /browsers/launch offers the OSes that have a snapshot, after the descr
   ].map((m) => m.slice(1));
   assert.deepEqual(options, [
     ['debian-13', ' checked', 'Debian 13'],
-    ['ubuntu-26.04', undefined, 'Ubuntu 26.04']
+    ['ubuntu-26.04', undefined, 'Ubuntu 26.04'],
+    ['fedora-44', undefined, 'Fedora 44']
   ]);
   const at = (text) => body.indexOf(text);
   assert.ok(at('name="description"') < at('name="os"'));

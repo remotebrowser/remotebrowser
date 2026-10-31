@@ -12,7 +12,8 @@ import { LOG_ATTRIBUTES, qemu, step } from './step.js';
 // built on this host, or null. `prepareSource` downloads what it can.
 const BUILDERS = {
   'debian-13': linuxImage('debian-13'),
-  'ubuntu-26.04': linuxImage('ubuntu-26.04')
+  'ubuntu-26.04': linuxImage('ubuntu-26.04'),
+  'fedora-44': linuxImage('fedora-44')
 };
 
 // The OSes whose image can be built here.

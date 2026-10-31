@@ -47,7 +47,7 @@ curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/j
   -d '{ "proxy": "http://user:password@proxy.example.com:8080" }' http://localhost:3000/api/v1/browsers
 ```
 
-The body can also name the browser's `os`: `debian-13`, the default, or `ubuntu-26.04`. Case does not matter, the dash may be left out, and `ubuntu` is short for `ubuntu-26.04`. Only a launch takes it:
+The body can also name the browser's `os`: `debian-13`, the default, `ubuntu-26.04`, or `fedora-44`. Case does not matter, the dash may be left out, and `ubuntu` and `fedora` are short for `ubuntu-26.04` and `fedora-44`. Only a launch takes it:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \

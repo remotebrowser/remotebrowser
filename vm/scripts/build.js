@@ -4,7 +4,7 @@
 // only when its result is missing or out of date, so running this again is
 // cheap. vm/build-<os>.sh runs this, and vm/build-image.sh runs those.
 //
-//   vm/scripts/build.js <os>     debian-13 or ubuntu-26.04; see src/vm/os.js
+//   vm/scripts/build.js <os>     debian-13, ubuntu-26.04, or fedora-44; see src/vm/os.js
 //
 // It reads the same settings as the app:
 //

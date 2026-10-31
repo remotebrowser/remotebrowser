@@ -35,7 +35,7 @@ The table below lists the environment variables that the app uses in production:
 | `VM_DATA_DIR`                 | No       | VM images, snapshots, VMs (default: `.data/vm`)             |
 | `VM_MEMORY`                   | No       | Memory per browser VM (default: `2G`)                       |
 
-Each browser runs Debian 13 or Ubuntu 26.04, chosen when it is launched.
+Each browser runs Debian 13, Ubuntu 26.04, or Fedora 44, chosen when it is launched.
 
 See [Controls](controls.md), [Sign-in](sign-in.md), [Sandboxing](sandboxing.md), [Database](database.md), [Instrumentation](instrumentation.md), and [Harness](harness.md) for details.
 
@@ -55,7 +55,7 @@ docker run --rm -it \
   ghcr.io/remotebrowser/remotebrowser vm/build-image.sh
 ```
 
-`vm/build-image.sh` builds the image of each OS, with its own script, such as `vm/build-debian-13.sh` and `vm/build-ubuntu-26.04.sh`. To build only one OS, run its own script instead.
+`vm/build-image.sh` builds the image of each OS, with its own script, such as `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`. To build only one OS, run its own script instead.
 
 Then start the server without the socket. Give it the same KVM access, user, and VM directory as the build, so it finds the image and the snapshot.
 

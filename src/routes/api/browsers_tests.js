@@ -73,7 +73,7 @@ const fakeVms = (overrides = {}) => {
   };
   setVmClient({
     canLaunchBrowser: record('canLaunchBrowser', true),
-    launchableOses: record('launchableOses', ['debian-13', 'ubuntu-26.04']),
+    launchableOses: record('launchableOses', ['debian-13', 'ubuntu-26.04', 'fedora-44']),
     launchBrowser: record('launchBrowser', { browserId: 'Qabc12345' }),
     browserExists: record('browserExists', true),
     stopBrowser: record('stopBrowser', undefined),
@@ -507,6 +507,9 @@ test('POST /api/v1/browsers launches on Debian 13 by default, or the os it names
   for (const os of ['ubuntu-26.04', 'Ubuntu', 'ubuntu26.04', 'UBUNTU-26.04']) {
     assert.deepEqual(await launchesOf(apiKey, os), ['ubuntu-26.04'], os);
   }
+  for (const os of ['fedora-44', 'Fedora', 'fedora44']) {
+    assert.deepEqual(await launchesOf(apiKey, os), ['fedora-44'], os);
+  }
 });
 
 test('POST /api/v1/browsers refuses an unknown os, and launches nothing', async () => {
@@ -516,7 +519,7 @@ test('POST /api/v1/browsers refuses an unknown os, and launches nothing', async 
   for (const os of ['windows-11', 'debian', 'ubuntu-24.04', '', 13, null]) {
     const res = await sendJson('POST', '/api/v1/browsers', apiKey, { os });
     assert.equal(res.status, 400, String(os));
-    assert.deepEqual(await res.json(), { error: 'The os must be one of debian-13, ubuntu-26.04.' });
+    assert.deepEqual(await res.json(), { error: 'The os must be one of debian-13, ubuntu-26.04, fedora-44.' });
   }
   assert.ok(!calls.includes('launchBrowser'));
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
