@@ -17,8 +17,20 @@ RUN apt-get update \
         linux-image-virtual initramfs-tools \
         systemd systemd-sysv dbus kmod udev \
         iproute2 nftables tinyproxy ca-certificates curl socat nano tzdata \
-        qemu-guest-agent util-linux-extra \
+        qemu-guest-agent util-linux-extra zstd \
     && rm -rf /var/lib/apt/lists/*
+
+# On arm64, vmlinuz is an EFI app that wraps a zstd EFI zboot image, which
+# QEMU cannot boot directly (-kernel), so put the plain kernel in its place.
+RUN for kernel in /boot/vmlinuz-*; do \
+        perl -e 'local $/; open my $f, "<:raw", $ARGV[0] or die; my $d = <$f>; \
+            my $i = index($d, "MZ\0\0zimg"); exit 1 if $i < 0; \
+            die "zboot is not zstd\n" unless substr($d, $i + 24, 4) eq "zstd"; \
+            my ($off, $size) = unpack("V V", substr($d, $i + 8, 8)); \
+            print substr($d, $i + $off, $size)' "$kernel" >/tmp/zboot \
+        && zstd -dq --rm -f /tmp/zboot -o "$kernel"; \
+        rm -f /tmp/zboot; \
+    done
 
 # Pacific time by default, which follows daylight saving (PST and PDT). The
 # browser reports this zone to the pages it opens.
