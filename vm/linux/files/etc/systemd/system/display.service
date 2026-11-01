@@ -1,28 +1,30 @@
 [Unit]
-Description=X display for the browser, on the VM's virtual GPU
+Description=labwc, the Wayland compositor for the browser, on the VM's virtual GPU
 # QEMU shows this screen over VNC on the host's loopback, so the guest runs
-# no VNC server of its own.
+# no VNC server of its own. seatd opens the GPU and the input devices for
+# labwc, so it needs no root.
+Requires=seatd.service
+After=seatd.service
 
 [Service]
 User=browser
-# The GPU and the virtual keyboard and tablet, for Xorg only: the browser
-# runs without these groups.
-SupplementaryGroups=video input
-# Xorg needs a VT, which it can only switch to as its controlling terminal.
-# Nothing else uses tty1.
-TTYPath=/dev/tty1
-StandardInput=tty
-StandardOutput=journal
-StandardError=journal
-Environment=HOME=/home/browser
+# For the seatd socket only: the browser runs without this group.
+SupplementaryGroups=video
+# The Wayland socket, private to the browser user.
+RuntimeDirectory=display
+RuntimeDirectoryMode=0700
+Environment=HOME=/home/browser XDG_RUNTIME_DIR=/run/display
+# The GPU has no 3D on the host, so labwc draws in software.
+Environment=WLR_RENDERER=pixman
 # The GPU driver loads a moment after boot.
 ExecStartPre=/bin/sh -c 'until [ -e /dev/dri/card0 ]; do sleep 0.1; done'
-# No screen saver, nor power saving, which would blank the screen.
-ExecStart=/usr/bin/Xorg :99 vt1 -keeptty -novtswitch -nolisten tcp -s 0 -dpms
-# The screen size that the host may set (see screen-resolution). Xorg starts
-# at the size QEMU offers, 1920x1080, e.g. after a crash, so it is set again
-# here. A failure leaves that size, and keeps the display up.
+ExecStart=/usr/bin/labwc --config-dir /etc/remotebrowser/labwc
+# The screen size and scale that the host may set (see screen-resolution and
+# screen-scale). labwc starts at the size QEMU offers and at 100%, e.g. after
+# a crash, so both are set here. A failure leaves the defaults, and keeps the
+# display up.
 ExecStartPost=-/usr/local/bin/screen-resolution
+ExecStartPost=-/usr/local/bin/screen-scale
 Restart=always
 
 [Install]

@@ -1,6 +1,6 @@
 # Display
 
-The browser runs on Xorg, inside each VM, on the VM's virtual GPU (`virtio-gpu-pci`). QEMU itself shows that screen over VNC, on the host's loopback, so the guest runs no VNC server. By default, the screen is 1920×1080, at a scale of 150%. [Openbox](https://openbox.org), a small window manager, keeps the browser window maximized on it.
+The browser runs on [labwc](https://labwc.github.io), a Wayland compositor, inside each VM, on the VM's virtual GPU (`virtio-gpu-pci`). QEMU itself shows that screen over VNC, on the host's loopback, so the guest runs no VNC server. By default, the screen is 1920×1080, at a scale of 150%. labwc keeps every browser window maximized on it, without a title bar, so each page gets the whole screen. It draws in software, since the VM has no 3D GPU.
 
 The launch page offers these screen resolutions:
 
@@ -26,12 +26,12 @@ A new size takes effect at once. The browser keeps running, with its pages and C
 How it works:
 
 1. The app writes the size, such as `1366x768`, or `default`, as one line into `/etc/remotebrowser/screen-resolution` in the guest, through the guest agent.
-2. `screen-resolution.path` sees the change, and `/usr/local/bin/screen-resolution` sets the X screen to it with `xrandr`. Only numbers go into the commands. The app waits until the VNC handshake reports the new size. The virtual GPU pads each row of the screen to 16 pixels, so for a width such as 1366, VNC shows a black strip, up to 15 pixels wide, on the right. The browser sees the size that was asked for.
-3. Openbox sees the new screen and resizes the maximized window to fit. Chromium starts with `--start-maximized`, which needs a window manager to do anything.
+2. `screen-resolution.path` sees the change, and `/usr/local/bin/screen-resolution` sets the labwc output to it with `wlr-randr`. Only numbers go into the commands. The app waits until the VNC handshake reports the new size. The virtual GPU pads each row of the screen to 16 pixels, so for a width such as 1366, VNC shows a black strip, up to 15 pixels wide, on the right. The browser sees the size that was asked for.
+3. labwc resizes the maximized windows to fit. A window rule in `/etc/remotebrowser/labwc/rc.xml` maximizes each new window, also one that a new browser context opens.
 
-At launch, the app sets the size before it sets the clock, which starts the browser (see `chromium-start.timer`), so the browser starts on that screen. The setting is on the VM's disk, so it stays across a suspend and resume. If the file does not hold exactly one valid line, for example after a write that did not finish, the screen keeps its size. Xorg starts at 1920×1080, the size QEMU offers, for example after a crash, and sets the screen size again right after.
+At launch, the app sets the size before it sets the clock, which starts the browser (see `chromium-start.timer`), so the browser starts on that screen. The setting is on the VM's disk, so it stays across a suspend and resume. If the file does not hold exactly one valid line, for example after a write that did not finish, the screen keeps its size. labwc starts at 1920×1080, the size QEMU offers, for example after a crash, and sets the screen size again right after.
 
-Check it in the VM's root shell with `DISPLAY=:99 xrandr`, or `journalctl -u screen-resolution -u openbox`.
+Check it in the VM's root shell with `XDG_RUNTIME_DIR=/run/display WAYLAND_DISPLAY=wayland-0 wlr-randr`, or `journalctl -u screen-resolution -u display`.
 
 ## Screen scale
 
@@ -50,9 +50,9 @@ The screen keeps its size in pixels, so at 150%, a 1920×1080 screen shows pages
 How it works:
 
 1. The app writes the scale, such as `150`, or `default`, as one line into `/etc/remotebrowser/screen-scale` in the guest, through the guest agent.
-2. `screen-scale.path` sees the change, and `/usr/local/bin/screen-scale` writes the matching DPI, 96 for each 100%, into `/etc/remotebrowser/xsettingsd.conf`, then tells [xsettingsd](https://codeberg.org/derat/xsettingsd) to read it again.
-3. xsettingsd shares the new DPI (`Xft/DPI`) with the X clients on the display. Chromium follows it at once, through GTK.
+2. `screen-scale.path` sees the change, and `/usr/local/bin/screen-scale` sets the labwc output scale to it with `wlr-randr`.
+3. Chromium runs natively on Wayland, and follows the new scale at once, through the fractional scale protocol. labwc forgets the scale when it restarts, so `display.service` sets it again.
 
 As for the screen size, the app sets the scale before the clock at launch, the setting stays across a suspend and resume, and a file without exactly one valid line leaves the scale as it is.
 
-Check it in the VM's root shell with `cat /etc/remotebrowser/xsettingsd.conf`, or `journalctl -u screen-scale -u xsettingsd`.
+Check it with `wlr-randr`, as above, or `journalctl -u screen-scale`.

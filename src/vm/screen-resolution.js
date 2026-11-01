@@ -2,8 +2,8 @@ import { writeGuestFile } from './guest-file.js';
 
 // The browser's screen size. The host writes it, as one line such as
 // "1920x1080", or "default", into this guest file through the guest agent.
-// The guest sets the X screen to it at once, and the window manager keeps
-// the browser maximized on it. See screen-resolution in vm/linux/files.
+// The guest sets the labwc output to it at once, and labwc keeps the browser
+// filling it. See screen-resolution in vm/linux/files.
 const GUEST_SCREEN_RESOLUTION_FILE = '/etc/remotebrowser/screen-resolution';
 const DEFAULT = 'default';
 
@@ -40,8 +40,8 @@ const normalizeScreenResolution = (input) => {
   return { width, height };
 };
 
-// Each row of the screen, as Xorg gives it to the virtual GPU, is a multiple
-// of these pixels.
+// Each row of the screen, as the guest gives it to the virtual GPU, is a
+// multiple of these pixels.
 const ROW_PIXELS = 16;
 
 /**

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Waits until labwc serves its Wayland socket, since the browser, wlr-randr,
+# and the snapshot all need it.
+tries=0
+until [ -S /run/display/wayland-0 ]; do
+  tries=$((tries + 1))
+  if [ "$tries" -gt 100 ]; then
+    echo 'labwc is not running' >&2
+    exit 1
+  fi
+  sleep 0.1
+done

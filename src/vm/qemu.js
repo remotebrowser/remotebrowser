@@ -90,7 +90,7 @@ const linuxDevices = ({ arch, image, overlay, cdpHostPort, vncHostPort }) => {
     `user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${cdpHostPort}-:${CDP_PORT}`,
     '-device',
     'virtio-net-pci,netdev=net0,romfile=',
-    // Xorg draws on this GPU, which takes any screen size, and starts at the
+    // labwc draws on this GPU, which takes any screen size, and starts at the
     // default. Unlike virtio-vga, it is on aarch64 too. The keyboard and
     // tablet take a VNC viewer's input.
     '-device',
