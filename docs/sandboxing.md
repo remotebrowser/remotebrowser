@@ -4,11 +4,11 @@ Remote Browser runs each browser in its own [QEMU](https://www.qemu.org) virtual
 
 ## Behind the scenes
 
-Each browser runs on Debian 13, the default, or on Ubuntu 26.04, chosen on the launch page. The launch page offers an OS once its snapshot is ready. The app keeps an image and a snapshot per OS, so a host can run browsers of both at once.
+Each browser runs on Debian 13, the default, on Ubuntu 26.04, or on Fedora 44, chosen on the launch page. The launch page offers an OS once its snapshot is ready. The app keeps an image and a snapshot per OS, so a host can run browsers of each at once.
 
 At startup, in the background, the app prepares two things for each OS, all OSes at once. The server does not wait for them, and it logs each step with `event.domain` set to `qemu`.
 
-1. **Image**: the app builds the image of each Linux OS from its Dockerfile with Docker, such as `vm/debian-13/Dockerfile`. It copies in the services from `vm/linux/files`, and an OS may add its own in `vm/<os>/files`. Ubuntu ships Chromium only as a snap, which does not install in a Docker build, so its image takes Chromium, and nothing else, from the [xtradeb PPA](https://launchpad.net/~xtradeb/+archive/ubuntu/apps), with the signing key in `vm/ubuntu-26.04/files/etc/apt`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/<os>` in the [data directory](#data-directory), such as `images/debian-13`, as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
+1. **Image**: the app builds the image of each Linux OS from its Dockerfile with Docker, such as `vm/debian-13/Dockerfile`. It copies in the services from `vm/linux/files`, and an OS may add its own in `vm/<os>/files`. Ubuntu ships Chromium only as a snap, which does not install in a Docker build, so its image takes Chromium, and nothing else, from the [xtradeb PPA](https://launchpad.net/~xtradeb/+archive/ubuntu/apps), with the signing key in `vm/ubuntu-26.04/files/etc/apt`. Fedora's tinyproxy unit takes no flags, so its image adds a drop-in in `vm/fedora-44/files`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/<os>` in the [data directory](#data-directory), such as `images/debian-13`, as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
 2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshots/<os>` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
 
 Then every new browser is a VM started from the snapshot of its OS. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
@@ -19,7 +19,7 @@ Until a snapshot exists, browsers cannot be launched on its OS, and the app logs
 
 ## Inside each VM
 
-The VM is a small Debian 13 or Ubuntu 26.04 system with systemd. Its services, all in `vm/linux/files`, are:
+The VM is a small Debian 13, Ubuntu 26.04, or Fedora 44 system with systemd. Its services, all in `vm/linux/files`, are:
 
 | Service            | What it does                                                                                                                                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,10 +66,12 @@ The app keeps everything for the VMs in one directory, `.data/vm` by default. Se
 │   │       ├── chromium.qcow2
 │   │       ├── chromium.kernel
 │   │       └── chromium.initrd
-│   └── ubuntu-26.04/
+│   ├── ubuntu-26.04/
+│   └── fedora-44/
 ├── snapshots/
 │   ├── debian-13/
-│   └── ubuntu-26.04/
+│   ├── ubuntu-26.04/
+│   └── fedora-44/
 ├── machines/
 │   └── <id>/
 └── run/
@@ -95,7 +97,7 @@ npm install
 vm/build-image.sh
 ```
 
-It runs `vm/build-debian-13.sh` and `vm/build-ubuntu-26.04.sh`, each of which builds one OS.
+It runs `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`, each of which builds one OS.
 
 To start a Debian 13 VM from its snapshot:
 
@@ -103,7 +105,7 @@ To start a Debian 13 VM from its snapshot:
 vm/scripts/run.js
 ```
 
-`vm/scripts/run.js ubuntu-26.04` starts an Ubuntu 26.04 one instead.
+`vm/scripts/run.js ubuntu-26.04` starts an Ubuntu 26.04 one instead, and `vm/scripts/run.js fedora-44` a Fedora 44 one.
 
 The VM's console is your terminal, with a root shell; press Enter if no prompt shows. In another terminal, check that the browser answers, and open a page:
 

@@ -46,4 +46,5 @@ test('each OS has a stable source hash of its own', async () => {
   assert.match(debian, /^[0-9a-f]{64}$/);
   assert.equal(await imageSourceHash('debian-13'), debian);
   assert.notEqual(await imageSourceHash('ubuntu-26.04'), debian);
+  assert.notEqual(await imageSourceHash('fedora-44'), debian);
 });

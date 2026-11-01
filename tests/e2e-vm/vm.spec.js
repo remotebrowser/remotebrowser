@@ -118,6 +118,32 @@ test.describe('real QEMU VMs', () => {
     await terminateBrowser(page, publicId, browserName);
   });
 
+  test('a browser launched on Fedora 44 runs on its own snapshot and answers over CDP', async ({ page }) => {
+    const fedoraBuilt = readdirSafe(join(dataDir, 'images', 'fedora-44')).some((name) =>
+      name.startsWith(`${arch}-`)
+    );
+    test.skip(!fedoraBuilt, 'requires an Fedora 44 image build from vm/build-fedora-44.sh');
+    test.setTimeout(300000);
+    // The app saves this snapshot in the background too, after the others or alongside them.
+    await expect
+      .poll(() => existsSync(join(dataDir, 'snapshots', 'fedora-44', 'machine.json')), {
+        timeout: 120000,
+        intervals: [1000]
+      })
+      .toBe(true);
+
+    await signIn(page, 'e2e-qemu-fedora@example.com');
+    const browserName = 'e2e-qemu-fedora-otter';
+    const publicId = await launchBrowser(page, browserName, { os: 'Fedora 44' });
+    await expect(page.locator('#browser-status')).toContainText('running', { timeout: 150000 });
+    await expect(page.locator('a.page-preview-link').first()).toBeVisible({ timeout: 60000 });
+
+    const [vm] = listBrowserVms();
+    expect(JSON.parse(readFileSync(join(machinesDir, vm, 'machine.json'), 'utf8')).os).toBe('fedora-44');
+
+    await terminateBrowser(page, publicId, browserName);
+  });
+
   test('the running browser answers over CDP and streams a real screenshot', async ({ page }) => {
     await signIn(page, 'e2e-qemu-cdp@example.com');
     const browserName = 'e2e-qemu-cdp-otter';

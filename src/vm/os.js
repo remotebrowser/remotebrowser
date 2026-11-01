@@ -2,7 +2,8 @@
 // snapshot (layout.js), built by vm/build-<name>.sh.
 const OSES = Object.freeze({
   'debian-13': Object.freeze({ label: 'Debian 13' }),
-  'ubuntu-26.04': Object.freeze({ label: 'Ubuntu 26.04' })
+  'ubuntu-26.04': Object.freeze({ label: 'Ubuntu 26.04' }),
+  'fedora-44': Object.freeze({ label: 'Fedora 44' })
 });
 
 const DEFAULT_OS = 'debian-13';
@@ -10,10 +11,10 @@ const DEFAULT_OS = 'debian-13';
 const isOs = (name) => typeof name === 'string' && Object.hasOwn(OSES, name);
 
 // Short names that the API also takes.
-const OS_ALIASES = Object.freeze({ ubuntu: 'ubuntu-26.04' });
+const OS_ALIASES = Object.freeze({ ubuntu: 'ubuntu-26.04', fedora: 'fedora-44' });
 
 // The OS that `name` means, or null. Case does not matter, and the dash may
-// be left out, e.g. 'Ubuntu', 'debian13', or 'ubuntu26.04'.
+// be left out, e.g. 'Ubuntu', 'debian13', 'ubuntu26.04', or 'fedora44'.
 const resolveOs = (name) => {
   if (typeof name !== 'string') {
     return null;
