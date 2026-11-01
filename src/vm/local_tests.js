@@ -39,7 +39,7 @@ test('startFromSnapshot needs a snapshot on its image build as it was', async ()
   const dir = tempDir();
   const runDir = path.join(dir, 'run');
   const snapshotDir = path.join(dir, 'snapshot');
-  await assert.rejects(startFromSnapshot({ snapshotDir, runDir }), /No snapshot in .*build\.js/);
+  await assert.rejects(startFromSnapshot({ snapshotDir, runDir }), /No snapshot in .*build-image\.sh/);
 
   const image = buildIn(dir);
   mkdirSync(snapshotDir);

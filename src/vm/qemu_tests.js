@@ -21,7 +21,7 @@ test('buildQemuArgs boots the image kernel with a disposable overlay and no defa
     vncHostPort: 34568
   });
   assert.ok(args.includes('-nodefaults'));
-  assert.equal(valueAfter(args, '-machine'), 'q35,hpet=off');
+  assert.equal(valueAfter(args, '-machine'), 'q35,hpet=off,vmport=off,i8042=off');
   assert.equal(valueAfter(args, '-accel'), 'kvm');
   assert.equal(valueAfter(args, '-cpu'), 'host');
   assert.equal(valueAfter(args, '-m'), '2G');
@@ -35,7 +35,7 @@ test('buildQemuArgs boots the image kernel with a disposable overlay and no defa
   assert.ok(!args.includes('-daemonize'));
 });
 
-test('buildQemuArgs forwards only CDP and VNC, and only on host loopback', () => {
+test('buildQemuArgs forwards only CDP, and serves the virtual GPU over VNC, both on host loopback', () => {
   const args = buildQemuArgs({
     name: 'chromium-Qabc12345',
     arch: 'x86_64',
@@ -49,9 +49,32 @@ test('buildQemuArgs forwards only CDP and VNC, and only on host loopback', () =>
     vncHostPort: 34568
   });
   const netdevs = args.filter((_arg, index) => args[index - 1] === '-netdev');
-  assert.deepEqual(netdevs, [
-    'user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:34567-:9222,hostfwd=tcp:127.0.0.1:34568-:5900'
-  ]);
+  assert.deepEqual(netdevs, ['user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:34567-:9222']);
+  assert.equal(valueAfter(args, '-vnc'), '127.0.0.1:28668');
+  const devices = args.filter((_arg, index) => args[index - 1] === '-device');
+  assert.ok(devices.includes('virtio-gpu-pci,xres=1920,yres=1080'));
+  assert.ok(devices.includes('virtio-keyboard-pci'));
+  assert.ok(devices.includes('virtio-tablet-pci'));
+  assert.ok(!devices.includes('virtio-vga'), 'aarch64 has no VGA');
+});
+
+test('buildQemuArgs refuses a VNC port below the first display', () => {
+  assert.throws(
+    () =>
+      buildQemuArgs({
+        name: 'chromium-Qabc12345',
+        arch: 'x86_64',
+        accel: 'kvm',
+        image: '/i/c.qcow2',
+        overlay: '/s/o.qcow2',
+        dir: '/s',
+        memory: '2G',
+        cpus: 2,
+        cdpHostPort: 34567,
+        vncHostPort: 5899
+      }),
+    /port 5900 or above/
+  );
 });
 
 test('buildQemuArgs confines QEMU with seccomp', () => {
@@ -65,7 +88,7 @@ test('buildQemuArgs confines QEMU with seccomp', () => {
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2,
+    vncHostPort: 5902,
     seccomp: true
   });
   const sandbox = valueAfter(args, '-sandbox');
@@ -86,7 +109,7 @@ test('buildQemuArgs runs HVF VMs on the host CPU, without seccomp', () => {
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2,
+    vncHostPort: 5902,
     seccomp: false
   });
   assert.equal(valueAfter(args, '-accel'), 'hvf');
@@ -105,7 +128,7 @@ test('buildQemuArgs picks the machine and console per architecture, and a portab
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2
+    vncHostPort: 5902
   });
   assert.equal(valueAfter(args, '-machine'), 'virt,gic-version=max');
   assert.equal(valueAfter(args, '-cpu'), 'max');
@@ -153,7 +176,7 @@ test('buildQemuArgs gives QEMU a control socket and a guest agent channel in the
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2
+    vncHostPort: 5902
   });
   assert.equal(valueAfter(args, '-qmp'), 'unix:/s/qmp.sock,server=on,wait=off');
   assert.equal(valueAfter(args, '-chardev'), 'socket,id=qga,path=/s/qga.sock,server=on,wait=off');
@@ -172,7 +195,7 @@ test('buildQemuArgs loads the saved state when resuming', () => {
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2,
+    vncHostPort: 5902,
     incoming: '/s/suspended.state'
   });
   assert.equal(valueAfter(args, '-incoming'), 'file:/s/suspended.state');
@@ -189,7 +212,7 @@ test('buildQemuArgs adds vmgenid where the machine supports it', () => {
     memory: '2G',
     cpus: 2,
     cdpHostPort: 1,
-    vncHostPort: 2
+    vncHostPort: 5902
   };
   assert.ok(buildQemuArgs({ ...machine, arch: 'x86_64' }).includes('vmgenid'));
   assert.ok(!buildQemuArgs({ ...machine, arch: 'aarch64' }).includes('vmgenid'));

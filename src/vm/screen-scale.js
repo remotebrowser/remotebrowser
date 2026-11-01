@@ -3,7 +3,7 @@ import { writeGuestFile } from './guest-file.js';
 // The browser's screen scale, in percent. The host writes it, as one line
 // such as "150", or "default", into this guest file through the guest agent.
 // The guest sets the X DPI to it, and Chromium follows at once, without a
-// restart. See screen-scale in vm/files.
+// restart. See screen-scale in vm/linux/files.
 const GUEST_SCREEN_SCALE_FILE = '/etc/remotebrowser/screen-scale';
 const DEFAULT = 'default';
 

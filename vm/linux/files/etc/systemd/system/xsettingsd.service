@@ -2,8 +2,8 @@
 Description=X settings for the browser, such as the screen scale
 # Chromium reads its scale from the X DPI here, and follows a change at once
 # (see screen-scale).
-Requires=xvnc.service
-After=xvnc.service
+Requires=display.service
+After=display.service
 
 [Service]
 User=browser

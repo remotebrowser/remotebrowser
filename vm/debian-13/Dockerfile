@@ -1,18 +1,19 @@
 # The guest image for the QEMU browser VMs: a Debian system with a kernel and
 # initrd for direct boot, systemd as init, and services for a headful Chromium
-# on Xvnc that serves CDP on port 9222, and its display over VNC on port 5900.
+# on Xorg that serves CDP on port 9222. QEMU shows its screen over VNC.
 # The browser reaches the internet only through tinyproxy.
-# vm/scripts/build.js turns this into a disk image; it is never run as a container.
+# vm/build-debian-13.sh turns this into a disk image; it never runs as a
+# container. The services are in vm/linux/files, for any Linux image.
 FROM debian:trixie
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# The kernel, systemd, and the guest networking and firewall. Debian's cloud
-# kernel is the one built for running in a VM. The guest agent and hwclock
-# set the clock after the host resumes a suspended VM.
+# The kernel, systemd, and the guest networking and firewall. Not Debian's
+# cloud kernel, which has no driver for the virtual GPU. The guest agent and
+# hwclock set the clock after the host resumes a suspended VM.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        "linux-image-cloud-$(dpkg --print-architecture)" initramfs-tools \
+        "linux-image-$(dpkg --print-architecture)" initramfs-tools \
         systemd systemd-sysv dbus kmod udev \
         iproute2 nftables tinyproxy ca-certificates curl socat nano tzdata \
         qemu-guest-agent util-linux-extra \
@@ -24,23 +25,24 @@ RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime \
     && echo America/Los_Angeles >/etc/timezone
 
 # Debian's Chromium, for amd64 and arm64, plus fonts that most sites expect,
-# xrandr to resize the screen, openbox to keep the browser maximized, and
-# xsettingsd to set the screen scale (Xft/DPI), which Chromium follows live.
+# Xorg on the virtual GPU, xrandr to resize the screen, openbox to keep the
+# browser maximized, and xsettingsd to set the screen scale (Xft/DPI), which
+# Chromium follows live.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        chromium tigervnc-standalone-server x11-xserver-utils openbox xsettingsd \
+        chromium xserver-xorg-core xserver-xorg-input-libinput x11-xserver-utils openbox xsettingsd \
         fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 # The browser runs as this user, so its own sandbox stays on.
 RUN useradd --create-home --shell /usr/sbin/nologin browser
 
-COPY files/ /
+COPY linux/files/ /
 
 # Chromium is not enabled: chromium-start.timer starts it, once a VM starts
 # from the snapshot.
 RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path \
-        screen-resolution.path screen-scale.path xvnc openbox xsettingsd cdp-proxy guest-ready \
+        screen-resolution.path screen-scale.path display openbox xsettingsd cdp-proxy guest-ready \
         chromium-start.timer \
     # Nothing in the VM needs these, and each one slows the boot.
     && systemctl mask systemd-networkd-wait-online apt-daily.timer apt-daily-upgrade.timer \

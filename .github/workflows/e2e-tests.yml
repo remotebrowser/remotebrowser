@@ -39,7 +39,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Build the browser VM image
-        run: vm/scripts/build.js
+        run: vm/build-debian-13.sh
 
       - name: Run E2E tests
         run: npx playwright test

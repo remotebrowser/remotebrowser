@@ -4,44 +4,46 @@ Remote Browser runs each browser in its own [QEMU](https://www.qemu.org) virtual
 
 ## Behind the scenes
 
+Each browser runs on Debian 13.
+
 At startup, in the background, the app prepares two things. The server does not wait for them, and it logs each step with `event.domain` set to `qemu`.
 
-1. **Image**: the app builds the VM image from `vm/Dockerfile` with Docker. This happens when the image is missing, or when `vm/Dockerfile` or `vm/files` changed. Docker only installs the packages; the result never runs as a container. The image goes to `images` in the [data directory](#data-directory), as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
-2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshot` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
+1. **Image**: the app builds the image from `vm/debian-13/Dockerfile` with Docker. It copies in the services from `vm/linux/files`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/debian-13` in the [data directory](#data-directory), as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
+2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshots/debian-13` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
 
-Then every new browser is a VM started from that snapshot. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
+Then every new browser is a VM started from the snapshot. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
 
-Each VM gets `VM_MEMORY` of memory (default `2G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
+Each VM gets `VM_MEMORY` of memory (default `2G` for Debian 13) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
-Until the snapshot exists, launching a browser fails, and the app logs why.
+Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
 ## Inside each VM
 
-The VM is a small Debian 13 system with systemd. Its services, all in `vm/files`, are:
+The VM is a small Debian 13 system with systemd. Its services, all in `vm/linux/files`, are:
 
-| Service            | What it does                                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `systemd-networkd` | Gets the guest address from QEMU user-mode networking by DHCP (`10.0.2.15`, gateway `10.0.2.2`, DNS `10.0.2.3`) |
-| `nftables`         | Refuses new connections to `10.0.2.2`, which leads to the host's loopback interface                             |
-| `tinyproxy`        | The HTTP proxy that all of the browser's traffic goes through, on `127.0.0.1:8119`. See [Proxy](proxy.md)       |
-| `xvnc`             | A virtual 24-bit display, shared over VNC on port `5900`. See [Display](display.md)                             |
-| `openbox`          | A window manager that keeps the browser window maximized, also when the screen size changes                     |
-| `xsettingsd`       | Gives the display its DPI, which sets the browser's screen scale. See [Display](display.md)                     |
-| `chromium`         | Debian's Chromium on that display, as the unprivileged `browser` user, with CDP on `127.0.0.1:9221`             |
-| `chromium-start`   | A timer that starts `chromium` when the host sets the clock, after a VM starts from the snapshot                |
-| `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot    |
-| `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                     |
+| Service            | What it does                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `systemd-networkd` | Gets the guest address from QEMU user-mode networking by DHCP (`10.0.2.15`, gateway `10.0.2.2`, DNS `10.0.2.3`)             |
+| `nftables`         | Refuses new connections to `10.0.2.2`, which leads to the host's loopback interface                                         |
+| `tinyproxy`        | The HTTP proxy that all of the browser's traffic goes through, on `127.0.0.1:8119`. See [Proxy](proxy.md)                   |
+| `display`          | Xorg on the VM's virtual GPU, which QEMU shows over VNC. It runs as the `browser` user, not root. See [Display](display.md) |
+| `openbox`          | A window manager that keeps the browser window maximized, also when the screen size changes                                 |
+| `xsettingsd`       | Gives the display its DPI, which sets the browser's screen scale. See [Display](display.md)                                 |
+| `chromium`         | The distro's Chromium on that display, as the unprivileged `browser` user, with CDP on `127.0.0.1:9221`                     |
+| `chromium-start`   | A timer that starts `chromium` when the host sets the clock, after a VM starts from the snapshot                            |
+| `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot                |
+| `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                                 |
 
 The browser has a display rather than running headless. The VM has no GPU, and the browser does not render in software, so WebGL and WebGPU are not available. Chromium reads its flags from `/etc/remotebrowser/browser.env`. It does not start without `nftables` and `tinyproxy`.
 
-To change what runs in the VM, edit `vm/Dockerfile` or `vm/files`. The app builds the image again at its next start.
+To change what runs in the VMs, edit the files in `vm/linux/files`, or `vm/debian-13/Dockerfile`. The app builds the image again at its next start.
 
 The VM is isolated in these ways:
 
 - The browser runs as an unprivileged user, so its own sandbox stays on.
 - QEMU has only the devices it needs (`-nodefaults`). On Linux, it also runs under its seccomp sandbox (`-sandbox on`). QEMU on macOS has no seccomp, so there the VM boundary is the main protection.
 - The QEMU guest agent accepts only the commands that set the clock.
-- Only the CDP and VNC ports are forwarded, and only to `127.0.0.1` on the host. The VNC port has no password, so do not expose it beyond the host's loopback.
+- Only the CDP port is forwarded, and only to `127.0.0.1` on the host. QEMU's own VNC server shows the screen, also only on `127.0.0.1`. It has no password, so do not expose it beyond the host's loopback.
 - A firewall in the VM blocks `10.0.2.2`, so a browser cannot reach services on the host's loopback, such as the app or its database. IPv6 is off for the same reason. The VM can still reach other hosts on the network; to limit that, use a host firewall or an [upstream proxy](proxy.md).
 
 ## Lifecycle
@@ -60,18 +62,20 @@ The app keeps everything for the VMs in one directory, `.data/vm` by default. Se
 ```
 .data/vm/
 ├── images/
-│   └── x86_64-<source>/
-│       ├── chromium.qcow2
-│       ├── chromium.kernel
-│       └── chromium.initrd
-├── snapshot/
+│   └── debian-13/
+│       └── x86_64-<source>/
+│           ├── chromium.qcow2
+│           ├── chromium.kernel
+│           └── chromium.initrd
+├── snapshots/
+│   └── debian-13/
 ├── machines/
 │   └── <id>/
 └── run/
 ```
 
-- **`images`** holds the builds of the VM image. A build is named after its architecture and a hash of `vm/Dockerfile` and `vm/files`. When those files change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither the snapshot nor any VM uses it.
-- **`snapshot`** holds the snapshot that new browsers start from: its disk (`overlay.qcow2`), its memory (`vm.state`), and `machine.json`, which names the image build it runs on. While the app saves a new snapshot, it works in `snapshot.new.<pid>` and replaces `snapshot` only when it is done.
+- **`images`** holds the builds of the image. A build is named after its architecture and a hash of its sources, such as `vm/debian-13/Dockerfile` and `vm/linux/files`. When those change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither a snapshot nor any VM uses it.
+- **`snapshots`** holds the snapshot that new browsers start from: its disk (`overlay.qcow2`), its memory (`vm.state`), and `machine.json`, which names the image build it runs on. While the app saves a new snapshot, it works in `snapshots/debian-13.new.<pid>` and replaces `snapshots/debian-13` only when it is done.
 - **`machines`** holds one directory per browser, as described in [Lifecycle](#lifecycle).
 - **`run`** holds the VM that `vm/scripts/run.js` starts, as described in [Manual test](#manual-test).
 
@@ -83,14 +87,14 @@ To share the data directory between the container and the scripts in `vm/scripts
 
 ## Manual test
 
-The scripts in `vm/scripts` do the same steps as the app, and read the same settings. To build the image and save a snapshot:
+The scripts in `vm` do the same steps as the app, and read the same settings. To build the image and save a snapshot:
 
 ```bash
 npm install
-vm/scripts/build.js
+vm/build-image.sh
 ```
 
-To start a VM from the snapshot:
+To start a Debian 13 VM from its snapshot:
 
 ```bash
 vm/scripts/run.js

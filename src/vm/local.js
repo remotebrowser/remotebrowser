@@ -9,6 +9,7 @@ import { checkImage } from './image.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, MAX_SOCKET_PATH, buildQemuArgs } from './qemu.js';
+import { machineOs } from './os.js';
 import { openQmp } from './qmp.js';
 import { suspendVm } from './save.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
@@ -115,13 +116,19 @@ const runForeground = async ({ dir, machine, cdpPort, vncPort, incoming, afterCo
 const startFromSnapshot = async ({ snapshotDir, runDir, cdpPort = 9222, vncPort = 5900 }) => {
   const machine = await readSnapshot(snapshotDir);
   if (!machine) {
-    throw new Error(`No snapshot in ${snapshotDir}; save one first with vm/scripts/build.js`);
+    throw new Error(`No snapshot in ${snapshotDir}; save one first with vm/build-image.sh`);
   }
   // The snapshot's disk only records its changes to the image, so it fits
   // only the image as it was.
-  const status = await snapshotStatus({ snapshotDir, arch: machine.arch, memory: machine.memory, cpus: machine.cpus });
+  const status = await snapshotStatus({
+    snapshotDir,
+    os: machineOs(machine),
+    arch: machine.arch,
+    memory: machine.memory,
+    cpus: machine.cpus
+  });
   if (!status.current) {
-    throw new Error(`${status.reason}; save a new one with vm/scripts/build.js`);
+    throw new Error(`${status.reason}; save a new one with vm/build-image.sh`);
   }
   const { dir, running, suspended } = await localState(runDir);
   if (running) {

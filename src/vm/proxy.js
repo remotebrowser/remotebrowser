@@ -4,8 +4,8 @@ import { writeGuestFile } from './guest-file.js';
 // Each VM's tinyproxy can forward the browser's traffic to an upstream proxy,
 // e.g. for a fixed egress IP address. The host writes the proxy URL, or
 // "direct", into this guest file through the guest agent, and
-// tinyproxy-upstream.path in vm/files applies it. See tinyproxy-config there
-// for how the guest reads it.
+// tinyproxy-upstream.path in vm/linux/files applies it. See tinyproxy-config
+// there for how the guest reads it.
 const GUEST_PROXY_FILE = '/etc/remotebrowser/proxy/upstream';
 const DIRECT = 'direct';
 

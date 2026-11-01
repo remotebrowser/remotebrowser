@@ -16,9 +16,9 @@ const providedDataDir = process.env.PGLITE_DATA_DIR;
 const dataDir = providedDataDir || mkdtempSync(join(tmpdir(), 'remotebrowser-e2e-'));
 
 // Its own VM data dir, so the tests see only the VMs this run started. It
-// shares the image builds of the usual one through hard links, so it needs
-// the same filesystem, and saves only its own snapshot. Without builds, the
-// VM tests skip themselves.
+// shares the Debian 13 image builds of the usual one through hard links, so
+// it needs the same filesystem, and saves only its own snapshot. Without
+// builds, the VM tests skip themselves.
 const listDir = (dir) => {
   try {
     return readdirSync(dir, { withFileTypes: true });
@@ -30,11 +30,12 @@ const vmDataDirFor = () => {
   const usual = process.env.VM_DATA_DIR || join(import.meta.dirname, '.data', 'vm');
   mkdirSync(join(import.meta.dirname, '.data'), { recursive: true });
   const dir = mkdtempSync(join(import.meta.dirname, '.data', 'e2e-vm-'));
-  for (const build of listDir(join(usual, 'images'))) {
+  const images = (root) => join(root, 'images', 'debian-13');
+  for (const build of listDir(images(usual))) {
     if (build.isDirectory() && !build.name.startsWith('.')) {
-      mkdirSync(join(dir, 'images', build.name), { recursive: true });
-      for (const file of readdirSync(join(usual, 'images', build.name))) {
-        linkSync(join(usual, 'images', build.name, file), join(dir, 'images', build.name, file));
+      mkdirSync(join(images(dir), build.name), { recursive: true });
+      for (const file of readdirSync(join(images(usual), build.name))) {
+        linkSync(join(images(usual), build.name, file), join(images(dir), build.name, file));
       }
     }
   }

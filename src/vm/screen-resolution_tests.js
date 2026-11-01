@@ -4,6 +4,7 @@ import {
   DEFAULT_SCREEN_RESOLUTION,
   GUEST_SCREEN_RESOLUTION_FILE,
   normalizeScreenResolution,
+  vncScreenSize,
   writeGuestScreenResolution
 } from './screen-resolution.js';
 
@@ -82,4 +83,10 @@ test('writeGuestScreenResolution says what failed', async () => {
     writeGuestScreenResolution({ dir: '/vm', screenResolution: null, connectQmp, attempts: 1 }),
     /unable to set the screen resolution: no agent/
   );
+});
+
+test('vncScreenSize pads the width to 16 pixels for Xorg', () => {
+  assert.deepEqual(vncScreenSize({ width: 1366, height: 768 }), { width: 1376, height: 768 });
+  assert.deepEqual(vncScreenSize({ width: 1290, height: 800 }), { width: 1296, height: 800 });
+  assert.deepEqual(vncScreenSize({ width: 1920, height: 1080 }), { width: 1920, height: 1080 });
 });
