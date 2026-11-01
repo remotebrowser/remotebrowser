@@ -3,15 +3,15 @@ import { buildVm, buildableOses } from './build.js';
 import { OSES } from './os.js';
 import { LOG_ATTRIBUTES, step } from './step.js';
 
-// Builds the image and snapshot, as vm/build-image.sh does, in the
-// background of the server. It is skipped when it cannot be built on this
-// host.
+// Builds the image and snapshot of each OS, as vm/build-image.sh does, in
+// the background of the server. An OS that cannot be built on this host is
+// skipped.
 // It runs async on the main thread, not in a worker thread: the work is in
 // Docker and QEMU, and only the main thread sends logs to OTLP.
 //
 // The returned promise never rejects; a failure is logged, and the server
-// keeps running without a fresh image or snapshot. It resolves to whether
-// the image and snapshot are ready.
+// keeps running without a fresh image or snapshot of that OS. It resolves to
+// whether every OS it tried is ready.
 const bootstrapVm = async ({ build = buildVm, oses = buildableOses } = {}) => {
   const buildable = await oses().catch(() => []);
   for (const os of Object.keys(OSES).filter((os) => !buildable.includes(os))) {

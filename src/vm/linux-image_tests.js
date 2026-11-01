@@ -20,7 +20,7 @@ const build = (imagesDir, name) => {
   return path.join(dir, 'chromium.qcow2');
 };
 
-test('the image as its sources are now is in a build dir named after them', async () => {
+test('the image of an OS as its sources are now is in a build dir named after them', async () => {
   const imagesDir = path.join(tempDir(), 'images', 'debian-13');
   const source = (await imageSourceHash('debian-13')).slice(0, 16);
   const { imageStatus } = linuxImage('debian-13');
@@ -41,8 +41,9 @@ test('a build that misses its disk, kernel, or initrd does not count', async () 
   assert.equal((await linuxImage('debian-13').imageStatus({ imagesDir, arch: 'x86_64' })).current, false);
 });
 
-test('the source hash of the image is stable', async () => {
+test('each OS has a stable source hash of its own', async () => {
   const debian = await imageSourceHash('debian-13');
   assert.match(debian, /^[0-9a-f]{64}$/);
   assert.equal(await imageSourceHash('debian-13'), debian);
+  assert.notEqual(await imageSourceHash('ubuntu-26.04'), debian);
 });

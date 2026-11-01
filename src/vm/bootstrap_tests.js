@@ -15,7 +15,7 @@ const captureLogs = () => {
   return { lines, restore: () => Object.assign(consola, saved) };
 };
 
-test('the VM bootstrap builds the image and snapshot, and logs each build before and after, with its duration', async () => {
+test('the VM bootstrap builds each OS it can, and logs each build before and after, with its duration', async () => {
   const logs = captureLogs();
   const built = [];
   try {
@@ -35,7 +35,7 @@ test('the VM bootstrap builds the image and snapshot, and logs each build before
   assert.equal(typeof done.attributes['rb.duration_ms'], 'number');
 });
 
-test('the VM bootstrap skips a build that cannot run here', async () => {
+test('the VM bootstrap skips an OS that cannot be built here', async () => {
   const logs = captureLogs();
   const built = [];
   try {

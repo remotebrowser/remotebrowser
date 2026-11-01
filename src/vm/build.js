@@ -8,13 +8,14 @@ import { hostArch } from './qemu.js';
 import { snapshotStatus, takeSnapshot } from './snapshot.js';
 import { LOG_ATTRIBUTES, qemu, step } from './step.js';
 
-// How the image is made. `missingSource` says why the image cannot be
+// How each OS's image is made. `missingSource` says why the image cannot be
 // built on this host, or null. `prepareSource` downloads what it can.
 const BUILDERS = {
-  'debian-13': linuxImage('debian-13')
+  'debian-13': linuxImage('debian-13'),
+  'ubuntu-26.04': linuxImage('ubuntu-26.04')
 };
 
-// The OS, when its image can be built here.
+// The OSes whose image can be built here.
 const buildableOses = async ({ arch = hostArch() } = {}) => {
   const oses = [];
   for (const os of Object.keys(OSES)) {

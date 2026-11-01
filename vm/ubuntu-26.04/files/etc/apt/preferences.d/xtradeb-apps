@@ -1,0 +1,8 @@
+# Only Chromium from the xtradeb PPA; the rest of its apps never install.
+Package: *
+Pin: release o=LP-PPA-xtradeb-apps
+Pin-Priority: -1
+
+Package: chromium chromium-*
+Pin: release o=LP-PPA-xtradeb-apps
+Pin-Priority: 500

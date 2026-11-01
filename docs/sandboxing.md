@@ -4,22 +4,22 @@ Remote Browser runs each browser in its own [QEMU](https://www.qemu.org) virtual
 
 ## Behind the scenes
 
-Each browser runs on Debian 13.
+Each browser runs on Debian 13, the default, or on Ubuntu 26.04, chosen on the launch page. The launch page offers an OS once its snapshot is ready. The app keeps an image and a snapshot per OS, so a host can run browsers of both at once.
 
-At startup, in the background, the app prepares two things. The server does not wait for them, and it logs each step with `event.domain` set to `qemu`.
+At startup, in the background, the app prepares two things for each OS, all OSes at once. The server does not wait for them, and it logs each step with `event.domain` set to `qemu`.
 
-1. **Image**: the app builds the image from `vm/debian-13/Dockerfile` with Docker. It copies in the services from `vm/linux/files`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/debian-13` in the [data directory](#data-directory), as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
-2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshots/debian-13` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
+1. **Image**: the app builds the image of each Linux OS from its Dockerfile with Docker, such as `vm/debian-13/Dockerfile`. It copies in the services from `vm/linux/files`, and an OS may add its own in `vm/<os>/files`. Ubuntu ships Chromium only as a snap, which does not install in a Docker build, so its image takes Chromium, and nothing else, from the [xtradeb PPA](https://launchpad.net/~xtradeb/+archive/ubuntu/apps), with the signing key in `vm/ubuntu-26.04/files/etc/apt`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/<os>` in the [data directory](#data-directory), such as `images/debian-13`, as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
+2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshots/<os>` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
 
-Then every new browser is a VM started from the snapshot. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
+Then every new browser is a VM started from the snapshot of its OS. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
 
-Each VM gets `VM_MEMORY` of memory (default `2G` for Debian 13) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
+Each VM gets `VM_MEMORY` of memory (default `2G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
 Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
 ## Inside each VM
 
-The VM is a small Debian 13 system with systemd. Its services, all in `vm/linux/files`, are:
+The VM is a small Debian 13 or Ubuntu 26.04 system with systemd. Its services, all in `vm/linux/files`, are:
 
 | Service            | What it does                                                                                                                                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,7 +35,7 @@ The VM is a small Debian 13 system with systemd. Its services, all in `vm/linux/
 
 The browser has a display rather than running headless. The VM has no GPU, and the browser does not render in software, so WebGL and WebGPU are not available. Chromium reads its flags from `/etc/remotebrowser/browser.env`. It does not start without `nftables` and `tinyproxy`.
 
-To change what runs in the VMs, edit the files in `vm/linux/files`, or `vm/debian-13/Dockerfile`. The app builds the image again at its next start.
+To change what runs in the VMs, edit the files in `vm/linux/files`, or an OS's own Dockerfile. The app builds the images again at its next start.
 
 The VM is isolated in these ways:
 
@@ -61,20 +61,22 @@ The app keeps everything for the VMs in one directory, `.data/vm` by default. Se
 ```
 .data/vm/
 ├── images/
-│   └── debian-13/
-│       └── x86_64-<source>/
-│           ├── chromium.qcow2
-│           ├── chromium.kernel
-│           └── chromium.initrd
+│   ├── debian-13/
+│   │   └── x86_64-<source>/
+│   │       ├── chromium.qcow2
+│   │       ├── chromium.kernel
+│   │       └── chromium.initrd
+│   └── ubuntu-26.04/
 ├── snapshots/
-│   └── debian-13/
+│   ├── debian-13/
+│   └── ubuntu-26.04/
 ├── machines/
 │   └── <id>/
 └── run/
 ```
 
-- **`images`** holds the builds of the image. A build is named after its architecture and a hash of its sources, such as `vm/debian-13/Dockerfile` and `vm/linux/files`. When those change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither a snapshot nor any VM uses it.
-- **`snapshots`** holds the snapshot that new browsers start from: its disk (`overlay.qcow2`), its memory (`vm.state`), and `machine.json`, which names the image build it runs on. While the app saves a new snapshot, it works in `snapshots/debian-13.new.<pid>` and replaces `snapshots/debian-13` only when it is done.
+- **`images`** holds the builds of each OS's image. A build is named after its architecture and a hash of its sources, such as `vm/debian-13/Dockerfile` and `vm/linux/files`. When those change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither a snapshot nor any VM uses it.
+- **`snapshots`** holds the snapshot of each OS that new browsers start from: its disk (`overlay.qcow2`), its memory (`vm.state`), and `machine.json`, which names the OS and the image build it runs on. While the app saves a new snapshot, it works in `snapshots/<os>.new.<pid>` and replaces `snapshots/<os>` only when it is done.
 - **`machines`** holds one directory per browser, as described in [Lifecycle](#lifecycle).
 - **`run`** holds the VM that `vm/scripts/run.js` starts, as described in [Manual test](#manual-test).
 
@@ -86,18 +88,22 @@ To share the data directory between the container and the scripts in `vm/scripts
 
 ## Manual test
 
-The scripts in `vm` do the same steps as the app, and read the same settings. To build the image and save a snapshot:
+The scripts in `vm` do the same steps as the app, and read the same settings. To build the image and save a snapshot of each OS, all at once:
 
 ```bash
 npm install
 vm/build-image.sh
 ```
 
+It runs `vm/build-debian-13.sh` and `vm/build-ubuntu-26.04.sh`, each of which builds one OS.
+
 To start a Debian 13 VM from its snapshot:
 
 ```bash
 vm/scripts/run.js
 ```
+
+`vm/scripts/run.js ubuntu-26.04` starts an Ubuntu 26.04 one instead.
 
 The VM's console is your terminal, with a root shell; press Enter if no prompt shows. In another terminal, check that the browser answers, and open a page:
 

@@ -12,6 +12,19 @@ include('/partials/breadcrumbs', it) %>
       <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
       <label for="description">Description</label>
       <input type="text" id="description" name="description" value="<%= it.description %>" maxlength="140" />
+      <span id="osLabel" class="field-label">Operating system</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="osLabel">
+        <% it.oses.forEach(function (os) { %>
+        <label class="radio-label">
+          <% if (os.value === it.os) { %>
+          <input type="radio" name="os" value="<%= os.value %>" checked />
+          <% } else { %>
+          <input type="radio" name="os" value="<%= os.value %>" />
+          <% } %>
+          <span><%= os.label %></span>
+        </label>
+        <% }) %>
+      </div>
       <span id="screenResolutionLabel" class="field-label">Screen resolution</span>
       <div class="field-radios" role="radiogroup" aria-labelledby="screenResolutionLabel">
         <% it.screenResolutions.forEach(function (resolution) { %>

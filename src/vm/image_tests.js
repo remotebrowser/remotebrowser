@@ -35,7 +35,7 @@ test('pruneImages keeps the current build, and those that the snapshot or a VM r
   const dataDir = tempDir();
   const imagesDir = path.join(dataDir, 'images', 'debian-13');
   const builds = ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => build(imagesDir, `x86_64-${name}`));
-  // A prune never removes the builds in another images/<os> dir.
+  // A prune never removes the builds of another OS.
   const other = build(path.join(dataDir, 'images', 'other-os'), 'x86_64-g');
   const runsOn = (dir, image) => {
     mkdirSync(dir, { recursive: true });

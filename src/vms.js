@@ -1,4 +1,4 @@
-import { vms, isWellFormedBrowserId } from './vm/index.js';
+import { DEFAULT_OS, vms, isWellFormedBrowserId } from './vm/index.js';
 
 // The facade over the in-process QEMU VM manager (src/vm/). It turns
 // thrown errors into `{ error }` results, so callers never need a try block.
@@ -32,16 +32,16 @@ const orFallback = async (browserId, run, fallback) => {
 };
 
 /**
- * Starts a browser in a local VM, optionally with an upstream `proxy` URL (see
- * src/vm/proxy.js), a `screenResolution`, the screen size (see
- * src/vm/screen-resolution.js), and a `screenScale` in percent (see
- * src/vm/screen-scale.js).
- * @param {{proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null}} [params]
+ * Starts a browser in a local VM of `os` (see src/vm/os.js), optionally with
+ * an upstream `proxy` URL (see src/vm/proxy.js), a `screenResolution`, the
+ * screen size (see src/vm/screen-resolution.js), and a `screenScale` in
+ * percent (see src/vm/screen-scale.js).
+ * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
-const startBrowser = async ({ proxy = null, screenResolution = null, screenScale = null } = {}) => {
+const startBrowser = async ({ os = DEFAULT_OS, proxy = null, screenResolution = null, screenScale = null } = {}) => {
   try {
-    const { browserId } = await vms.launchBrowser({ proxy, screenResolution, screenScale });
+    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }
@@ -52,13 +52,25 @@ const startBrowser = async ({ proxy = null, screenResolution = null, screenScale
 };
 
 /**
- * Whether a browser can be started now. That needs the VM snapshot, which the
- * server saves in the background at startup.
+ * Whether a browser can be started now, on any OS. That needs a VM snapshot,
+ * which the server saves in the background at startup.
  * @returns {Promise<{data?: boolean, error?: string}>}
  */
 const canStartBrowser = async () => {
   try {
     return { data: await vms.canLaunchBrowser() };
+  } catch (error) {
+    return { error: errorMessage(error) };
+  }
+};
+
+/**
+ * The OSes that a browser can be started on now, as names from src/vm/os.js.
+ * @returns {Promise<{data?: string[], error?: string}>}
+ */
+const listLaunchableOses = async () => {
+  try {
+    return { data: await vms.launchableOses() };
   } catch (error) {
     return { error: errorMessage(error) };
   }
@@ -210,6 +222,7 @@ export {
   isWellFormedBrowserId,
   startBrowser,
   canStartBrowser,
+  listLaunchableOses,
   browserExists,
   browserCdpUrl,
   stopBrowser,

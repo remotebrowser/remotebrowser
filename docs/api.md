@@ -47,6 +47,15 @@ curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/j
   -d '{ "proxy": "http://user:password@proxy.example.com:8080" }' http://localhost:3000/api/v1/browsers
 ```
 
+The body can also name the browser's `os`: `debian-13`, the default, or `ubuntu-26.04`. Case does not matter, the dash may be left out, and `ubuntu` is short for `ubuntu-26.04`. Only a launch takes it:
+
+```bash
+curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{ "os": "ubuntu" }' http://localhost:3000/api/v1/browsers
+```
+
+An unknown `os` gets HTTP 400. If that OS cannot be launched yet, because its snapshot is not ready, the server returns HTTP 503.
+
 ## Terminate a browser
 
 `DELETE /api/v1/browsers/{browser_id}` terminates the browser. If the browser does not exist, the server returns HTTP 404. Only the person who launched the browser, or a workspace Admin, may terminate it; anyone else gets HTTP 403.
