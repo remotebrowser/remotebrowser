@@ -39,9 +39,10 @@ const loadBrowser = async (c) => {
 };
 
 // The settings a launch or a config change may carry. More will join proxy,
-// e.g. the allow and deny lists. The OS is only for a launch.
+// e.g. the allow and deny lists. The OS and WebGL are only for a launch, as
+// the browser takes them when it starts.
 const SETTINGS = new Set(['proxy']);
-const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os']);
+const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os', 'webgl']);
 
 // Returns the settings, or the response that says what is wrong with them. An
 // empty body means no settings, so a bare POST still launches a browser.
@@ -68,6 +69,12 @@ const readSettings = async (c, { launch = false } = {}) => {
     if (!settings.os) {
       return { response: c.json({ error: `The os must be one of ${Object.keys(OSES).join(', ')}.` }, 400) };
     }
+  }
+  if ('webgl' in body) {
+    if (typeof body.webgl !== 'boolean') {
+      return { response: c.json({ error: 'The webgl setting must be true or false.' }, 400) };
+    }
+    settings.webgl = body.webgl;
   }
   if ('proxy' in body) {
     if (body.proxy !== null && typeof body.proxy !== 'string') {
@@ -120,7 +127,8 @@ routes.post('/', async (c) => {
     browserInstanceId: launched.data.browserInstanceId,
     userId: user.id,
     os,
-    proxy: settings.proxy ?? null
+    proxy: settings.proxy ?? null,
+    webgl: settings.webgl ?? true
   });
   logAction(c, 'API browser launched', launched.data);
   return c.json({ browser_id: launched.data.publicId, status: 'launched' });

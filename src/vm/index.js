@@ -19,6 +19,7 @@ import { createVmClient } from './client.js';
 //   proxy.js    the browser's upstream proxy
 //   screen-resolution.js  the browser's screen size
 //   screen-scale.js       the browser's screen scale
+//   webgl.js    WebGL on the CPU
 //   client.js   the VM client that ties these together
 
 // Reassignable so tests (and future callers) can swap the client; importers read

@@ -34,14 +34,20 @@ const orFallback = async (browserId, run, fallback) => {
 /**
  * Starts a browser in a local VM of `os` (see src/vm/os.js), optionally with
  * an upstream `proxy` URL (see src/vm/proxy.js), a `screenResolution`, the
- * screen size (see src/vm/screen-resolution.js), and a `screenScale` in
- * percent (see src/vm/screen-scale.js).
- * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null}} [params]
+ * screen size (see src/vm/screen-resolution.js), a `screenScale` in percent
+ * (see src/vm/screen-scale.js), and `webgl` on (see src/vm/webgl.js).
+ * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
-const startBrowser = async ({ os = DEFAULT_OS, proxy = null, screenResolution = null, screenScale = null } = {}) => {
+const startBrowser = async ({
+  os = DEFAULT_OS,
+  proxy = null,
+  screenResolution = null,
+  screenScale = null,
+  webgl = false
+} = {}) => {
   try {
-    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale });
+    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale, webgl });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }

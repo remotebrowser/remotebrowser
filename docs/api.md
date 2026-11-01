@@ -56,6 +56,15 @@ curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/j
 
 An unknown `os` gets HTTP 400. If that OS cannot be launched yet, because its snapshot is not ready, the server returns HTTP 503.
 
+WebGL is on by default. The VM has no GPU, so Chromium renders WebGL with a software renderer (Mesa's llvmpipe), on the CPU. It is much slower than on a real GPU. Set `webgl` to `false` to turn it off. Only a launch takes it:
+
+```bash
+curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{ "webgl": false }' http://localhost:3000/api/v1/browsers
+```
+
+A `webgl` that is not `true` or `false` gets HTTP 400.
+
 ## Terminate a browser
 
 `DELETE /api/v1/browsers/{browser_id}` terminates the browser. If the browser does not exist, the server returns HTTP 404. Only the person who launched the browser, or a workspace Admin, may terminate it; anyone else gets HTTP 403.

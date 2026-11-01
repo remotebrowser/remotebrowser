@@ -105,6 +105,7 @@ const renderBrowserLaunch = async (c, data = {}) => {
     description: '',
     enableScreenRecording: true,
     blockAdsAndTrackers: true,
+    enableWebgl: true,
     notReady: false,
     oses: oses.map((os) => ({ value: os, label: OSES[os].label })),
     os: defaultOsChoice(oses),
@@ -139,6 +140,7 @@ const renderBrowserLaunchError = (c, body, error, data = {}) =>
     description: formString(body.description).trim(),
     enableScreenRecording: Boolean(body.enableScreenRecording),
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers),
+    enableWebgl: Boolean(body.enableWebgl),
     ...(formString(body.os) && { os: formString(body.os) }),
     screenResolution: parseScreenResolution(body)?.value ?? DEFAULT_SCREEN_RESOLUTION_CHOICE,
     screenScale: parseScreenScale(body)?.value ?? DEFAULT_SCREEN_SCALE_CHOICE,
@@ -163,10 +165,11 @@ const startBrowser = async ({
   proxy = null,
   screenResolution = null,
   screenScale = null,
+  webgl = false,
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale });
+  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale, webgl });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -296,7 +299,8 @@ const handleLaunch = async (c) => {
     os,
     proxy,
     screenResolution,
-    screenScale
+    screenScale,
+    webgl: Boolean(body.enableWebgl)
   });
 
   return c.redirect(`/browsers/${launched.data.publicId}`, 303);

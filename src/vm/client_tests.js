@@ -581,6 +581,15 @@ test('launchBrowser sets the screen scale before the clock, which starts the bro
   assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/screen-scale', '150\n']]);
 });
 
+test('launchBrowser enables WebGL before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher({ start, portOpen, connectQmp });
+  await vm.launchBrowser({ webgl: true });
+  assert.equal(names(commands).at(-1), 'guest-set-time');
+  assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/webgl.env', 'WEBGL_FLAGS=--ignore-gpu-blocklist\n']]);
+});
+
 test('launchBrowser refuses a bad screen scale before it starts a VM', async () => {
   const dataDir = tempDataDir();
   const { starts, start, portOpen } = startStub();

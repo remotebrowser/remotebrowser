@@ -400,6 +400,7 @@ test('PATCH /:id/config refuses a bad body or proxy URL, and changes nothing', a
     ['[1]', 'The request body must be a JSON object.'],
     [{ denylist: [] }, 'Unknown setting: denylist.'],
     [{ os: 'ubuntu' }, 'Unknown setting: os.'],
+    [{ webgl: true }, 'Unknown setting: webgl.'],
     [{ proxy: 42 }, 'The proxy must be a URL, or null to connect directly.'],
     [{ proxy: 'https://proxy.example.com' }, 'The proxy URL must start with http://, socks4://, or socks5://.']
   ]) {
@@ -474,7 +475,13 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: 'http://u:p@proxy.example.com:8080', screenResolution: null, screenScale: null }
+    {
+      os: 'debian-13',
+      proxy: 'http://u:p@proxy.example.com:8080',
+      screenResolution: null,
+      screenScale: null,
+      webgl: true
+    }
   ]);
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
   assert.deepEqual(stored.data.config, { proxy: 'http://u:****@proxy.example.com:8080' });
@@ -534,6 +541,39 @@ test('POST /api/v1/browsers answers 503 for an os whose snapshot is not ready, a
   assert.deepEqual(await res.json(), {
     error: 'Ubuntu 26.04 browsers are not available here yet. Please try again later.'
   });
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /api/v1/browsers enables WebGL unless it is turned off', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const launches = [];
+  fakeVms({
+    canLaunchBrowser: async () => true,
+    launchBrowser: async (options) => {
+      launches.push(options);
+      throw new Error('no VM in tests');
+    }
+  });
+  for (const body of [{ webgl: true }, { webgl: false }, {}]) {
+    assert.equal((await sendJson('POST', '/api/v1/browsers', apiKey, body)).status, 200);
+  }
+  for (let i = 0; i < 100 && launches.length < 3; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.deepEqual(launches.map((options) => options.webgl).sort(), [false, true, true]);
+});
+
+test('POST /api/v1/browsers refuses a webgl setting that is not true or false, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  for (const webgl of ['true', 1, null, 'on']) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { webgl });
+    assert.equal(res.status, 400, String(webgl));
+    assert.deepEqual(await res.json(), { error: 'The webgl setting must be true or false.' });
+  }
   assert.ok(!calls.includes('launchBrowser'));
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });

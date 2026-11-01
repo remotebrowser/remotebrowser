@@ -41,10 +41,13 @@ RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime \
 # etc/apt. Plus fonts that most sites expect, and labwc on the virtual GPU,
 # which sets the screen size and scale live. seatd lets labwc open the GPU
 # and the input devices without root.
+# The virtual GPU has no 3D, so Mesa's llvmpipe (in libgl1-mesa-dri) draws
+# GL, and WebGL, on the CPU.
 COPY ubuntu-26.04/files/etc/apt/ /etc/apt/
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         chromium labwc wlr-randr seatd xkb-data \
+        libgl1-mesa-dri libegl-mesa0 \
         fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
