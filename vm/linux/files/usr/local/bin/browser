@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the browser that the host picked at launch (src/vm/browser-app.js),
+# else Chromium. systemd cannot take the program itself from a variable.
+exec "${BROWSER_APP:-/usr/bin/chromium}" "$@"

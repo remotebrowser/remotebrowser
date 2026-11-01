@@ -36,6 +36,16 @@ RUN apt-get update \
         fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
+# Google Chrome, which a launch may pick instead of Chromium (see
+# src/vm/browser-app.js), from Google's repository, for amd64 and arm64.
+RUN install -d /etc/apt/keyrings \
+    && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /etc/apt/keyrings/google-chrome.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.asc] https://dl.google.com/linux/chrome/deb/ stable main" \
+        >/etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
 # The browser runs as this user, so its own sandbox stays on.
 RUN useradd --create-home --shell /usr/sbin/nologin browser
 

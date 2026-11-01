@@ -401,6 +401,7 @@ test('PATCH /:id/config refuses a bad body or proxy URL, and changes nothing', a
     [{ denylist: [] }, 'Unknown setting: denylist.'],
     [{ os: 'ubuntu' }, 'Unknown setting: os.'],
     [{ webgl: true }, 'Unknown setting: webgl.'],
+    [{ browser: 'chrome' }, 'Unknown setting: browser.'],
     [{ proxy: 42 }, 'The proxy must be a URL, or null to connect directly.'],
     [{ proxy: 'https://proxy.example.com' }, 'The proxy URL must start with http://, socks4://, or socks5://.']
   ]) {
@@ -480,7 +481,8 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
       proxy: 'http://u:p@proxy.example.com:8080',
       screenResolution: null,
       screenScale: null,
-      webgl: true
+      webgl: true,
+      app: 'chromium'
     }
   ]);
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
@@ -563,6 +565,41 @@ test('POST /api/v1/browsers enables WebGL unless it is turned off', async () => 
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   assert.deepEqual(launches.map((options) => options.webgl).sort(), [false, true, true]);
+});
+
+test('POST /api/v1/browsers runs Chromium by default, or the browser it names, in any case', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const launches = [];
+  fakeVms({
+    canLaunchBrowser: async () => true,
+    launchBrowser: async (options) => {
+      launches.push(options);
+      throw new Error('no VM in tests');
+    }
+  });
+  const bodies = [{}, { browser: 'Chromium' }, { browser: 'chrome' }, { browser: 'google-chrome' }];
+  const expected = ['chromium', 'chromium', 'chrome', 'chrome'];
+  for (const body of bodies) {
+    assert.equal((await sendJson('POST', '/api/v1/browsers', apiKey, body)).status, 200);
+  }
+  for (let i = 0; i < 100 && launches.length < bodies.length; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.deepEqual(launches.map((options) => options.app).sort(), expected.sort());
+});
+
+test('POST /api/v1/browsers refuses an unknown browser, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  for (const browser of ['firefox', '', null, 1]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { browser });
+    assert.equal(res.status, 400, String(browser));
+    assert.deepEqual(await res.json(), { error: 'The browser must be one of chromium, chrome.' });
+  }
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
 test('POST /api/v1/browsers refuses a webgl setting that is not true or false, and launches nothing', async () => {

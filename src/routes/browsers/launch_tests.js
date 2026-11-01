@@ -607,7 +607,7 @@ test('POST /browsers/launch enables WebGL when the box is checked', async () => 
   assert.equal((await postLaunch(workspaceId, { enableWebgl: 'on' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true }
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true, app: 'chromium' }
   ]);
 });
 
@@ -675,8 +675,8 @@ test('POST /browsers/launch sets the chosen screen scale, and nothing for 150%',
   }
   assert.ok(await settle(() => launches.length > 1));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 175, webgl: false },
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false }
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 175, webgl: false, app: 'chromium' },
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
   ]);
 });
 
@@ -711,8 +711,22 @@ test('POST /browsers/launch sets the chosen screen resolution', async () => {
   }
   assert.ok(await settle(() => launches.length > 1));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: { width: 1920, height: 1200 }, screenScale: null, webgl: false },
-    { os: 'debian-13', proxy: null, screenResolution: { width: 3840, height: 2160 }, screenScale: null, webgl: false }
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: { width: 1920, height: 1200 },
+      screenScale: null,
+      webgl: false,
+      app: 'chromium'
+    },
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: { width: 3840, height: 2160 },
+      screenScale: null,
+      webgl: false,
+      app: 'chromium'
+    }
   ]);
 });
 
@@ -722,7 +736,7 @@ test('POST /browsers/launch keeps the image default for Full HD', async () => {
   assert.equal((await postLaunch(workspaceId, { screenResolution: 'full-hd' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false }
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
   ]);
 });
 
@@ -761,7 +775,8 @@ test('POST /browsers/launch passes the proxy to the new VM when the box is check
       proxy: 'http://u:p@proxy.example.com:8080',
       screenResolution: null,
       screenScale: null,
-      webgl: false
+      webgl: false,
+      app: 'chromium'
     }
   ]);
   // Kept with the browser, so the REST API can report it, but never with the password.
@@ -776,7 +791,7 @@ test('POST /browsers/launch ignores the proxy URL when the box is not checked', 
   assert.equal((await postLaunch(workspaceId, { proxy: 'not a url' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false }
+    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
   ]);
 });
 
@@ -843,8 +858,59 @@ test('POST /browsers/launch starts the chosen OS, with its settings', async () =
   assert.equal((await postLaunch(workspaceId, ubuntu)).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'ubuntu-26.04', proxy: 'http://proxy.example:8080', screenResolution: null, screenScale: 200, webgl: false }
+    {
+      os: 'ubuntu-26.04',
+      proxy: 'http://proxy.example:8080',
+      screenResolution: null,
+      screenScale: 200,
+      webgl: false,
+      app: 'chromium'
+    }
   ]);
+});
+
+test('GET /browsers/launch offers the browsers after the OS, with Chromium chosen', async () => {
+  fakeVms();
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /<span id="browserAppLabel" class="field-label">Browser<\/span>/);
+  const options = [
+    ...body.matchAll(/<input type="radio" name="browserApp" value="([^"]+)"( checked)? \/>\s*<span>([^<]*)<\/span>/g)
+  ].map((m) => m.slice(1));
+  assert.deepEqual(options, [
+    ['chromium', ' checked', 'Chromium'],
+    ['chrome', undefined, 'Google Chrome']
+  ]);
+  const at = (text) => body.indexOf(text);
+  assert.ok(at('name="os"') < at('name="browserApp"'));
+  assert.ok(at('name="browserApp"') < at('name="screenResolution"'));
+});
+
+test('POST /browsers/launch starts Google Chrome when it is chosen', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  assert.equal((await postLaunch(workspaceId, { browserApp: 'chrome' })).status, 303);
+  assert.ok(await settle(() => launches.length > 0));
+  assert.equal(launches[0].app, 'chrome');
+});
+
+test('POST /browsers/launch keeps the chosen browser when it shows an error', async () => {
+  fakeVms();
+  const workspaceId = await makeUser();
+  const res = await postLaunch(workspaceId, { browserApp: 'chrome', useProxy: 'on', proxy: '' });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /name="browserApp" value="chrome" checked/);
+});
+
+test('POST /browsers/launch refuses a browser not in the list, and creates nothing', async () => {
+  const workspaceId = await makeUser();
+  const launches = fakeVms();
+  const res = await postLaunch(workspaceId, { browserApp: 'firefox' });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /Choose a browser from the list\./);
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+  assert.deepEqual(launches, []);
 });
 
 test('POST /browsers/launch refuses an OS without a snapshot, and creates nothing', async () => {

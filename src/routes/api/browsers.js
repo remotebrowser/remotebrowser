@@ -12,7 +12,16 @@ import { generateBrowserName, browsersReady, launchRefusal, launchableOses, star
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
 import { setBrowserProxy, clearBrowserProxy } from '../../vms.js';
-import { DEFAULT_OS, OSES, normalizeProxyUrl, maskProxyUrl, resolveOs } from '../../vm/index.js';
+import {
+  BROWSER_APPS,
+  DEFAULT_BROWSER_APP,
+  DEFAULT_OS,
+  OSES,
+  normalizeProxyUrl,
+  maskProxyUrl,
+  resolveBrowserApp,
+  resolveOs
+} from '../../vm/index.js';
 
 // Documented in docs/api.md. A browser_id is the browser's public id, and a key
 // reaches only the browsers of its own workspace.
@@ -39,10 +48,10 @@ const loadBrowser = async (c) => {
 };
 
 // The settings a launch or a config change may carry. More will join proxy,
-// e.g. the allow and deny lists. The OS and WebGL are only for a launch, as
-// the browser takes them when it starts.
+// e.g. the allow and deny lists. The OS, the browser, and WebGL are only for
+// a launch, as they apply when the browser starts.
 const SETTINGS = new Set(['proxy']);
-const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os', 'webgl']);
+const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os', 'browser', 'webgl']);
 
 // Returns the settings, or the response that says what is wrong with them. An
 // empty body means no settings, so a bare POST still launches a browser.
@@ -68,6 +77,14 @@ const readSettings = async (c, { launch = false } = {}) => {
     settings.os = resolveOs(body.os);
     if (!settings.os) {
       return { response: c.json({ error: `The os must be one of ${Object.keys(OSES).join(', ')}.` }, 400) };
+    }
+  }
+  if ('browser' in body) {
+    settings.browser = resolveBrowserApp(body.browser);
+    if (!settings.browser) {
+      return {
+        response: c.json({ error: `The browser must be one of ${Object.keys(BROWSER_APPS).join(', ')}.` }, 400)
+      };
     }
   }
   if ('webgl' in body) {
@@ -128,7 +145,8 @@ routes.post('/', async (c) => {
     userId: user.id,
     os,
     proxy: settings.proxy ?? null,
-    webgl: settings.webgl ?? true
+    webgl: settings.webgl ?? true,
+    app: settings.browser ?? DEFAULT_BROWSER_APP
   });
   logAction(c, 'API browser launched', launched.data);
   return c.json({ browser_id: launched.data.publicId, status: 'launched' });

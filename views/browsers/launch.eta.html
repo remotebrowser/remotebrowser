@@ -25,6 +25,19 @@ include('/partials/breadcrumbs', it) %>
         </label>
         <% }) %>
       </div>
+      <span id="browserAppLabel" class="field-label">Browser</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="browserAppLabel">
+        <% it.browserApps.forEach(function (app) { %>
+        <label class="radio-label">
+          <% if (app.value === it.browserApp) { %>
+          <input type="radio" name="browserApp" value="<%= app.value %>" checked />
+          <% } else { %>
+          <input type="radio" name="browserApp" value="<%= app.value %>" />
+          <% } %>
+          <span><%= app.label %></span>
+        </label>
+        <% }) %>
+      </div>
       <span id="screenResolutionLabel" class="field-label">Screen resolution</span>
       <div class="field-radios" role="radiogroup" aria-labelledby="screenResolutionLabel">
         <% it.screenResolutions.forEach(function (resolution) { %>

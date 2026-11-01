@@ -19,6 +19,7 @@ import {
 import { normalizeScreenScale, writeGuestScreenScale } from './screen-scale.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
 import { writeGuestWebgl } from './webgl.js';
+import { DEFAULT_BROWSER_APP, isBrowserApp, writeGuestBrowserApp } from './browser-app.js';
 import {
   readAnyScreenshot,
   readScreenshot,
@@ -155,7 +156,7 @@ const createVmClient = ({
 
   // Starts the VM as the snapshot left it, with the browser already up, on
   // a copy of the snapshot's disk.
-  const startFromSnapshot = async ({ name, dir, os, saved, proxy, screenResolution, screenScale, webgl }) => {
+  const startFromSnapshot = async ({ name, dir, os, saved, proxy, screenResolution, screenScale, webgl, app }) => {
     const snapshotDir = snapshotDirOf(os);
     // A reflink where the filesystem has them, else a plain copy.
     await copyFile(
@@ -183,9 +184,12 @@ const createVmClient = ({
       } finally {
         qmp.close();
       }
-      // Before the clock, which starts the browser, so its first request
-      // already takes this route, its window fills this screen at this scale,
-      // and it starts with WebGL on.
+      // Before the clock, which starts the browser, so the one picked starts,
+      // its first request already takes this route, its window fills this
+      // screen at this scale, and it starts with WebGL on.
+      if (app !== DEFAULT_BROWSER_APP) {
+        await writeGuestBrowserApp({ dir, app, connectQmp });
+      }
       if (webgl) {
         await writeGuestWebgl({ dir, connectQmp });
       }
@@ -273,15 +277,20 @@ const createVmClient = ({
   // `screenResolution` is the screen size; see screen-resolution.js.
   // `screenScale` is the screen scale in percent; see screen-scale.js.
   // `webgl` enables WebGL, on the CPU; see webgl.js.
+  // `app` is the browser, Chromium or Google Chrome; see browser-app.js.
   const launchBrowser = async ({
     os = DEFAULT_OS,
     proxy = null,
     screenResolution = null,
     screenScale = null,
-    webgl = false
+    webgl = false,
+    app = DEFAULT_BROWSER_APP
   } = {}) => {
     if (!isOs(os)) {
       throw new Error(`Unknown OS ${os}`);
+    }
+    if (!isBrowserApp(app)) {
+      throw new Error(`Unknown browser ${app}`);
     }
     // A bad URL, screen resolution, or scale fails here, before a VM starts.
     const upstreamProxy = normalizeProxyUrl(proxy);
@@ -327,7 +336,8 @@ const createVmClient = ({
         proxy: upstreamProxy,
         screenResolution: resolution,
         screenScale: scale,
-        webgl: Boolean(webgl)
+        webgl: Boolean(webgl),
+        app
       });
       consola.log(`QEMU started browser VM ${name}`, {
         'event.domain': 'qemu',
@@ -337,7 +347,8 @@ const createVmClient = ({
         'rb.upstream_proxy': Boolean(upstreamProxy),
         'rb.screen_resolution': screenResolutionLabel(resolution),
         'rb.screen_scale': screenScaleLabel(scale),
-        'rb.webgl': Boolean(webgl)
+        'rb.webgl': Boolean(webgl),
+        'rb.browser_app': app
       });
       return { browserId };
     } catch (error) {

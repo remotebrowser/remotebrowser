@@ -590,6 +590,26 @@ test('launchBrowser enables WebGL before the clock, which starts the browser', a
   assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/webgl.env', 'WEBGL_FLAGS=--ignore-gpu-blocklist\n']]);
 });
 
+test('launchBrowser picks Google Chrome before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher({ start, portOpen, connectQmp });
+  await vm.launchBrowser({ app: 'chrome' });
+  assert.equal(names(commands).at(-1), 'guest-set-time');
+  assert.deepEqual(guestWrites(commands), [
+    ['/etc/remotebrowser/app.env', 'BROWSER_APP=/usr/bin/google-chrome-stable\n']
+  ]);
+});
+
+test('launchBrowser refuses an unknown browser before it starts a VM', async () => {
+  const dataDir = tempDataDir();
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen, dataDir });
+  await assert.rejects(vm.launchBrowser({ app: 'firefox' }), /Unknown browser firefox/);
+  assert.equal(starts.length, 0);
+  assert.deepEqual(machines(dataDir), []);
+});
+
 test('launchBrowser refuses a bad screen scale before it starts a VM', async () => {
   const dataDir = tempDataDir();
   const { starts, start, portOpen } = startStub();
