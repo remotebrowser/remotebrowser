@@ -289,9 +289,10 @@ test("GET /browsers/launch renders the form in the visitor's own workspace", asy
   const body = await res.text();
   assert.match(body, /Launch a browser/);
   assert.match(body, /id="name" name="name" value="[a-z]+-[a-z]+"/);
-  assert.match(body, /id="enableScreenRecording" name="enableScreenRecording" checked/);
-  assert.match(body, /id="blockAdsAndTrackers" name="blockAdsAndTrackers" checked/);
-  assert.match(body, /id="description" name="description" value=""/);
+  assert.match(
+    body,
+    /id="description"\s+name="description"\s+value=""\s+maxlength="140"\s+placeholder="Optional, but helps you tell browsers apart"/
+  );
   assert.match(body, />Launch<\/button>/);
   assert.match(body, /class="breadcrumb-switcher-trigger">Personal workspace</);
   assert.match(body, /<a href="\/browsers">Browsers<\/a>/);
@@ -387,7 +388,7 @@ test('POST /browsers/launch rejects a blank name and preserves the description',
   assert.equal(res.status, 400);
   const body = await res.text();
   assert.match(body, /browser name/i);
-  assert.match(body, /id="description" name="description" value="For QA"/);
+  assert.match(body, /id="description"\s+name="description"\s+value="For QA"/);
 });
 
 test('POST /browsers/launch writes a browser instance and redirects to its browser page', async () => {
@@ -404,7 +405,6 @@ test('POST /browsers/launch writes a browser instance and redirects to its brows
     body: new URLSearchParams({
       name: 'calm-otter',
       description: 'For QA testing',
-      enableScreenRecording: 'on',
       workspace: workspaceId,
       csrf: makeCsrfToken(csrfId)
     }).toString()
@@ -455,7 +455,6 @@ test('POST /browsers/launch writes a browser instance scoped to the active works
     },
     body: new URLSearchParams({
       name: 'calm-otter',
-      blockAdsAndTrackers: 'on',
       workspace: 3333,
       csrf: makeCsrfToken(csrfId)
     }).toString()
@@ -566,12 +565,12 @@ test('POST /browsers/launch refuses, without writing an instance, while there is
   const body = await res.text();
   assert.match(body, /still being prepared/);
   assert.match(body, /id="name" name="name" value="calm-otter"/);
-  assert.match(body, /id="description" name="description" value="For QA"/);
+  assert.match(body, /id="description"\s+name="description"\s+value="For QA"/);
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
   assert.deepEqual(launches, []);
 });
 
-test('GET /browsers/launch offers an unchecked proxy box after the checkboxes, with the URL input next to it', async () => {
+test('GET /browsers/launch offers an unchecked proxy box after the description, with the URL input next to it', async () => {
   fakeVms();
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
@@ -579,15 +578,15 @@ test('GET /browsers/launch offers an unchecked proxy box after the checkboxes, w
   assert.match(body, /<input type="checkbox" id="useProxy" name="useProxy" \/>\s*Use proxy\s*<\/label>/);
   assert.match(body, /id="proxy"\s+name="proxy"\s+value=""/);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="blockAdsAndTrackers"') < at('name="useProxy"'));
+  assert.ok(at('name="description"') < at('name="useProxy"'));
   assert.ok(at('name="useProxy"') < at('name="proxy"'));
-  assert.ok(at('name="proxy"') < at('>Launch</button>'));
+  assert.ok(at('name="proxy"') < at('name="screenResolution"'));
   // Enabled in markup, for a visitor without JavaScript; the script disables it.
   assert.doesNotMatch(body, /id="proxy"[^>]*disabled/);
   assert.match(body, /proxyInput\.disabled = !useProxy\.checked/);
 });
 
-test('GET /browsers/launch offers a checked WebGL box between the ad blocker and the proxy', async () => {
+test('GET /browsers/launch offers a checked WebGL box between the screen scale and the browsers', async () => {
   fakeVms();
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
@@ -597,8 +596,8 @@ test('GET /browsers/launch offers a checked WebGL box between the ad blocker and
     /<input type="checkbox" id="enableWebgl" name="enableWebgl" checked \/>\s*Enable WebGL \(software renderer\)\s*<\/label>/
   );
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="blockAdsAndTrackers"') < at('name="enableWebgl"'));
-  assert.ok(at('name="enableWebgl"') < at('name="useProxy"'));
+  assert.ok(at('name="screenScale"') < at('name="enableWebgl"'));
+  assert.ok(at('name="enableWebgl"') < at('name="browserApp"'));
 });
 
 test('POST /browsers/launch enables WebGL when the box is checked', async () => {
@@ -619,7 +618,7 @@ test('POST /browsers/launch keeps the WebGL box checked when it shows an error',
   assert.match(await res.text(), /id="enableWebgl" name="enableWebgl" checked/);
 });
 
-test('GET /browsers/launch offers the screen resolutions after the description, with Full HD chosen', async () => {
+test('GET /browsers/launch offers the screen resolutions after the proxy, with Full HD chosen', async () => {
   fakeVms();
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
@@ -638,8 +637,7 @@ test('GET /browsers/launch offers the screen resolutions after the description, 
     ['4k', undefined, '4K', '3840×2160']
   ]);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="description"') < at('name="screenResolution"'));
-  assert.ok(at('name="screenResolution"') < at('name="enableScreenRecording"'));
+  assert.ok(at('name="proxy"') < at('name="screenResolution"'));
 });
 
 test('GET /browsers/launch offers a screen scale slider after the screen resolutions, at 150%', async () => {
@@ -663,7 +661,7 @@ test('GET /browsers/launch offers a screen scale slider after the screen resolut
   ]);
   const at = (text) => body.indexOf(text);
   assert.ok(at('name="screenResolution"') < at('name="screenScale"'));
-  assert.ok(at('name="screenScale"') < at('name="enableScreenRecording"'));
+  assert.ok(at('name="screenScale"') < at('name="enableWebgl"'));
 });
 
 test('POST /browsers/launch sets the chosen screen scale, and nothing for 150%', async () => {
@@ -823,7 +821,7 @@ test('POST /browsers/launch refuses a bad proxy URL, keeps what was typed, and c
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
-test('GET /browsers/launch offers the OSes that have a snapshot, after the description, with Debian 13 chosen', async () => {
+test('GET /browsers/launch offers the OSes that have a snapshot, last, with Debian 13 chosen', async () => {
   fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04', 'fedora-44'] });
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
@@ -838,8 +836,8 @@ test('GET /browsers/launch offers the OSes that have a snapshot, after the descr
     ['fedora-44', undefined, 'Fedora 44']
   ]);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="description"') < at('name="os"'));
-  assert.ok(at('name="os"') < at('name="screenResolution"'));
+  assert.ok(at('name="browserApp"') < at('name="os"'));
+  assert.ok(at('name="os"') < at('>Launch</button>'));
 });
 
 test('GET /browsers/launch chooses the only OS with a snapshot', async () => {
@@ -869,7 +867,7 @@ test('POST /browsers/launch starts the chosen OS, with its settings', async () =
   ]);
 });
 
-test('GET /browsers/launch offers the browsers after the OS, with Chromium chosen', async () => {
+test('GET /browsers/launch offers the browsers after the WebGL box, with Chromium chosen', async () => {
   fakeVms();
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
@@ -883,8 +881,8 @@ test('GET /browsers/launch offers the browsers after the OS, with Chromium chose
     ['chrome', undefined, 'Google Chrome']
   ]);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="os"') < at('name="browserApp"'));
-  assert.ok(at('name="browserApp"') < at('name="screenResolution"'));
+  assert.ok(at('name="enableWebgl"') < at('name="browserApp"'));
+  assert.ok(at('name="browserApp"') < at('name="os"'));
 });
 
 test('POST /browsers/launch starts Google Chrome when it is chosen', async () => {
