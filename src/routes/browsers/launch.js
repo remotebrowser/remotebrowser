@@ -14,10 +14,13 @@ import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceS
 import { browserMonitors } from '../../browser.js';
 import { canStartBrowser, listLaunchableOses, startBrowser as startBrowserVm } from '../../vms.js';
 import {
+  BROWSER_APPS,
+  DEFAULT_BROWSER_APP,
   DEFAULT_OS,
   DEFAULT_SCREEN_RESOLUTION,
   DEFAULT_SCREEN_SCALE,
   OSES,
+  isBrowserApp,
   normalizeProxyUrl,
   maskProxyUrl
 } from '../../vm/index.js';
@@ -109,6 +112,8 @@ const renderBrowserLaunch = async (c, data = {}) => {
     notReady: false,
     oses: oses.map((os) => ({ value: os, label: OSES[os].label })),
     os: defaultOsChoice(oses),
+    browserApps: Object.entries(BROWSER_APPS).map(([value, { label }]) => ({ value, label })),
+    browserApp: DEFAULT_BROWSER_APP,
     screenResolutions: SCREEN_RESOLUTIONS,
     screenResolution: DEFAULT_SCREEN_RESOLUTION_CHOICE,
     screenScales: SCREEN_SCALES,
@@ -142,6 +147,7 @@ const renderBrowserLaunchError = (c, body, error, data = {}) =>
     blockAdsAndTrackers: Boolean(body.blockAdsAndTrackers),
     enableWebgl: Boolean(body.enableWebgl),
     ...(formString(body.os) && { os: formString(body.os) }),
+    ...(formString(body.browserApp) && { browserApp: formString(body.browserApp) }),
     screenResolution: parseScreenResolution(body)?.value ?? DEFAULT_SCREEN_RESOLUTION_CHOICE,
     screenScale: parseScreenScale(body)?.value ?? DEFAULT_SCREEN_SCALE_CHOICE,
     useProxy: Boolean(body.useProxy),
@@ -166,10 +172,11 @@ const startBrowser = async ({
   screenResolution = null,
   screenScale = null,
   webgl = false,
+  app = DEFAULT_BROWSER_APP,
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale, webgl });
+  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale, webgl, app });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     return;
@@ -271,6 +278,11 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, 'Choose an operating system from the list.'), 400);
   }
 
+  const app = formString(body.browserApp) || DEFAULT_BROWSER_APP;
+  if (!isBrowserApp(app)) {
+    return c.html(renderBrowserLaunchError(c, body, 'Choose a browser from the list.'), 400);
+  }
+
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -300,7 +312,8 @@ const handleLaunch = async (c) => {
     proxy,
     screenResolution,
     screenScale,
-    webgl: Boolean(body.enableWebgl)
+    webgl: Boolean(body.enableWebgl),
+    app
   });
 
   return c.redirect(`/browsers/${launched.data.publicId}`, 303);

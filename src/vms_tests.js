@@ -63,7 +63,8 @@ test('startBrowser passes the upstream proxy to the VM launch', async () => {
       proxy: 'http://proxy.example.com:8080',
       screenResolution: null,
       screenScale: null,
-      webgl: false
+      webgl: false,
+      app: 'chromium'
     }
   });
 });
@@ -79,7 +80,8 @@ test('startBrowser passes the screen resolution to the VM launch', async () => {
       proxy: null,
       screenResolution: { width: 1280, height: 720 },
       screenScale: null,
-      webgl: false
+      webgl: false,
+      app: 'chromium'
     }
   });
 });
@@ -90,7 +92,7 @@ test('startBrowser passes the screen scale to the VM launch', async () => {
   await startBrowser({ screenScale: 150 });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 150, webgl: false }
+    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 150, webgl: false, app: 'chromium' }
   });
 });
 
@@ -100,7 +102,7 @@ test('startBrowser passes WebGL to the VM launch', async () => {
   await startBrowser({ webgl: true });
   assert.deepEqual(calls[0], {
     name: 'launchBrowser',
-    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true }
+    args: { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true, app: 'chromium' }
   });
 });
 
@@ -187,7 +189,8 @@ test('startBrowser launches the chosen OS', async () => {
     proxy: null,
     screenResolution: null,
     screenScale: null,
-    webgl: false
+    webgl: false,
+    app: 'chromium'
   });
 });
 

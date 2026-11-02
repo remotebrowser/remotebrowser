@@ -1,4 +1,4 @@
-import { DEFAULT_OS, vms, isWellFormedBrowserId } from './vm/index.js';
+import { DEFAULT_BROWSER_APP, DEFAULT_OS, vms, isWellFormedBrowserId } from './vm/index.js';
 
 // The facade over the in-process QEMU VM manager (src/vm/). It turns
 // thrown errors into `{ error }` results, so callers never need a try block.
@@ -35,8 +35,9 @@ const orFallback = async (browserId, run, fallback) => {
  * Starts a browser in a local VM of `os` (see src/vm/os.js), optionally with
  * an upstream `proxy` URL (see src/vm/proxy.js), a `screenResolution`, the
  * screen size (see src/vm/screen-resolution.js), a `screenScale` in percent
- * (see src/vm/screen-scale.js), and `webgl` on (see src/vm/webgl.js).
- * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean}} [params]
+ * (see src/vm/screen-scale.js), `webgl` on (see src/vm/webgl.js), and the
+ * browser `app` (see src/vm/browser-app.js).
+ * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean, app?: string}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
 const startBrowser = async ({
@@ -44,10 +45,11 @@ const startBrowser = async ({
   proxy = null,
   screenResolution = null,
   screenScale = null,
-  webgl = false
+  webgl = false,
+  app = DEFAULT_BROWSER_APP
 } = {}) => {
   try {
-    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale, webgl });
+    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale, webgl, app });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }

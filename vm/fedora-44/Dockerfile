@@ -52,6 +52,16 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     # chromium.service runs it under Debian's name.
     && ln -s chromium-browser /usr/bin/chromium
 
+# Google Chrome, which a launch may pick instead of Chromium (see
+# src/vm/browser-app.js), from Google's repository, for x86_64 and aarch64.
+RUN rpm --import https://dl.google.com/linux/linux_signing_key.pub \
+    && printf '%s\n' '[google-chrome]' 'name=google-chrome' \
+        'baseurl=https://dl.google.com/linux/chrome/rpm/stable/$basearch' \
+        'gpgcheck=1' 'gpgkey=https://dl.google.com/linux/linux_signing_key.pub' \
+        >/etc/yum.repos.d/google-chrome.repo \
+    && dnf install -y --setopt=install_weak_deps=False google-chrome-stable \
+    && dnf clean all
+
 # The browser runs as this user, so its own sandbox stays on.
 RUN useradd --create-home --shell /usr/sbin/nologin browser
 

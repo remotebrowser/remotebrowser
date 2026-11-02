@@ -56,7 +56,14 @@ curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/j
 
 An unknown `os` gets HTTP 400. If that OS cannot be launched yet, because its snapshot is not ready, the server returns HTTP 503.
 
-WebGL is on by default. The VM has no GPU, so Chromium renders WebGL with a software renderer (Mesa's llvmpipe), on the CPU. It is much slower than on a real GPU. Set `webgl` to `false` to turn it off. Only a launch takes it:
+The `browser` is `chromium`, the default, or `chrome` for Google Chrome. Case does not matter, and `google-chrome` is short for `chrome`. An unknown `browser` gets HTTP 400. Only a launch takes it:
+
+```bash
+curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{ "browser": "chrome" }' http://localhost:3000/api/v1/browsers
+```
+
+WebGL is on by default. The VM has no GPU, so the browser renders WebGL with a software renderer (Mesa's llvmpipe), on the CPU. It is much slower than on a real GPU. Set `webgl` to `false` to turn it off. Only a launch takes it:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
