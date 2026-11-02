@@ -11,33 +11,37 @@ include('/partials/breadcrumbs', it) %>
       <label for="name">Name</label>
       <input type="text" id="name" name="name" value="<%= it.suggestedName %>" required maxlength="80" />
       <label for="description">Description</label>
-      <input type="text" id="description" name="description" value="<%= it.description %>" maxlength="140" />
-      <span id="osLabel" class="field-label">Operating system</span>
-      <div class="field-radios" role="radiogroup" aria-labelledby="osLabel">
-        <% it.oses.forEach(function (os) { %>
-        <label class="radio-label">
-          <% if (os.value === it.os) { %>
-          <input type="radio" name="os" value="<%= os.value %>" checked />
+      <input
+        type="text"
+        id="description"
+        name="description"
+        value="<%= it.description %>"
+        maxlength="140"
+        placeholder="Optional, but helps you tell browsers apart"
+      />
+      <div class="field-break"></div>
+      <div class="field-checkbox-input">
+        <label class="checkbox-label">
+          <% if (it.useProxy) { %>
+          <input type="checkbox" id="useProxy" name="useProxy" checked />
           <% } else { %>
-          <input type="radio" name="os" value="<%= os.value %>" />
-          <% } %>
-          <span><%= os.label %></span>
+          <input type="checkbox" id="useProxy" name="useProxy" />
+          <% } %> Use proxy
         </label>
-        <% }) %>
+        <input
+          type="text"
+          id="proxy"
+          name="proxy"
+          value="<%= it.proxy %>"
+          maxlength="512"
+          placeholder="http://user:password@host:8080"
+          aria-label="Proxy URL"
+          spellcheck="false"
+          autocomplete="off"
+          autocapitalize="off"
+        />
       </div>
-      <span id="browserAppLabel" class="field-label">Browser</span>
-      <div class="field-radios" role="radiogroup" aria-labelledby="browserAppLabel">
-        <% it.browserApps.forEach(function (app) { %>
-        <label class="radio-label">
-          <% if (app.value === it.browserApp) { %>
-          <input type="radio" name="browserApp" value="<%= app.value %>" checked />
-          <% } else { %>
-          <input type="radio" name="browserApp" value="<%= app.value %>" />
-          <% } %>
-          <span><%= app.label %></span>
-        </label>
-        <% }) %>
-      </div>
+      <div class="field-break"></div>
       <span id="screenResolutionLabel" class="field-label">Screen resolution</span>
       <div class="field-radios" role="radiogroup" aria-labelledby="screenResolutionLabel">
         <% it.screenResolutions.forEach(function (resolution) { %>
@@ -72,46 +76,38 @@ include('/partials/breadcrumbs', it) %>
         </datalist>
       </div>
       <label class="checkbox-label field-checkbox">
-        <% if (it.enableScreenRecording) { %>
-        <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" checked />
-        <% } else { %>
-        <input type="checkbox" id="enableScreenRecording" name="enableScreenRecording" />
-        <% } %> Enable screen recording
-      </label>
-      <label class="checkbox-label field-checkbox">
-        <% if (it.blockAdsAndTrackers) { %>
-        <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" checked />
-        <% } else { %>
-        <input type="checkbox" id="blockAdsAndTrackers" name="blockAdsAndTrackers" />
-        <% } %> Block ads and trackers
-      </label>
-      <label class="checkbox-label field-checkbox">
         <% if (it.enableWebgl) { %>
         <input type="checkbox" id="enableWebgl" name="enableWebgl" checked />
         <% } else { %>
         <input type="checkbox" id="enableWebgl" name="enableWebgl" />
         <% } %> Enable WebGL (software renderer)
       </label>
-      <div class="field-checkbox-input">
-        <label class="checkbox-label">
-          <% if (it.useProxy) { %>
-          <input type="checkbox" id="useProxy" name="useProxy" checked />
+      <div class="field-break"></div>
+      <span id="browserAppLabel" class="field-label">Browser</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="browserAppLabel">
+        <% it.browserApps.forEach(function (app) { %>
+        <label class="radio-label">
+          <% if (app.value === it.browserApp) { %>
+          <input type="radio" name="browserApp" value="<%= app.value %>" checked />
           <% } else { %>
-          <input type="checkbox" id="useProxy" name="useProxy" />
-          <% } %> Use proxy
+          <input type="radio" name="browserApp" value="<%= app.value %>" />
+          <% } %>
+          <span><%= app.label %></span>
         </label>
-        <input
-          type="text"
-          id="proxy"
-          name="proxy"
-          value="<%= it.proxy %>"
-          maxlength="512"
-          placeholder="http://user:password@host:8080"
-          aria-label="Proxy URL"
-          spellcheck="false"
-          autocomplete="off"
-          autocapitalize="off"
-        />
+        <% }) %>
+      </div>
+      <span id="osLabel" class="field-label">Operating system</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="osLabel">
+        <% it.oses.forEach(function (os) { %>
+        <label class="radio-label">
+          <% if (os.value === it.os) { %>
+          <input type="radio" name="os" value="<%= os.value %>" checked />
+          <% } else { %>
+          <input type="radio" name="os" value="<%= os.value %>" />
+          <% } %>
+          <span><%= os.label %></span>
+        </label>
+        <% }) %>
       </div>
       <% if (it.notReady) { %>
       <button type="submit" class="btn-primary" disabled>Launch</button>

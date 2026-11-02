@@ -226,6 +226,10 @@ input {
   color: var(--text-muted);
 }
 
+.field-break {
+  grid-column: 1 / -1;
+}
+
 .field-slider {
   display: flex;
   align-items: center;
@@ -447,6 +451,7 @@ button.signin-submit[disabled] {
 
 .checkbox-label.field-checkbox {
   grid-column: 2;
+  align-items: center;
 }
 
 .checkbox-label input[type='checkbox'],
@@ -604,23 +609,18 @@ a.btn-secondary {
   color: var(--text-muted);
 }
 
-/* A checkbox with the input it turns on, side by side in a form grid. */
+/* A checkbox with the input it turns on, stacked in a form grid. */
 .field-checkbox-input {
   grid-column: 2;
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .field-checkbox-input .checkbox-label {
   align-items: center;
   flex: none;
   white-space: nowrap;
-}
-
-.field-checkbox-input input[type='text'] {
-  flex: 1;
-  min-width: 0;
 }
 
 /* A phone is too narrow for a label column, so each label sits above its field. */
@@ -637,7 +637,8 @@ a.btn-secondary {
 
   .page-form input + label,
   .page-form input + .field-label,
-  .page-form .field-radios + label {
+  .page-form .field-radios + label,
+  .page-form .field-radios + .field-label {
     margin-top: 0.5rem;
   }
 
@@ -648,14 +649,12 @@ a.btn-secondary {
     margin-top: 0.5rem;
   }
 
-  .page-form .field-radios + .field-checkbox,
-  .page-form .field-slider + .field-checkbox {
-    margin-top: 1.5rem;
+  .page-form .field-break {
+    height: 1rem;
   }
 
-  .page-form .field-checkbox-input {
-    flex-direction: column;
-    align-items: stretch;
+  .page-form .field-break + * {
+    margin-top: 0;
   }
 }
 
