@@ -623,3 +623,81 @@ test('POST /api/v1/browsers with a bad proxy launches nothing', async () => {
   assert.equal(res.status, 400);
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
+
+test('POST /api/v1/browsers stores the name and description it is given', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  fakeVms({ launchBrowser: async () => Promise.reject(new Error('no VM in tests')) });
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, { name: '  qa-run  ', description: 'For QA testing' });
+  assert.equal(res.status, 200);
+  const { browser_id: publicId } = await res.json();
+  const browser = (await getBrowserInstanceByPublicId({ workspaceId, publicId })).data;
+  assert.equal(browser.browserName, 'qa-run');
+  assert.equal(browser.browserDescription, 'For QA testing');
+});
+
+test('POST /api/v1/browsers refuses a bad name or description, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  for (const name of ['', '   ', 'x'.repeat(81), null, 1]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { name });
+    assert.equal(res.status, 400, String(name));
+    assert.deepEqual(await res.json(), { error: 'The name must be a string of 1 to 80 characters.' });
+  }
+  for (const description of ['x'.repeat(141), null, 1]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { description });
+    assert.equal(res.status, 400, String(description));
+    assert.deepEqual(await res.json(), { error: 'The description must be a string of up to 140 characters.' });
+  }
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /api/v1/browsers passes the screen resolution and scale, and the defaults as null', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const launches = [];
+  fakeVms({
+    launchBrowser: async (options) => {
+      launches.push(options);
+      throw new Error('no VM in tests');
+    }
+  });
+  const bodies = [
+    {},
+    { screen_resolution: 'full-hd', screen_scale: 150 },
+    { screen_resolution: 'qhd', screen_scale: 200 }
+  ];
+  for (const body of bodies) {
+    assert.equal((await sendJson('POST', '/api/v1/browsers', apiKey, body)).status, 200);
+  }
+  for (let i = 0; i < 100 && launches.length < bodies.length; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const screens = launches.map(({ screenResolution, screenScale }) => ({ screenResolution, screenScale }));
+  assert.equal(screens.filter((s) => s.screenResolution === null && s.screenScale === null).length, 2);
+  assert.ok(
+    screens.some(
+      (s) => s.screenResolution?.width === 2560 && s.screenResolution?.height === 1440 && s.screenScale === 200
+    )
+  );
+});
+
+test('POST /api/v1/browsers refuses a screen resolution or scale outside the list, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  for (const screen_resolution of ['8k', '1920x1080', '', null, 1]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { screen_resolution });
+    assert.equal(res.status, 400, String(screen_resolution));
+    assert.deepEqual(await res.json(), { error: 'The screen_resolution must be one of full-hd, wuxga, qhd, 4k.' });
+  }
+  for (const screen_scale of [90, 110, 225, '150', null]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, { screen_scale });
+    assert.equal(res.status, 400, String(screen_scale));
+    assert.deepEqual(await res.json(), { error: 'The screen_scale must be one of 100, 125, 150, 175, 200.' });
+  }
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});

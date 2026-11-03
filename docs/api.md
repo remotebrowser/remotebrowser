@@ -36,41 +36,52 @@ returns:
 { "browser_id": "B5xqk2m", "status": "launched" }
 ```
 
-If browsers cannot be launched yet, the server returns HTTP 503.
+### Launch settings
 
-A workspace can launch only so many browsers a minute. A launch over that rate gets HTTP 429, and the `Retry-After` header says how many seconds to wait. The same limit applies to the web UI.
+To choose how the browser is set up, send a JSON body. Every setting is optional, and a setting you leave out takes its default. These are the same choices as in the web UI's launch form.
 
-The request can carry a JSON body with the browser's [settings](#configure-a-browser), for example to launch it behind a proxy. The proxy is set before the browser starts, so even its first request takes that route:
+| Setting             | Values                                                                          | Default                          |
+| ------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
+| `name`              | Text, 1 to 80 characters                                                        | A random name, like `calm-otter` |
+| `description`       | Text, up to 140 characters                                                      | Empty                            |
+| `os`                | `debian-13`, `ubuntu-26.04`, `fedora-44`                                        | `debian-13`                      |
+| `browser`           | `chromium`, `chrome` (Google Chrome)                                            | `chromium`                       |
+| `screen_resolution` | `full-hd` (1920×1080), `wuxga` (1920×1200), `qhd` (2560×1440), `4k` (3840×2160) | `full-hd`                        |
+| `screen_scale`      | `100`, `125`, `150`, `175`, `200` (percent, a number)                           | `150`                            |
+| `webgl`             | `true` or `false`                                                               | `true`                           |
+| `proxy`             | A proxy URL, or `null` to connect directly                                      | `null`                           |
 
-```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{ "proxy": "http://user:password@proxy.example.com:8080" }' http://localhost:3000/api/v1/browsers
-```
-
-The body can also name the browser's `os`: `debian-13`, the default, `ubuntu-26.04`, or `fedora-44`. Case does not matter, the dash may be left out, and `ubuntu` and `fedora` are short for `ubuntu-26.04` and `fedora-44`. Only a launch takes it:
-
-```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{ "os": "ubuntu" }' http://localhost:3000/api/v1/browsers
-```
-
-An unknown `os` gets HTTP 400. If that OS cannot be launched yet, because its snapshot is not ready, the server returns HTTP 503.
-
-The `browser` is `chromium`, the default, or `chrome` for Google Chrome. Case does not matter, and `google-chrome` is short for `chrome`. An unknown `browser` gets HTTP 400. Only a launch takes it:
+_Example_, with several settings:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{ "browser": "chrome" }' http://localhost:3000/api/v1/browsers
+  -d '{
+    "name": "qa-run",
+    "description": "For QA testing",
+    "os": "ubuntu-26.04",
+    "browser": "chrome",
+    "screen_resolution": "qhd",
+    "screen_scale": 100
+  }' \
+  http://localhost:3000/api/v1/browsers
 ```
 
-WebGL is on by default. The VM has no GPU, so the browser renders WebGL with a software renderer (Mesa's llvmpipe), on the CPU. It is much slower than on a real GPU. Set `webgl` to `false` to turn it off. Only a launch takes it:
+Notes on some settings:
 
-```bash
-curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{ "webgl": false }' http://localhost:3000/api/v1/browsers
-```
+- **`os`**: Case does not matter, and the dash may be left out. `ubuntu` is short for `ubuntu-26.04`, and `fedora` for `fedora-44`.
+- **`browser`**: Case does not matter. `google-chrome` is short for `chrome`.
+- **`webgl`**: The VM has no GPU, so the browser draws WebGL on the CPU, with a software renderer (Mesa's llvmpipe). This is much slower than a real GPU. Set it to `false` if you do not need WebGL.
+- **`proxy`**: The browser's traffic goes through this proxy. The URL starts with `http://`, `socks4://`, or `socks5://`; see [Proxy](proxy.md) for what it may hold. The proxy is set before the browser starts, so even its first request takes that route. It is the only setting you can [change later](#configure-a-browser).
 
-A `webgl` that is not `true` or `false` gets HTTP 400.
+The other settings apply only when the browser starts, so they cannot be changed later.
+
+### Errors
+
+| Status | Why                                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | The body is not a JSON object, a setting is unknown, or a value is not allowed. The error says which.                                                      |
+| 429    | The workspace launched too many browsers in the last minute. The `Retry-After` header says how many seconds to wait. The same limit applies to the web UI. |
+| 503    | Browsers cannot be launched yet, or the chosen `os` is not ready yet. Try again in a few minutes.                                                          |
 
 ## Terminate a browser
 
@@ -92,7 +103,7 @@ _Example_: `curl -H "Authorization: Bearer $API_KEY" http://localhost:3000/api/v
 { "browser_id": "B5xqk2m", "status": "running", "description": "For QA testing" }
 ```
 
-The status is one of `starting`, `running`, `suspended`, `error`, or `terminated`. The description is the one given at launch in the web UI, or an empty string.
+The status is one of `starting`, `running`, `suspended`, `error`, or `terminated`. The description is the one given at launch, or an empty string.
 
 ## Suspend a browser
 

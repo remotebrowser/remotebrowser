@@ -8,7 +8,17 @@ import {
   getBrowserInstanceByPublicId,
   setBrowserInstanceConfig
 } from '../../models/browsers.js';
-import { generateBrowserName, browsersReady, launchRefusal, launchableOses, startBrowser } from '../browsers/launch.js';
+import {
+  generateBrowserName,
+  browsersReady,
+  launchRefusal,
+  launchableOses,
+  startBrowser,
+  SCREEN_RESOLUTIONS,
+  DEFAULT_SCREEN_RESOLUTION_CHOICE,
+  SCREEN_SCALES,
+  DEFAULT_SCREEN_SCALE_CHOICE
+} from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
 import { setBrowserProxy, clearBrowserProxy } from '../../vms.js';
@@ -48,10 +58,20 @@ const loadBrowser = async (c) => {
 };
 
 // The settings a launch or a config change may carry. More will join proxy,
-// e.g. the allow and deny lists. The OS, the browser, and WebGL are only for
-// a launch, as they apply when the browser starts.
+// e.g. the allow and deny lists. The rest are only for a launch, as they apply
+// when the browser starts. They match the web UI's launch form, with the same
+// choices and limits.
 const SETTINGS = new Set(['proxy']);
-const LAUNCH_SETTINGS = new Set([...SETTINGS, 'os', 'browser', 'webgl']);
+const LAUNCH_SETTINGS = new Set([
+  ...SETTINGS,
+  'name',
+  'description',
+  'os',
+  'browser',
+  'webgl',
+  'screen_resolution',
+  'screen_scale'
+]);
 
 // Returns the settings, or the response that says what is wrong with them. An
 // empty body means no settings, so a bare POST still launches a browser.
@@ -73,6 +93,38 @@ const readSettings = async (c, { launch = false } = {}) => {
     return { response: c.json({ error: `Unknown setting: ${unknown}.` }, 400) };
   }
   const settings = {};
+  if ('name' in body) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 80) {
+      return { response: c.json({ error: 'The name must be a string of 1 to 80 characters.' }, 400) };
+    }
+    settings.name = name;
+  }
+  if ('description' in body) {
+    const description = typeof body.description === 'string' ? body.description.trim() : null;
+    if (description === null || description.length > 140) {
+      return { response: c.json({ error: 'The description must be a string of up to 140 characters.' }, 400) };
+    }
+    settings.description = description;
+  }
+  if ('screen_resolution' in body) {
+    const choice = SCREEN_RESOLUTIONS.find((resolution) => resolution.value === body.screen_resolution);
+    if (!choice) {
+      const values = SCREEN_RESOLUTIONS.map((resolution) => resolution.value).join(', ');
+      return { response: c.json({ error: `The screen_resolution must be one of ${values}.` }, 400) };
+    }
+    // The default is the image's own, so it sets nothing, as in the web UI.
+    settings.screenResolution =
+      choice.value === DEFAULT_SCREEN_RESOLUTION_CHOICE ? null : { width: choice.width, height: choice.height };
+  }
+  if ('screen_scale' in body) {
+    const choice = SCREEN_SCALES.find((scale) => scale.scale === body.screen_scale);
+    if (!choice) {
+      const values = SCREEN_SCALES.map((scale) => scale.scale).join(', ');
+      return { response: c.json({ error: `The screen_scale must be one of ${values}.` }, 400) };
+    }
+    settings.screenScale = choice.value === DEFAULT_SCREEN_SCALE_CHOICE ? null : choice.scale;
+  }
   if ('os' in body) {
     settings.os = resolveOs(body.os);
     if (!settings.os) {
@@ -125,8 +177,8 @@ routes.post('/', async (c) => {
   const launched = await launchBrowserInstance({
     workspaceId: workspace.id,
     userId: user.id,
-    browserName: generateBrowserName(),
-    browserDescription: '',
+    browserName: settings.name ?? generateBrowserName(),
+    browserDescription: settings.description ?? '',
     config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null
   });
   const refusal = launchRefusal(launched);
@@ -145,6 +197,8 @@ routes.post('/', async (c) => {
     userId: user.id,
     os,
     proxy: settings.proxy ?? null,
+    screenResolution: settings.screenResolution ?? null,
+    screenScale: settings.screenScale ?? null,
     webgl: settings.webgl ?? true,
     app: settings.browser ?? DEFAULT_BROWSER_APP
   });
