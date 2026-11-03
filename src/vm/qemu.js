@@ -2,6 +2,7 @@ import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { run } from './host.js';
+import { DEFAULT_OS, guestOf } from './os.js';
 
 const CDP_PORT = 9222;
 // QEMU's VNC display 0 is on this port, so display N is on 5900 + N.
@@ -19,11 +20,13 @@ const MACHINE_VERSION = 5;
 const ARCHES = {
   // Without the HPET, the RTC ticks, which hwclock in the guest needs to set
   // the clock after a resume.
-  // The guest takes input only from the virtio keyboard and tablet: QEMU
+  // Linux guests take input only from the virtio keyboard and tablet: QEMU
   // would send a VNC viewer's pointer to the PS/2 or VMware mouse instead.
+  // Windows has no virtio keyboard driver, so it keeps the PS/2 one.
   x86_64: {
     binary: 'qemu-system-x86_64',
-    machine: 'q35,hpet=off,vmport=off,i8042=off',
+    machine: 'q35,hpet=off',
+    linuxMachine: 'q35,hpet=off,vmport=off,i8042=off',
     console: 'ttyS0',
     vmgenid: true
   },
@@ -31,6 +34,7 @@ const ARCHES = {
   aarch64: {
     binary: 'qemu-system-aarch64',
     machine: 'virt,gic-version=max',
+    linuxMachine: 'virt,gic-version=max',
     console: 'ttyAMA0',
     vmgenid: false
   }
@@ -55,8 +59,11 @@ const detectAccel = async ({ platform = process.platform, kvmDevice = '/dev/kvm'
 };
 
 // The kernel and initrd sit next to the root disk image, as linux-image.js
-// writes them.
-const imageFiles = (image) => {
+// writes them. Windows boots from its disk, through the BIOS.
+const imageFiles = (image, guest = 'linux') => {
+  if (guest === 'windows') {
+    return { disk: image };
+  }
   const base = image.replace(/\.qcow2$/, '');
   return { disk: image, kernel: `${base}.kernel`, initrd: `${base}.initrd` };
 };
@@ -69,6 +76,41 @@ const vncDisplay = (vncHostPort) => {
   }
   return ['-vnc', `127.0.0.1:${vncHostPort - VNC_PORT}`];
 };
+
+// Hyper-V enlightenments make Windows much faster under KVM. Only those that
+// still let QEMU save the VM: not hv_passthrough, which pins the host's.
+const WINDOWS_KVM_CPU = 'host,hv_relaxed,hv_vapic,hv_spinlocks=0x1fff,hv_vpindex,hv_runtime,hv_synic,hv_stimer,hv_time';
+
+// Windows has no virtio drivers until the install adds them, so its disk and
+// CD drives sit on the AHCI controller of q35, one per port (ide.0 to ide.5),
+// and its NIC is an e1000e. The first CD boots first; Windows Setup boots
+// from the disk on its own once it has written it.
+const windowsDevices = ({ overlay, cdroms, cdpHostPort, vncHostPort }) => [
+  '-drive',
+  `file=${overlay},format=qcow2,if=none,id=root,discard=unmap`,
+  '-device',
+  'ide-hd,drive=root,bus=ide.0,bootindex=1',
+  ...cdroms.flatMap((file, i) => [
+    '-drive',
+    `file=${file},format=raw,if=none,id=cd${i},media=cdrom,readonly=on`,
+    '-device',
+    `ide-cd,drive=cd${i},bus=ide.${i + 1}${i === 0 ? ',bootindex=0' : ''}`
+  ]),
+  '-netdev',
+  `user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${cdpHostPort}-:${CDP_PORT}`,
+  '-device',
+  'e1000e,netdev=net0,romfile=',
+  // virtio-gpu takes any screen size, with the viogpudo driver that the
+  // setup installs; until then, Windows drives it as a plain VGA.
+  '-device',
+  'virtio-vga',
+  // An absolute pointer, so the VNC cursor and the guest's stay together.
+  '-device',
+  'qemu-xhci',
+  '-device',
+  'usb-tablet',
+  ...vncDisplay(vncHostPort)
+];
 
 const linuxDevices = ({ arch, image, overlay, cdpHostPort, vncHostPort }) => {
   const { kernel, initrd } = imageFiles(image);
@@ -108,6 +150,7 @@ const linuxDevices = ({ arch, image, overlay, cdpHostPort, vncHostPort }) => {
 const MAX_SOCKET_PATH = process.platform === 'darwin' ? 103 : 107;
 
 const buildQemuArgs = ({
+  os = DEFAULT_OS,
   name,
   arch,
   accel,
@@ -120,10 +163,17 @@ const buildQemuArgs = ({
   vncHostPort,
   incoming,
   consoleOnStdio = false,
+  // Only for the Windows install, which boots from these.
+  cdroms = [],
+  // Windows Setup reboots several times.
+  reboot = false,
   // QEMU has seccomp only on Linux.
   seccomp = process.platform === 'linux'
 }) => {
-  const { machine, vmgenid } = ARCHES[arch];
+  const windows = guestOf(os) === 'windows';
+  const { vmgenid } = ARCHES[arch];
+  const machine = windows ? ARCHES[arch].machine : ARCHES[arch].linuxMachine;
+  const devices = { arch, image, overlay, cdroms, cdpHostPort, vncHostPort };
   return [
     '-name',
     name,
@@ -135,12 +185,12 @@ const buildQemuArgs = ({
     '-accel',
     accel,
     '-cpu',
-    accel === 'tcg' ? 'max' : 'host',
+    accel === 'tcg' ? 'max' : windows && accel === 'kvm' ? WINDOWS_KVM_CPU : 'host',
     '-m',
     memory,
     '-smp',
     String(cpus),
-    ...linuxDevices({ arch, image, overlay, cdpHostPort, vncHostPort }),
+    ...(windows ? windowsDevices(devices) : linuxDevices(devices)),
     // Chromium and TLS need entropy early in boot.
     '-device',
     'virtio-rng-pci',
@@ -162,7 +212,7 @@ const buildQemuArgs = ({
     '-serial',
     consoleOnStdio ? 'mon:stdio' : `file:${path.join(dir, 'console.log')}`,
     // A guest that panics or reboots ends the VM, instead of looping.
-    '-no-reboot',
+    ...(reboot ? [] : ['-no-reboot']),
     // Seccomp: a compromised QEMU cannot exec, fork, or gain privileges. This
     // also rules out -daemonize, which forks, so the app detaches QEMU instead.
     ...(seccomp ? ['-sandbox', 'on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny'] : []),

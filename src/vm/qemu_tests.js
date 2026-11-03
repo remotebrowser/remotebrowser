@@ -217,3 +217,52 @@ test('buildQemuArgs adds vmgenid where the machine supports it', () => {
   assert.ok(buildQemuArgs({ ...machine, arch: 'x86_64' }).includes('vmgenid'));
   assert.ok(!buildQemuArgs({ ...machine, arch: 'aarch64' }).includes('vmgenid'));
 });
+const windowsArgs = (overrides = {}) =>
+  buildQemuArgs({
+    os: 'windows-11',
+    name: 'chromium-Qabc12345',
+    arch: 'x86_64',
+    accel: 'kvm',
+    image: '/images/windows.qcow2',
+    overlay: '/s/o.qcow2',
+    dir: '/s',
+    memory: '4G',
+    cpus: 2,
+    cdpHostPort: 34567,
+    vncHostPort: 34568,
+    ...overrides
+  });
+
+test('buildQemuArgs boots Windows from an AHCI disk, with no kernel', () => {
+  const args = windowsArgs();
+  assert.ok(!args.includes('-kernel'));
+  assert.ok(!args.includes('-append'));
+  assert.ok(args.includes('ide-hd,drive=root,bus=ide.0,bootindex=1'));
+  assert.ok(args.includes('e1000e,netdev=net0,romfile='));
+  assert.ok(args.includes('-no-reboot'));
+  // Hyper-V enlightenments, but not hv_passthrough, which QEMU cannot save.
+  assert.match(valueAfter(args, '-cpu'), /^host,hv_relaxed,/);
+  assert.doesNotMatch(valueAfter(args, '-cpu'), /passthrough|migratable/);
+  assert.equal(valueAfter(windowsArgs({ accel: 'tcg' }), '-cpu'), 'max');
+});
+
+test('buildQemuArgs serves the Windows display from QEMU, and forwards only CDP', () => {
+  const args = windowsArgs();
+  assert.equal(valueAfter(args, '-vnc'), `127.0.0.1:${34568 - 5900}`);
+  assert.equal(valueAfter(args, '-netdev'), 'user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:34567-:9222');
+  // virtio-gpu takes any screen size; the plain VGA takes only a few.
+  assert.ok(args.includes('virtio-vga'));
+  assert.throws(() => windowsArgs({ vncHostPort: 5899 }), /port 5900 or above/);
+});
+
+test('buildQemuArgs boots the Windows install from its first CD, and lets Setup reboot', () => {
+  const args = windowsArgs({ cdroms: ['/iso/win.iso', '/iso/virtio.iso'], reboot: true });
+  assert.ok(args.includes('ide-cd,drive=cd0,bus=ide.1,bootindex=0'));
+  assert.ok(args.includes('ide-cd,drive=cd1,bus=ide.2'));
+  assert.ok(args.includes('file=/iso/virtio.iso,format=raw,if=none,id=cd1,media=cdrom,readonly=on'));
+  assert.ok(!args.includes('-no-reboot'));
+});
+
+test('imageFiles has only the disk for Windows', () => {
+  assert.deepEqual(imageFiles('/i/windows.qcow2', 'windows'), { disk: '/i/windows.qcow2' });
+});

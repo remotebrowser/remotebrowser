@@ -83,8 +83,29 @@ include('/partials/breadcrumbs', it) %>
         <% } %> Enable WebGL (software renderer)
       </label>
       <div class="field-break"></div>
-      <span id="browserAppLabel" class="field-label">Browser</span>
-      <div class="field-radios" role="radiogroup" aria-labelledby="browserAppLabel">
+      <span id="osLabel" class="field-label">Operating system</span>
+      <div class="field-radios" role="radiogroup" aria-labelledby="osLabel">
+        <% it.oses.forEach(function (os) { %>
+        <label class="radio-label">
+          <% if (os.value === it.os) { %>
+          <input type="radio" name="os" value="<%= os.value %>" data-browser-choice="<%= os.browserChoice %>" checked />
+          <% } else { %>
+          <input type="radio" name="os" value="<%= os.value %>" data-browser-choice="<%= os.browserChoice %>" />
+          <% } %>
+          <span><%= os.label %></span>
+        </label>
+        <% }) %>
+      </div>
+      <% /* Hidden for an OS that has one browser, such as Windows with Edge. The script follows the OS choice. */ %> <%
+      const browserHidden = it.oses.some(function (os) { return os.value === it.os && !os.browserChoice; }) ? ' hidden'
+      : ''; %>
+      <span id="browserAppLabel" class="field-label<%= browserHidden %>" data-browser-field>Browser</span>
+      <div
+        class="field-radios<%= browserHidden %>"
+        role="radiogroup"
+        aria-labelledby="browserAppLabel"
+        data-browser-field
+      >
         <% it.browserApps.forEach(function (app) { %>
         <label class="radio-label">
           <% if (app.value === it.browserApp) { %>
@@ -93,19 +114,6 @@ include('/partials/breadcrumbs', it) %>
           <input type="radio" name="browserApp" value="<%= app.value %>" />
           <% } %>
           <span><%= app.label %></span>
-        </label>
-        <% }) %>
-      </div>
-      <span id="osLabel" class="field-label">Operating system</span>
-      <div class="field-radios" role="radiogroup" aria-labelledby="osLabel">
-        <% it.oses.forEach(function (os) { %>
-        <label class="radio-label">
-          <% if (os.value === it.os) { %>
-          <input type="radio" name="os" value="<%= os.value %>" checked />
-          <% } else { %>
-          <input type="radio" name="os" value="<%= os.value %>" />
-          <% } %>
-          <span><%= os.label %></span>
         </label>
         <% }) %>
       </div>
@@ -124,6 +132,22 @@ include('/partials/breadcrumbs', it) %>
     screenScaleValue.value = `${screenScale.value}%`;
     screenScale.setAttribute('aria-valuetext', `${screenScale.value}%`);
   });
+</script>
+<script nonce="<%= it.scriptNonce %>">
+  // An OS with one browser, such as Windows with Edge, offers no choice, so
+  // the browser field hides while that OS is chosen.
+  const osInputs = document.querySelectorAll('input[name="os"]');
+  const syncBrowserField = () => {
+    const chosen = document.querySelector('input[name="os"]:checked');
+    const hidden = chosen?.dataset.browserChoice === 'false';
+    for (const field of document.querySelectorAll('[data-browser-field]')) {
+      field.classList.toggle('hidden', hidden);
+    }
+  };
+  syncBrowserField();
+  for (const input of osInputs) {
+    input.addEventListener('change', syncBrowserField);
+  }
 </script>
 <script nonce="<%= it.scriptNonce %>">
   // The server ignores the URL unless the box is checked. The input starts

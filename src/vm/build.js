@@ -1,26 +1,30 @@
 import { consola } from 'consola/basic';
 import { vmConfig } from './config.js';
 import { pruneImages } from './image.js';
-import { osLayout } from './layout.js';
+import { osLayout, vmLayout } from './layout.js';
 import { linuxImage } from './linux-image.js';
 import { OSES, isOs } from './os.js';
 import { hostArch } from './qemu.js';
 import { snapshotStatus, takeSnapshot } from './snapshot.js';
 import { LOG_ATTRIBUTES, qemu, step } from './step.js';
+import { windowsImage } from './windows-image.js';
 
 // How each OS's image is made. `missingSource` says why the image cannot be
-// built on this host, or null. `prepareSource` downloads what it can.
+// built on this host, or null. `prepareSource` downloads what it can. Each
+// call also gets the iso dir (layout.js), which only Windows reads.
 const BUILDERS = {
   'debian-13': linuxImage('debian-13'),
   'ubuntu-26.04': linuxImage('ubuntu-26.04'),
-  'fedora-44': linuxImage('fedora-44')
+  'fedora-44': linuxImage('fedora-44'),
+  'windows-11': windowsImage()
 };
 
 // The OSes whose image can be built here.
-const buildableOses = async ({ arch = hostArch() } = {}) => {
+const buildableOses = async ({ arch = hostArch(), dataDir = vmConfig.vmDataDir } = {}) => {
+  const { iso: isoDir } = vmLayout(dataDir);
   const oses = [];
   for (const os of Object.keys(OSES)) {
-    if (!(await BUILDERS[os].missingSource({ arch }))) {
+    if (!(await BUILDERS[os].missingSource({ arch, isoDir }))) {
       oses.push(os);
     }
   }
@@ -46,20 +50,21 @@ const buildVm = async ({
   const { label } = OSES[os];
   const builder = BUILDERS[os];
   const { images, snapshot } = osLayout(dataDir, os);
-  const missing = await builder.missingSource({ arch });
+  const { iso: isoDir } = vmLayout(dataDir);
+  const missing = await builder.missingSource({ arch, isoDir });
   if (missing) {
     throw new Error(missing);
   }
-  await builder.prepareSource();
+  await builder.prepareSource({ isoDir });
   const imageCheck = await step(`Checking the ${label} image in ${images}`, () =>
-    builder.imageStatus({ imagesDir: images, arch })
+    builder.imageStatus({ imagesDir: images, arch, isoDir })
   );
   const { image } = imageCheck;
   if (imageCheck.current) {
     consola.info(`QEMU ${label} image ${image} is up to date`, LOG_ATTRIBUTES);
   } else {
     consola.info(qemu(imageCheck.reason), LOG_ATTRIBUTES);
-    await step(`Building the ${label} image`, () => builder.buildImage({ image, arch, memory, cpus }));
+    await step(`Building the ${label} image`, () => builder.buildImage({ image, arch, memory, cpus, isoDir }));
   }
 
   const machine = { snapshotDir: snapshot, image, os, arch, memory, cpus };

@@ -44,7 +44,7 @@ To choose how the browser is set up, send a JSON body. Every setting is optional
 | ------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
 | `name`              | Text, 1 to 80 characters                                                        | A random name, like `calm-otter` |
 | `description`       | Text, up to 140 characters                                                      | Empty                            |
-| `os`                | `debian-13`, `ubuntu-26.04`, `fedora-44`                                        | `debian-13`                      |
+| `os`                | `debian-13`, `ubuntu-26.04`, `fedora-44`, `windows-11` (see [VM](vm.md))        | `debian-13`                      |
 | `browser`           | `chromium`, `chrome` (Google Chrome)                                            | `chromium`                       |
 | `screen_resolution` | `full-hd` (1920×1080), `wuxga` (1920×1200), `qhd` (2560×1440), `4k` (3840×2160) | `full-hd`                        |
 | `screen_scale`      | `100`, `125`, `150`, `175`, `200` (percent, a number)                           | `150`                            |
@@ -68,8 +68,8 @@ curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/j
 
 Notes on some settings:
 
-- **`os`**: Case does not matter, and the dash may be left out. `ubuntu` is short for `ubuntu-26.04`, and `fedora` for `fedora-44`.
-- **`browser`**: Case does not matter. `google-chrome` is short for `chrome`.
+- **`os`**: Case does not matter, and the dash may be left out. `ubuntu`, `fedora`, and `windows` are short for `ubuntu-26.04`, `fedora-44`, and `windows-11`.
+- **`browser`**: Case does not matter. `google-chrome` is short for `chrome`. A Windows browser runs Microsoft Edge either way.
 - **`webgl`**: The VM has no GPU, so the browser draws WebGL on the CPU, with a software renderer (Mesa's llvmpipe). This is much slower than a real GPU. Set it to `false` if you do not need WebGL.
 - **`proxy`**: The browser's traffic goes through this proxy. The URL starts with `http://`, `socks4://`, or `socks5://`; see [Proxy](proxy.md) for what it may hold. The proxy is set before the browser starts, so even its first request takes that route. It is the only setting you can [change later](#configure-a-browser).
 
@@ -95,15 +95,21 @@ _Example_: `curl -X DELETE -H "Authorization: Bearer $API_KEY" http://localhost:
 
 ## Query a browser
 
-`GET /api/v1/browsers/{browser_id}` returns the browser's ID, status, and description. If the browser does not exist, the server returns HTTP 404.
+`GET /api/v1/browsers/{browser_id}` returns the browser's ID, status, description, OS, and creation time. If the browser does not exist, the server returns HTTP 404.
 
 _Example_: `curl -H "Authorization: Bearer $API_KEY" http://localhost:3000/api/v1/browsers/B5xqk2m` returns:
 
 ```json
-{ "browser_id": "B5xqk2m", "status": "running", "description": "For QA testing" }
+{
+  "browser_id": "B5xqk2m",
+  "status": "running",
+  "description": "For QA testing",
+  "os": "debian-13",
+  "creation_timestamp": 1793750400000
+}
 ```
 
-The status is one of `starting`, `running`, `suspended`, `error`, or `terminated`. The description is the one given at launch, or an empty string.
+The status is one of `starting`, `running`, `suspended`, `error`, or `terminated`. The description is the one given at launch, or an empty string. The OS is the full name of the one it was launched on, such as `debian-13` or `windows-11`, even when the launch used a short name. The creation timestamp is the launch time, in milliseconds since the Unix epoch. It is `null` for a browser launched before the server kept it.
 
 ## Suspend a browser
 

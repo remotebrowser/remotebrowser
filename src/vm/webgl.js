@@ -4,19 +4,22 @@ import { writeGuestFile } from './guest-file.js';
 // the CPU, which its GPU blocklist refuses. To enable WebGL, the host writes
 // the flag that ignores the blocklist into this guest file through the guest
 // agent, and chromium.service in vm/linux/files reads it when it starts.
+// Windows has no GPU either, and browser.ps1 in vm/windows-11 passes the
+// same flag to Edge when this file is there.
 const GUEST_WEBGL_FILE = '/etc/remotebrowser/webgl.env';
+const WINDOWS_WEBGL_FILE = 'C:\\ProgramData\\remotebrowser\\webgl';
 const WEBGL_FLAGS = 'WEBGL_FLAGS=--ignore-gpu-blocklist';
 
 /**
  * Enables WebGL in the guest. It works only before the browser starts.
- * @param {{dir: string, connectQmp: Function, attempts?: number}} params
+ * @param {{dir: string, connectQmp: Function, guest?: string, attempts?: number}} params
  */
-const writeGuestWebgl = async ({ dir, connectQmp, attempts = 20 }) => {
+const writeGuestWebgl = async ({ dir, connectQmp, guest = 'linux', attempts = 20 }) => {
   try {
     await writeGuestFile({
       dir,
-      file: GUEST_WEBGL_FILE,
-      content: Buffer.from(`${WEBGL_FLAGS}\n`),
+      file: guest === 'windows' ? WINDOWS_WEBGL_FILE : GUEST_WEBGL_FILE,
+      content: Buffer.from(guest === 'windows' ? 'on\n' : `${WEBGL_FLAGS}\n`),
       connectQmp,
       attempts
     });
@@ -27,4 +30,4 @@ const writeGuestWebgl = async ({ dir, connectQmp, attempts = 20 }) => {
   }
 };
 
-export { GUEST_WEBGL_FILE, writeGuestWebgl };
+export { GUEST_WEBGL_FILE, WINDOWS_WEBGL_FILE, writeGuestWebgl };

@@ -8,6 +8,7 @@ import { setupQemu } from './vm/setup.js';
 import { vms } from './vm/index.js';
 import { mountCdpRelay } from './cdp.js';
 import { stopScreenshots } from './screenshots.js';
+import { stopScreens } from './screens.js';
 import { stopScreencasts } from './screencast.js';
 import { browserMonitors } from './browser.js';
 import { canGenerateCode, startHarness, stopHarness, warmUpChecker } from './llm/harness.js';
@@ -89,6 +90,7 @@ const shutdown = async (signal) => {
   consola.info('SERVER shutting down on', signal, { 'event.domain': 'server' });
   server.close();
   await drainScheduler().catch(() => {});
+  stopScreens();
   // Open CDP WebSocket sessions would outlive server.close().
   await Promise.allSettled([
     cdpRelay.close(),

@@ -46,7 +46,9 @@ const fakeVms = ({
     canLaunchBrowser,
     launchableOses,
     launchBrowser: async (options) => {
-      launches.push(options);
+      // The callback is a fresh function each time, so tests compare the rest.
+      const { onVmStarted, ...settings } = options;
+      launches.push(settings);
       return launchBrowser(options);
     },
     browserIsRunning: async () => true,
@@ -168,6 +170,72 @@ test('startBrowser navigates the new browser to the initial URL', async () => {
     INITIAL_URLS.includes(navigateCalls[0].url),
     `expected one of ${INITIAL_URLS.join(', ')}, got ${navigateCalls[0].url}`
   );
+});
+
+// The page shows the VM screen while the browser starts, so it needs the id
+// before the launch is done.
+test('startBrowser records the id as soon as the VM runs, while the browser still starts', async () => {
+  const workspaceId = await makeUser();
+  const browserInstanceId = await makeLaunchedInstance({ workspaceId });
+  let whileStarting = null;
+  fakeVms({
+    launchBrowser: async ({ onVmStarted }) => {
+      onVmStarted({ browserId: 'foobar' });
+      whileStarting = await settle(async () => {
+        const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+        return fetched.data.internalBrowserId ? fetched.data : null;
+      });
+      return { browserId: 'foobar' };
+    }
+  });
+  await startBrowser({ workspaceId, browserInstanceId, userId });
+  assert.equal(whileStarting?.internalBrowserId, 'foobar');
+  assert.equal(whileStarting?.status, 'starting');
+  const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+  assert.equal(fetched.data.status, 'running');
+});
+
+test('startBrowser marks the browser terminated when its VM ran but the launch failed', async () => {
+  const workspaceId = await makeUser();
+  const browserInstanceId = await makeLaunchedInstance({ workspaceId });
+  fakeVms({
+    launchBrowser: async ({ onVmStarted }) => {
+      onVmStarted({ browserId: 'foobar' });
+      throw new Error('the browser never answered');
+    }
+  });
+  const errors = captureErrors();
+  try {
+    await startBrowser({ workspaceId, browserInstanceId, userId });
+  } finally {
+    errors.restore();
+  }
+  const fetched = await getBrowserInstance({ workspaceId, browserInstanceId });
+  assert.equal(fetched.data.internalBrowserId, 'foobar');
+  assert.equal(fetched.data.status, 'terminated');
+});
+
+// Windows runs Edge, so its CDP is navigated and monitored too.
+test('startBrowser navigates and monitors a Windows VM, as a Linux one', async () => {
+  const workspaceId = await makeUser();
+  const browserInstanceId = await makeLaunchedInstance({ workspaceId });
+  const calls = [];
+  await startBrowser({
+    workspaceId,
+    browserInstanceId,
+    userId,
+    os: 'windows-11',
+    navigate: async () => {
+      calls.push('navigate');
+      return { data: true };
+    },
+    startMonitor: async () => {
+      calls.push('startMonitor');
+      return { data: true };
+    }
+  });
+  assert.deepEqual(calls.sort(), ['navigate', 'startMonitor']);
+  assert.equal((await getBrowserInstance({ workspaceId, browserInstanceId })).data.status, 'running');
 });
 
 // Failed navigation is best-effort; must not stop the browser from being recorded.
@@ -821,23 +889,50 @@ test('POST /browsers/launch refuses a bad proxy URL, keeps what was typed, and c
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
-test('GET /browsers/launch offers the OSes that have a snapshot, last, with Debian 13 chosen', async () => {
+test('GET /browsers/launch offers the OSes that have a snapshot, before the browsers, with Debian 13 chosen', async () => {
   fakeVms({ launchableOses: async () => ['debian-13', 'ubuntu-26.04', 'fedora-44'] });
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
   const body = await res.text();
   assert.match(body, /<span id="osLabel" class="field-label">Operating system<\/span>/);
   const options = [
-    ...body.matchAll(/<input type="radio" name="os" value="([^"]+)"( checked)? \/>\s*<span>([^<]*)<\/span>/g)
+    ...body.matchAll(
+      /<input type="radio" name="os" value="([^"]+)" data-browser-choice="(true|false)"( checked)? \/>\s*<span>([^<]*)<\/span>/g
+    )
   ].map((m) => m.slice(1));
   assert.deepEqual(options, [
-    ['debian-13', ' checked', 'Debian 13'],
-    ['ubuntu-26.04', undefined, 'Ubuntu 26.04'],
-    ['fedora-44', undefined, 'Fedora 44']
+    ['debian-13', 'true', ' checked', 'Debian 13'],
+    ['ubuntu-26.04', 'true', undefined, 'Ubuntu 26.04'],
+    ['fedora-44', 'true', undefined, 'Fedora 44']
   ]);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="browserApp"') < at('name="os"'));
-  assert.ok(at('name="os"') < at('>Launch</button>'));
+  assert.ok(at('name="enableWebgl"') < at('name="os"'));
+  assert.ok(at('name="os"') < at('name="browserApp"'));
+  assert.ok(at('name="browserApp"') < at('>Launch</button>'));
+});
+
+// Windows always runs Edge, so the browser field hides while it is chosen.
+test('GET /browsers/launch marks Windows as having no browser choice, and the script hides the field for it', async () => {
+  fakeVms({ launchableOses: async () => ['debian-13', 'windows-11'] });
+  await makeUser();
+  const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
+  const body = await res.text();
+  assert.match(body, /name="os" value="windows-11" data-browser-choice="false"/);
+  // Debian 13 is chosen, so the field shows at first.
+  assert.match(body, /<span id="browserAppLabel" class="field-label" data-browser-field>Browser<\/span>/);
+  assert.match(body, /class="field-radios"\s+role="radiogroup"\s+aria-labelledby="browserAppLabel"/);
+  assert.match(body, /field\.classList\.toggle\('hidden', hidden\)/);
+});
+
+test('POST /browsers/launch keeps the browser field hidden when it shows the form again for Windows', async () => {
+  const workspaceId = await makeUser();
+  fakeVms({ launchableOses: async () => ['debian-13', 'windows-11'] });
+  const res = await postLaunch(workspaceId, { os: 'windows-11', screenScale: '110' });
+  assert.equal(res.status, 400);
+  const body = await res.text();
+  assert.match(body, /value="windows-11" data-browser-choice="false" checked/);
+  assert.match(body, /<span id="browserAppLabel" class="field-label hidden" data-browser-field>Browser<\/span>/);
+  assert.match(body, /class="field-radios hidden"\s+role="radiogroup"\s+aria-labelledby="browserAppLabel"/);
 });
 
 test('GET /browsers/launch chooses the only OS with a snapshot', async () => {
@@ -845,7 +940,7 @@ test('GET /browsers/launch chooses the only OS with a snapshot', async () => {
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
   const body = await res.text();
-  assert.match(body, /value="ubuntu-26.04" checked/);
+  assert.match(body, /value="ubuntu-26.04" data-browser-choice="true" checked/);
   assert.doesNotMatch(body, /value="debian-13"/);
 });
 
@@ -867,12 +962,12 @@ test('POST /browsers/launch starts the chosen OS, with its settings', async () =
   ]);
 });
 
-test('GET /browsers/launch offers the browsers after the WebGL box, with Chromium chosen', async () => {
+test('GET /browsers/launch offers the browsers after the OSes, with Chromium chosen', async () => {
   fakeVms();
   await makeUser();
   const res = await setupApp().request('/browsers/launch', { headers: { cookie: `session=${makeSessionCookie()}` } });
   const body = await res.text();
-  assert.match(body, /<span id="browserAppLabel" class="field-label">Browser<\/span>/);
+  assert.match(body, /<span id="browserAppLabel" class="field-label" data-browser-field>Browser<\/span>/);
   const options = [
     ...body.matchAll(/<input type="radio" name="browserApp" value="([^"]+)"( checked)? \/>\s*<span>([^<]*)<\/span>/g)
   ].map((m) => m.slice(1));
@@ -881,8 +976,7 @@ test('GET /browsers/launch offers the browsers after the WebGL box, with Chromiu
     ['chrome', undefined, 'Google Chrome']
   ]);
   const at = (text) => body.indexOf(text);
-  assert.ok(at('name="enableWebgl"') < at('name="browserApp"'));
-  assert.ok(at('name="browserApp"') < at('name="os"'));
+  assert.ok(at('name="os"') < at('name="browserApp"'));
 });
 
 test('POST /browsers/launch starts Google Chrome when it is chosen', async () => {

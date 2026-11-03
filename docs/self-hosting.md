@@ -33,9 +33,9 @@ The table below lists the environment variables that the app uses in production:
 | `TRUSTED_PROXY_HOPS`          | No       | Reverse proxies in front of the app (default: `0`)          |
 | `VM_CPUS`                     | No       | Virtual CPUs per browser VM (default: `2`)                  |
 | `VM_DATA_DIR`                 | No       | VM images, snapshots, VMs (default: `.data/vm`)             |
-| `VM_MEMORY`                   | No       | Memory per browser VM (default: `2G`)                       |
+| `VM_MEMORY`                   | No       | Memory per browser VM (default: `4G`)                       |
 
-Each browser runs Debian 13, Ubuntu 26.04, or Fedora 44, chosen when it is launched.
+Each browser runs Debian 13, Ubuntu 26.04, or Fedora 44, chosen when it is launched, or Windows 11 on a host with its ISO. See [VM](vm.md).
 
 See [Controls](controls.md), [Sign-in](sign-in.md), [Sandboxing](sandboxing.md), [Database](database.md), [Instrumentation](instrumentation.md), and [Harness](harness.md) for details.
 
@@ -55,8 +55,12 @@ docker run --rm -it \
   ghcr.io/remotebrowser/remotebrowser vm/build-image.sh
 ```
 
-`vm/build-image.sh` builds the image of each OS, with its own script, such as `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`. To build only one OS, run its own script instead.
+`vm/build-image.sh` builds the image of each OS, with its own script, such as `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`, and `vm/build-windows-11.sh` when the Windows ISO is there (see [VM](vm.md#windows)). To build only one OS, run its own script instead.
 
 Then start the server without the socket. Give it the same KVM access, user, and VM directory as the build, so it finds the image and the snapshot.
 
 Run the build again after you pull a newer `ghcr.io/remotebrowser/remotebrowser`, in case its VM image changed. Without the socket, the server cannot build a new image by itself.
+
+### Windows 11
+
+Windows 11 is offered only when its install ISO is in place, since Remote Browser cannot download it. Put the ISO at `iso/windows-11.iso` in the VM directory, so with the command above, at `.data/vm/iso/windows-11.iso`, or at `$VM_DATA_DIR/iso/windows-11.iso`. Then run the build again. The Windows build needs only KVM, not the Docker socket. See [VM](vm.md#windows) for what else it needs, and for how to get the ISO.

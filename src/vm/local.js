@@ -6,10 +6,11 @@ import { vmConfig } from './config.js';
 import * as host from './host.js';
 import { compressSuspendedState, hasSuspendedState, loadableSuspendedState, removeSuspendedState } from './compress.js';
 import { checkImage } from './image.js';
+import { startGuestBrowser } from './browser-app.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { vmLayout } from './layout.js';
 import { ARCHES, MAX_SOCKET_PATH, buildQemuArgs } from './qemu.js';
-import { machineOs } from './os.js';
+import { guestOf, machineOs } from './os.js';
 import { openQmp } from './qmp.js';
 import { suspendVm } from './save.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
@@ -92,7 +93,10 @@ const runForeground = async ({ dir, machine, cdpPort, vncPort, incoming, afterCo
       qmp.close();
     }
     await afterContinue();
-    await setGuestClock({ dir, name: path.basename(dir), connectQmp: openQmp });
+    const guest = guestOf(machineOs(machine));
+    await setGuestClock({ dir, name: path.basename(dir), connectQmp: openQmp, guest });
+    // On Linux the clock starts the browser; Windows waits for the host.
+    await startGuestBrowser({ dir, connectQmp: openQmp, guest });
   })().catch((error) =>
     consola.error(`QEMU unable to continue the VM: ${error instanceof Error ? error.message : error}`, LOG_ATTRIBUTES)
   );
@@ -154,7 +158,9 @@ const startFromSnapshot = async ({ snapshotDir, runDir, cdpPort = 9222, vncPort 
     );
   }
   consola.info(`QEMU starting ${machine.image} from the snapshot in ${snapshotDir}`, LOG_ATTRIBUTES);
-  consola.info("QEMU the console continues the snapshot's root shell; press Enter for a prompt.", LOG_ATTRIBUTES);
+  if (guestOf(machineOs(machine)) === 'linux') {
+    consola.info("QEMU the console continues the snapshot's root shell; press Enter for a prompt.", LOG_ATTRIBUTES);
+  }
   return runForeground({
     dir,
     machine,

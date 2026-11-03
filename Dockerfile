@@ -3,9 +3,10 @@ FROM node:24-trixie-slim
 # QEMU runs the browser VMs; only the system emulator for this architecture.
 # zstd compresses the state of suspended VMs. The Docker CLI builds the VM
 # image, through the host's Docker socket, and fetches registry tokens over TLS.
+# xorriso makes the unattend CD for a Windows guest.
 RUN apt-get update \
     && case "$(dpkg --print-architecture)" in arm64) qemu=qemu-system-arm ;; *) qemu=qemu-system-x86 ;; esac \
-    && apt-get install -y --no-install-recommends "$qemu" qemu-utils zstd docker-cli docker-buildx ca-certificates \
+    && apt-get install -y --no-install-recommends "$qemu" qemu-utils zstd xorriso docker-cli docker-buildx ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -1,12 +1,14 @@
 import { BlockList } from 'node:net';
 import { writeGuestFile } from './guest-file.js';
 
-// Each VM's tinyproxy can forward the browser's traffic to an upstream proxy,
-// e.g. for a fixed egress IP address. The host writes the proxy URL, or
-// "direct", into this guest file through the guest agent, and
-// tinyproxy-upstream.path in vm/linux/files applies it. See tinyproxy-config
-// there for how the guest reads it.
+// Each VM's local proxy can forward the browser's traffic to an upstream
+// proxy, e.g. for a fixed egress IP address. The host writes the proxy URL, or
+// "direct", into this guest file through the guest agent. On Linux,
+// tinyproxy-upstream.path in vm/linux/files applies it, and tinyproxy-config
+// there reads it. On Windows, proxy.ps1 in vm/windows-11 writes it into the
+// config of 3proxy, which the image installs (windows-image.js).
 const GUEST_PROXY_FILE = '/etc/remotebrowser/proxy/upstream';
+const WINDOWS_PROXY_FILE = 'C:\\ProgramData\\remotebrowser\\proxy';
 const DIRECT = 'direct';
 
 const MAX_PROXY_URL_LENGTH = 512;
@@ -129,16 +131,18 @@ const normalizeProxyUrl = (input) => {
 const maskProxyUrl = (proxy) => (proxy ? proxy.replace(/^([a-z0-9]+:\/\/[^:@/]*):[^@]+@/, '$1:****@') : null);
 
 /**
- * Writes the upstream proxy into the guest, which restarts tinyproxy with it.
- * That also ends the browser's open connections, so none keep the old route.
- * @param {{dir: string, proxy: string | null, connectQmp: Function, attempts?: number}} params
+ * Writes the upstream proxy into the guest. Linux restarts tinyproxy with it,
+ * which also ends the browser's open connections, so none keep the old route.
+ * Windows restarts 3proxy, which does the same.
+ * @param {{dir: string, proxy: string | null, connectQmp: Function, guest?: string, attempts?: number}} params
  */
-const writeGuestProxy = async ({ dir, proxy, connectQmp, attempts = 20 }) => {
+const writeGuestProxy = async ({ dir, proxy, connectQmp, guest = 'linux', attempts = 20 }) => {
   // The guest rejects a file without its closing newline, so a partial
   // write leaves the browser offline, not going out directly.
   const content = Buffer.from(`${normalizeProxyUrl(proxy) ?? DIRECT}\n`);
+  const file = guest === 'windows' ? WINDOWS_PROXY_FILE : GUEST_PROXY_FILE;
   try {
-    await writeGuestFile({ dir, file: GUEST_PROXY_FILE, content, connectQmp, attempts });
+    await writeGuestFile({ dir, file, content, connectQmp, attempts });
   } catch (error) {
     throw new Error(`unable to set the upstream proxy: ${error instanceof Error ? error.message : String(error)}`, {
       cause: error
@@ -146,4 +150,4 @@ const writeGuestProxy = async ({ dir, proxy, connectQmp, attempts = 20 }) => {
   }
 };
 
-export { GUEST_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy };
+export { GUEST_PROXY_FILE, WINDOWS_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy };

@@ -4,20 +4,22 @@
 // only when its result is missing or out of date, so running this again is
 // cheap. vm/build-<os>.sh runs this, and vm/build-image.sh runs those.
 //
-//   vm/scripts/build.js <os>     debian-13, ubuntu-26.04, or fedora-44; see src/vm/os.js
+//   vm/scripts/build.js <os>     debian-13, ubuntu-26.04, fedora-44, or windows-11;
+//                                see src/vm/os.js
 //
 // It reads the same settings as the app:
 //
 //   VM_DATA_DIR   where the image goes, in images/<os>/, and the snapshot,
 //                 in snapshots/<os>/ (default .data/vm). Delete a build in
 //                 images/<os>/ to build it again.
-//   VM_MEMORY     the VM's memory (default 2G);
+//   VM_MEMORY     the VM's memory (default 4G);
 //                 the snapshot holds it, so it takes about this much disk
 //                 space
 //   VM_CPUS       the VM's CPUs (default 2)
 //
 // The snapshot is saved again when the image changes, or when VM_MEMORY or
-// VM_CPUS change. Building the image needs Docker; the snapshot needs QEMU.
+// VM_CPUS change. Building a Linux image needs Docker, and Windows its ISO
+// (docs/vm.md); the snapshot needs QEMU.
 import { consola } from 'consola/basic';
 import { LOG_ATTRIBUTES, qemu } from '../../src/vm/step.js';
 import { buildVm } from '../../src/vm/build.js';

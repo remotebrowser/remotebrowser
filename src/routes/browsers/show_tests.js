@@ -9,13 +9,18 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 // Stub-recognised ids for exercising the page-count line's edge cases.
 const ONE_PAGE_BROWSER_ID = 'one-page-browser';
 const CDP_ERROR_BROWSER_ID = 'cdp-error-browser';
+const NO_PAGE_BROWSER_ID = 'no-page-browser';
 
 // Stands in for the browser's CDP endpoint.
 const cdpStub = await new Promise((resolve) => {
   const wss = new WebSocketServer({ port: 0, perMessageDeflate: false, maxPayload: 0 });
   wss.on('connection', (socket, req) => {
     const shouldError = req.url.includes(`/${CDP_ERROR_BROWSER_ID}/`);
-    const pageCount = req.url.includes(`/${ONE_PAGE_BROWSER_ID}/`) ? 1 : 2;
+    const pageCount = req.url.includes(`/${NO_PAGE_BROWSER_ID}/`)
+      ? 0
+      : req.url.includes(`/${ONE_PAGE_BROWSER_ID}/`)
+        ? 1
+        : 2;
     socket.on('message', (raw) => {
       const { id, method } = JSON.parse(raw.toString());
       if (method !== 'Target.getTargets') {
@@ -116,10 +121,11 @@ const makeSharedWorkspace = async ({ workspaceId, role = 'User' } = {}) => {
 };
 
 // Seeds a browser in the given status, with a handle/internal id recorded
-// (except when 'starting', which mirrors a browser that never finished provisioning).
+// (except when 'starting', which mirrors a browser whose VM has not started
+// yet, unless `vmStarted` says it has).
 const makeBrowser = async (
   workspaceId,
-  { browserName = 'calm-otter', status = 'running', internalBrowserId = 'br-happy' } = {}
+  { browserName = 'calm-otter', status = 'running', internalBrowserId = 'br-happy', vmStarted = false } = {}
 ) => {
   const launched = await launchBrowserInstance({
     workspaceId,
@@ -128,8 +134,10 @@ const makeBrowser = async (
     browserDescription: ''
   });
   const browserInstanceId = launched.data.browserInstanceId;
-  if (status !== 'starting') {
+  if (status !== 'starting' || vmStarted) {
     await recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId, userId });
+  }
+  if (status !== 'starting') {
     await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: status });
   }
   return launched.data.publicId;
@@ -386,7 +394,7 @@ test('GET /browsers/:browserId renders a preview for a browser with exactly one 
   assert.doesNotMatch(body, /pages\/page1\/view/);
 });
 
-test('GET /browsers/:browserId omits previews when listing pages over CDP fails', async () => {
+test('GET /browsers/:browserId keeps the VM screen when listing pages over CDP fails', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: CDP_ERROR_BROWSER_ID });
 
@@ -395,15 +403,25 @@ test('GET /browsers/:browserId omits previews when listing pages over CDP fails'
   const res = await app.request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.doesNotMatch(body, /browser-screenshot/);
-  // Right after it starts running, a browser may not answer yet, so the
-  // starting box stays until there is a page to show.
-  assert.match(
-    body,
-    /<div id="browser-preview" class="browser-preview">\s*<div class="browser-preview-placeholder browser-preview-starting"/
-  );
+  // Right after it starts running, a browser may not answer yet, so its VM
+  // screen stays until there is a page to show.
+  assert.match(body, new RegExp(`id="screenshot-screen"\\s+src="/browsers/${browserPublicId}/screen\\?t=\\d+"`));
+  assert.doesNotMatch(body, /pages\/page0/);
+  assert.doesNotMatch(body, /class="[^"]*browser-preview-starting/);
   // Rest of page still renders; a CDP listing hiccup shouldn't break UI.
   assert.match(body, /id="browser-connection-info"/);
+});
+
+test('GET /browsers/:browserId/status keeps the VM screen until CDP lists a page', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: NO_PAGE_BROWSER_ID });
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}/status`, {
+    headers: { 'cookie': `session=${cookie}`, 'HX-Request': 'true' }
+  });
+  const body = await res.text();
+  assert.match(body, new RegExp(`id="screenshot-screen"\\s+src="/browsers/${browserPublicId}/screen\\?t=\\d+"`));
+  assert.doesNotMatch(body, /screencast-/);
 });
 
 // Handle presence isn't enough (never cleared); status gates connection info.
@@ -496,12 +514,14 @@ test('GET /browsers/:browserId renders for the active shared workspace with unpr
   assert.doesNotMatch(body, /\/cdp\//);
   assert.doesNotMatch(body, /browser-starting-notice/);
   assert.doesNotMatch(body, /connectOverCDP/);
-  assert.doesNotMatch(body, /browser-screenshot/, 'no screenshot until the browser is actually running');
-  // Placeholder holds right column width so layout doesn't jump later.
+  // Black at launch, then the VM screen once it can be read, so the layout
+  // does not jump later.
   assert.match(body, /<main>/);
   assert.match(
     body,
-    /<div id="browser-preview" class="browser-preview">\s*<div class="browser-preview-placeholder browser-preview-starting"/
+    new RegExp(
+      `<div id="browser-preview" class="browser-preview">\\s*<img\\s+class="browser-screenshot"\\s+id="screenshot-screen"\\s+src="/browsers/${browserPublicId}/screen\\?t=\\d+"`
+    )
   );
   assert.doesNotMatch(body, /id="browser-actions"[^>]*>\s*<a/, 'no controls while starting');
 });
@@ -609,4 +629,29 @@ test('GET /browsers/:browserId/status keeps the previews empty once the browser 
   assert.match(body, /<p id="browser-status"><strong>Status:<\/strong> terminated<\/p>/);
   assert.match(body, /<div id="browser-preview" class="browser-preview">\s*<\/div>/);
   assert.doesNotMatch(body, /hx-get/);
+});
+
+// Windows runs Edge, so it shows its pages over CDP, as Linux does.
+test('GET /browsers/:browserId shows the pages of a running Windows browser, not its VM screen', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-windows' });
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  assert.match(body, new RegExp(`id="screenshot-page0"\\s+src="/browsers/${browserPublicId}/pages/page0/view`));
+  assert.doesNotMatch(body, /id="screenshot-screen"/);
+  assert.match(body, /id="playground-panel"/);
+});
+
+// Linux has no CDP yet while its browser starts, but its VM already runs.
+test('GET /browsers/:browserId shows the VM screen while the browser starts, with the starting panel', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { status: 'starting', vmStarted: true });
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  assert.match(body, new RegExp(`id="screenshot-screen"\\s+src="/browsers/${browserPublicId}/screen\\?t=\\d+"`));
+  assert.match(body, /This browser is starting\./);
+  assert.doesNotMatch(body, /This VM has no browser yet/);
+  assert.doesNotMatch(body, /class="[^"]*browser-preview-starting/);
 });

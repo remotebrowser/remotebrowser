@@ -517,6 +517,17 @@ test('setProxy writes the upstream proxy into a running VM, and clearProxy goes 
   ]);
 });
 
+test('setProxy writes the proxy of a running Windows VM, with a password, as for Linux', async () => {
+  const { vm, commands, dir } = runningVm();
+  writeFileSync(path.join(dir, 'machine.json'), JSON.stringify({ os: 'windows-11' }));
+  await vm.setProxy('Qabc12345', 'socks5://u:p@proxy.example.com:1080');
+  await vm.clearProxy('Qabc12345');
+  assert.deepEqual(guestWrites(commands), [
+    ['C:\\ProgramData\\remotebrowser\\proxy', 'socks5://u:p@proxy.example.com:1080\n'],
+    ['C:\\ProgramData\\remotebrowser\\proxy', 'direct\n']
+  ]);
+});
+
 test('setProxy and clearProxy refuse a VM that is not running, a bad id, and a bad or empty URL', async () => {
   const dataDir = tempDataDir();
   fakeVmDir(dataDir, 'Qabc12345');
@@ -655,7 +666,7 @@ const runningVm = ({ pad = (width) => width, ...overrides } = {}) => {
     },
     ...overrides
   });
-  return { vm, commands: qmp.commands };
+  return { vm, commands: qmp.commands, dir };
 };
 
 test('setScreenResolution sets the screen of a running browser, and waits until it shows', async () => {
@@ -704,6 +715,13 @@ test('setScreenScale sets the scale of a running browser', async () => {
     ['/etc/remotebrowser/screen-scale', '200\n'],
     ['/etc/remotebrowser/screen-scale', 'default\n']
   ]);
+});
+
+test('setScreenScale sets the scale of a running Windows browser', async () => {
+  const { vm, commands, dir } = runningVm();
+  writeFileSync(path.join(dir, 'machine.json'), JSON.stringify({ os: 'windows-11' }));
+  await vm.setScreenScale('Qabc12345', 225);
+  assert.deepEqual(guestWrites(commands), [['C:\\ProgramData\\remotebrowser\\screen-scale', '225\n']]);
 });
 
 test('setScreenScale refuses a VM that is not running, a bad id, and a bad scale', async () => {
@@ -970,4 +988,103 @@ test('setScreenResolution waits for the screen that VNC shows padded to 16 pixel
   const { vm, commands } = runningVm({ pad: (width) => Math.ceil(width / 16) * 16 });
   await vm.setScreenResolution('Qabc12345', { width: 1366, height: 768 });
   assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/screen-resolution', '1366x768\n']]);
+});
+
+test('launchBrowser starts Windows with its own devices, sets the clock to the host time, then starts Edge and waits for CDP', async () => {
+  const { starts, start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const fetches = [];
+  const { vm } = await launcher(
+    {
+      start,
+      portOpen,
+      connectQmp,
+      fetchImpl: async (url) => {
+        fetches.push(url);
+        return jsonResponse({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/b' });
+      }
+    },
+    { os: 'windows-11' }
+  );
+  const before = Date.now() * 1e6;
+  await vm.launchBrowser({ os: 'windows-11', webgl: true, app: 'chrome' });
+  assert.ok(starts[0].includes('e1000e,netdev=net0,romfile='));
+  assert.ok(!starts[0].includes('-kernel'));
+  // Chrome is not on Windows, so the choice writes nothing; Edge runs.
+  assert.deepEqual(guestWrites(commands), [
+    ['C:\\ProgramData\\remotebrowser\\webgl', 'on\n'],
+    ['C:\\ProgramData\\remotebrowser\\start-browser', 'start\n']
+  ]);
+  const clock = commands.find(({ command }) => command === 'guest-set-time');
+  assert.ok(clock.args.time >= before);
+  // The browser starts only once the clock is set.
+  const order = names(commands);
+  assert.ok(order.indexOf('guest-set-time') < order.lastIndexOf('guest-file-open'));
+  assert.deepEqual(fetches, ['http://127.0.0.1:34567/json/version']);
+});
+
+test('launchBrowser writes the proxy of Windows, with a password, before the clock', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher({ start, portOpen, connectQmp }, { os: 'windows-11' });
+  await vm.launchBrowser({ os: 'windows-11', proxy: 'socks5://u:p@proxy.example.com:1080' });
+  assert.deepEqual(guestWrites(commands), [
+    ['C:\\ProgramData\\remotebrowser\\proxy', 'socks5://u:p@proxy.example.com:1080\n'],
+    ['C:\\ProgramData\\remotebrowser\\start-browser', 'start\n']
+  ]);
+  const order = names(commands);
+  assert.ok(order.indexOf('guest-file-open') < order.indexOf('guest-set-time'));
+});
+
+test('launchBrowser sets the screen size, then the scale, of Windows before the clock', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher(
+    {
+      start,
+      portOpen,
+      connectQmp,
+      // The Windows GPU pads each row to 32 pixels.
+      readScreenSize: async () => ({ width: 1376, height: 768 })
+    },
+    { os: 'windows-11' }
+  );
+  await vm.launchBrowser({ os: 'windows-11', screenResolution: { width: 1366, height: 768 }, screenScale: 200 });
+  assert.deepEqual(guestWrites(commands), [
+    ['C:\\ProgramData\\remotebrowser\\screen-resolution', '1366x768\n'],
+    ['C:\\ProgramData\\remotebrowser\\screen-scale', '200\n'],
+    ['C:\\ProgramData\\remotebrowser\\start-browser', 'start\n']
+  ]);
+  // The size and scale are set before the clock, and the browser after it.
+  const order = names(commands);
+  const clock = order.indexOf('guest-set-time');
+  assert.equal(order.filter((name, index) => name === 'guest-file-open' && index < clock).length, 2);
+});
+
+test('every OS runs with the same memory, so a snapshot saved with other memory cannot be used', async () => {
+  const dataDir = tempDataDir();
+  await savedSnapshot(dataDir, { os: 'debian-13', memory: '2G' });
+  await savedSnapshot(dataDir, { os: 'windows-11', memory: '4G' });
+  assert.deepEqual(await client({ dataDir, memory: '4G' }).launchableOses(), ['windows-11']);
+  assert.deepEqual(await client({ dataDir, memory: '2G' }).launchableOses(), ['debian-13']);
+});
+
+test('captureScreen turns the VNC frame into a JPEG, and browserOs reads the OS of the VM', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  writeFileSync(path.join(dir, 'vnc-port'), '34568');
+  writeFileSync(path.join(dir, 'machine.json'), JSON.stringify({ os: 'windows-11' }));
+  const ports = [];
+  const readFrame = async (port) => {
+    ports.push(port);
+    return { width: 2, height: 1, data: Buffer.from([255, 0, 0, 0, 0, 0, 255, 0]) };
+  };
+  const vm = client({ dataDir, readFrame });
+  const jpeg = await vm.captureScreen('Qabc12345');
+  assert.deepEqual([...jpeg.subarray(0, 2)], [0xff, 0xd8]);
+  assert.deepEqual(ports, [34568]);
+  assert.equal(await vm.browserOs('Qabc12345'), 'windows-11');
+  assert.equal(await vm.browserOs('a/../b'), null);
+  await assert.rejects(vm.captureScreen('a/../b'), /Invalid browser id/);
+  await assert.rejects(vm.captureScreen('Qmissing1'), /VNC port not found/);
 });

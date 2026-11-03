@@ -51,7 +51,8 @@ test('migrate creates the application tables once', async () => {
         '009_signin_codes_expiry_index.sql',
         '010_browser_instances_suspended.sql',
         '011_api_keys.sql',
-        '012_browser_launches.sql'
+        '012_browser_launches.sql',
+        '013_browser_instances_extra.sql'
       ]
     );
   });
@@ -133,22 +134,22 @@ test('browser_instances.public_id is unique and required', async () => {
     );
     const workspaceId = workspace.rows[0].id;
     await database.query(
-      `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle, public_id)
-       VALUES ($1, $2, $3, 'starting', $4, $5)`,
+      `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle, public_id, os)
+       VALUES ($1, $2, $3, 'starting', $4, $5, 'debian-13')`,
       [workspaceId, ownerId, 'calm-otter', 'handle-1', 'Babc234']
     );
     await assert.rejects(
       database.query(
-        `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle, public_id)
-         VALUES ($1, $2, $3, 'starting', $4, $5)`,
+        `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle, public_id, os)
+         VALUES ($1, $2, $3, 'starting', $4, $5, 'debian-13')`,
         [workspaceId, ownerId, 'brave-otter', 'handle-2', 'Babc234']
       ),
       /unique/i
     );
     await assert.rejects(
       database.query(
-        `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle)
-         VALUES ($1, $2, $3, 'starting', $4)`,
+        `INSERT INTO browser_instances (workspace_id, user_id, browser_name, status, browser_handle, os)
+         VALUES ($1, $2, $3, 'starting', $4, 'debian-13')`,
         [workspaceId, ownerId, 'no-id', 'handle-3']
       ),
       /null/i

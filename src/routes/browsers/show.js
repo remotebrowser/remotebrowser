@@ -98,6 +98,11 @@ const listPreviewPages = async (browser) => {
   return listed.data.map((page) => ({ pageId: page.targetId, url: page.url, title: page.title }));
 };
 
+// The screen stands in for the pages until CDP lists one: black at launch,
+// then the VM screen once it can be read (see /screen in pages/view.js).
+const showsScreenFor = (browser, pages) =>
+  browser.status === 'starting' || (browser.status === 'running' && !pages?.length);
+
 // The pages a suspended browser had, each with a picture saved at suspend
 // time; none otherwise.
 const listSuspendedPages = async (browser) =>
@@ -166,6 +171,7 @@ const renderBrowser = async (c, { error = null } = {}) => {
       example: naturalLanguage && text ? text : code
     })),
     pages,
+    showScreen: showsScreenFor(browser, pages),
     suspendedPages: await listSuspendedPages(browser),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
@@ -202,10 +208,14 @@ routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), asyn
     return c.text('Not found', 404);
   }
   const data = statusBarData(c, browser);
+  const pages = await listPreviewPages(browser);
   let html = eta.render('browsers/status', { ...data, live: true });
   html += eta.render('browsers/preview', {
     ...data,
-    pages: await listPreviewPages(browser),
+    showScreen: showsScreenFor(browser, pages),
+    // ?t= freshens the screen's <img> URL, so each poll fetches a new one.
+    screenshotCacheBust: Math.floor(Date.now() / 1000),
+    pages,
     suspendedPages: await listSuspendedPages(browser),
     live: true
   });

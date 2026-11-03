@@ -29,7 +29,10 @@
     for (const img of swapped.querySelectorAll('img[id^="screenshot-"]')) {
       const outgoing = outgoingScreenshots.get(img.id);
       if (outgoing) {
-        outgoing.src = img.src;
+        // One that fetches its own frames already has a newer one.
+        if (!('refreshSelf' in outgoing.dataset)) {
+          outgoing.src = img.src;
+        }
         img.replaceWith(outgoing);
       }
     }

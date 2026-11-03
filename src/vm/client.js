@@ -1,14 +1,15 @@
 import { constants as fsConstants } from 'node:fs';
-import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
+import sharp from 'sharp';
 import { vmConfig } from './config.js';
 import { generateShortId } from '../id.js';
 import { fetchWebSocketDebuggerUrl, rewriteWsUrl } from './cdp.js';
 import * as host from './host.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { osLayout, vmLayout } from './layout.js';
-import { DEFAULT_OS, OSES, isOs } from './os.js';
+import { DEFAULT_OS, OSES, guestOf, isOs, machineOs } from './os.js';
 import { ARCHES, buildQemuArgs, detectAccel, hostArch } from './qemu.js';
 import {
   DEFAULT_SCREEN_RESOLUTION,
@@ -19,7 +20,7 @@ import {
 import { normalizeScreenScale, writeGuestScreenScale } from './screen-scale.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
 import { writeGuestWebgl } from './webgl.js';
-import { DEFAULT_BROWSER_APP, isBrowserApp, writeGuestBrowserApp } from './browser-app.js';
+import { DEFAULT_BROWSER_APP, isBrowserApp, startGuestBrowser, writeGuestBrowserApp } from './browser-app.js';
 import {
   readAnyScreenshot,
   readScreenshot,
@@ -31,7 +32,7 @@ import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
 import { createSuspender } from './suspend.js';
-import { readVncScreenSize } from './vnc.js';
+import { readVncFrame, readVncScreenSize } from './vnc.js';
 
 const { delay, lastLines } = host;
 
@@ -67,7 +68,8 @@ const createVmClient = ({
   stopGraceMs = STOP_GRACE_MS,
   suspendTimeoutMs = SUSPEND_TIMEOUT_MS,
   zstd = 'zstd',
-  readScreenSize = readVncScreenSize
+  readScreenSize = readVncScreenSize,
+  readFrame = readVncFrame
 } = {}) => {
   const { binary } = ARCHES[arch];
   const { machines: machinesDir } = vmLayout(dataDir);
@@ -156,7 +158,18 @@ const createVmClient = ({
 
   // Starts the VM as the snapshot left it, with the browser already up, on
   // a copy of the snapshot's disk.
-  const startFromSnapshot = async ({ name, dir, os, saved, proxy, screenResolution, screenScale, webgl, app }) => {
+  const startFromSnapshot = async ({
+    name,
+    dir,
+    os,
+    saved,
+    proxy,
+    screenResolution,
+    screenScale,
+    webgl,
+    app,
+    onVmStarted
+  }) => {
     const snapshotDir = snapshotDirOf(os);
     // A reflink where the filesystem has them, else a plain copy.
     await copyFile(
@@ -184,29 +197,36 @@ const createVmClient = ({
       } finally {
         qmp.close();
       }
-      // Before the clock, which starts the browser, so the one picked starts,
-      // its first request already takes this route, its window fills this
-      // screen at this scale, and it starts with WebGL on.
+      // Its screen can be read from now on, long before the browser is up.
+      onVmStarted?.();
+      const guest = guestOf(os);
+      // Before the browser starts, so the one picked starts, its first
+      // request already takes this route, its window fills this screen at
+      // this scale, and it starts with WebGL on.
       if (app !== DEFAULT_BROWSER_APP) {
-        await writeGuestBrowserApp({ dir, app, connectQmp });
+        await writeGuestBrowserApp({ dir, app, connectQmp, guest });
       }
       if (webgl) {
-        await writeGuestWebgl({ dir, connectQmp });
+        await writeGuestWebgl({ dir, connectQmp, guest });
       }
       if (proxy) {
-        await writeGuestProxy({ dir, proxy, connectQmp });
+        await writeGuestProxy({ dir, proxy, connectQmp, guest });
       }
       if (screenResolution) {
-        await writeGuestScreenResolution({ dir, screenResolution, connectQmp });
-        await waitForScreenResolution(started.vncHostPort, screenResolution);
+        await writeGuestScreenResolution({ dir, screenResolution, connectQmp, guest });
+        await waitForScreenResolution(started.vncHostPort, screenResolution, guest);
       }
+      // After the size, since the largest scale Windows offers depends on it.
       if (screenScale) {
-        await writeGuestScreenScale({ dir, screenScale, connectQmp });
+        await writeGuestScreenScale({ dir, screenScale, connectQmp, guest });
       }
-      // The guest clock stopped when the snapshot was saved. Setting it also
-      // starts the browser, which is not in the snapshot (see
-      // chromium-start.timer in vm/linux/files).
-      await setGuestClock({ dir, name, connectQmp });
+      // The guest clock stopped when the snapshot was saved. The browser is
+      // not in the snapshot, and starts only after this, so it gets the right
+      // time and randomness of its own. On Linux, the clock change starts it
+      // (see chromium-start.timer in vm/linux/files); Windows waits for the
+      // host to say so.
+      await setGuestClock({ dir, name, connectQmp, guest });
+      await startGuestBrowser({ dir, connectQmp, guest });
       await waitForBrowser(started.cdpHostPort);
     } catch (error) {
       kill(started.pid, 'SIGKILL');
@@ -218,8 +238,8 @@ const createVmClient = ({
 
   // The guest sets the screen size a moment after the host writes it, and a
   // change while it sets one would be missed, so wait until it shows.
-  const waitForScreenResolution = async (port, mode) => {
-    const { width, height } = vncScreenSize(mode);
+  const waitForScreenResolution = async (port, mode, guest = 'linux') => {
+    const { width, height } = vncScreenSize(mode, guest);
     const deadline = Date.now() + browserStartTimeoutMs;
     let seen = 'no answer';
     while (Date.now() < deadline) {
@@ -278,13 +298,15 @@ const createVmClient = ({
   // `screenScale` is the screen scale in percent; see screen-scale.js.
   // `webgl` enables WebGL, on the CPU; see webgl.js.
   // `app` is the browser, Chromium or Google Chrome; see browser-app.js.
+  // `onVmStarted` is called with the id once the VM runs, before its browser does.
   const launchBrowser = async ({
     os = DEFAULT_OS,
     proxy = null,
     screenResolution = null,
     screenScale = null,
     webgl = false,
-    app = DEFAULT_BROWSER_APP
+    app = DEFAULT_BROWSER_APP,
+    onVmStarted
   } = {}) => {
     if (!isOs(os)) {
       throw new Error(`Unknown OS ${os}`);
@@ -337,7 +359,8 @@ const createVmClient = ({
         screenResolution: resolution,
         screenScale: scale,
         webgl: Boolean(webgl),
-        app
+        app,
+        onVmStarted: onVmStarted && (() => onVmStarted({ browserId }))
       });
       consola.log(`QEMU started browser VM ${name}`, {
         'event.domain': 'qemu',
@@ -363,6 +386,14 @@ const createVmClient = ({
       throw new Error(`Unable to launch the browser for ${name}: ${message}`, { cause: error });
     }
   };
+
+  // The OS of a browser's VM, from its machine.json.
+  const vmOs = async (browserId) =>
+    machineOs(
+      await readFile(path.join(vmDir(browserId), 'machine.json'), 'utf8')
+        .then((text) => JSON.parse(text))
+        .catch(() => null)
+    );
 
   const browserExists = async (browserId) => {
     if (!isWellFormedBrowserId(browserId)) {
@@ -401,7 +432,8 @@ const createVmClient = ({
     if (!(await browserIsRunning(browserId))) {
       throw new Error(`${name} is not running`);
     }
-    await writeGuestProxy({ dir: vmDir(browserId), proxy: upstreamProxy, connectQmp });
+    const guest = guestOf(await vmOs(browserId));
+    await writeGuestProxy({ dir: vmDir(browserId), proxy: upstreamProxy, connectQmp, guest });
     // Never the URL itself, which may hold a password.
     consola.log(`QEMU ${upstreamProxy ? 'set' : 'cleared'} the upstream proxy of browser VM ${name}`, {
       'event.domain': 'qemu',
@@ -527,8 +559,9 @@ const createVmClient = ({
     if (!Number.isInteger(vncPort)) {
       throw new Error(`VNC port not found for ${name}`);
     }
-    await writeGuestScreenResolution({ dir, screenResolution: resolution, connectQmp });
-    await waitForScreenResolution(vncPort, resolution ?? DEFAULT_SCREEN_RESOLUTION);
+    const guest = guestOf(await vmOs(browserId));
+    await writeGuestScreenResolution({ dir, screenResolution: resolution, connectQmp, guest });
+    await waitForScreenResolution(vncPort, resolution ?? DEFAULT_SCREEN_RESOLUTION, guest);
     consola.log(`QEMU set the screen resolution of browser VM ${name}`, {
       'event.domain': 'qemu',
       'rb.runtime': 'qemu',
@@ -550,12 +583,33 @@ const createVmClient = ({
     if (!(await browserIsRunning(browserId))) {
       throw new Error(`${name} is not running`);
     }
-    await writeGuestScreenScale({ dir, screenScale: scale, connectQmp });
+    const os = await vmOs(browserId);
+    await writeGuestScreenScale({ dir, screenScale: scale, connectQmp, guest: guestOf(os) });
     consola.log(`QEMU set the screen scale of browser VM ${name}`, {
       'event.domain': 'qemu',
       'rb.runtime': 'qemu',
       'rb.screen_scale': screenScaleLabel(scale)
     });
+  };
+
+  // The OS of a browser's VM, or null for a bad id.
+  const browserOs = async (browserId) => (isWellFormedBrowserId(browserId) ? vmOs(browserId) : null);
+
+  // The VM's screen as a JPEG, from QEMU's VNC server. It needs no browser in
+  // the VM, so it works on Windows, which has none yet.
+  const captureScreen = async (browserId) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    const vncPort = await readPort(vmDir(browserId), 'vnc-port');
+    if (!Number.isInteger(vncPort)) {
+      throw new Error(`VNC port not found for ${vmName(browserId)}`);
+    }
+    const { width, height, data } = await readFrame(vncPort, cdpRetry.timeoutMs);
+    return sharp(data, { raw: { width, height, channels: 4 } })
+      .removeAlpha()
+      .jpeg({ quality: 80 })
+      .toBuffer();
   };
 
   return {
@@ -576,6 +630,8 @@ const createVmClient = ({
     saveScreenshot,
     readSavedScreenshot,
     readAnySavedScreenshot,
+    browserOs,
+    captureScreen,
     setProxy,
     clearProxy,
     setScreenResolution,

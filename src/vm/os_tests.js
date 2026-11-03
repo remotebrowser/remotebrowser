@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveOs } from './os.js';
 
-test('resolveOs takes an OS name in any case, with or without the dash, or the short ubuntu or fedora', () => {
+test('resolveOs takes an OS name in any case, with or without the dash, or the short ubuntu, fedora, or windows', () => {
   for (const name of ['debian-13', 'Debian-13', 'debian13', 'DEBIAN13']) {
     assert.equal(resolveOs(name), 'debian-13', name);
   }
@@ -12,6 +12,9 @@ test('resolveOs takes an OS name in any case, with or without the dash, or the s
   for (const name of ['fedora-44', 'fedora44', 'Fedora', 'FEDORA-44']) {
     assert.equal(resolveOs(name), 'fedora-44', name);
   }
+  for (const name of ['windows-11', 'windows11', 'Windows', 'WINDOWS-11']) {
+    assert.equal(resolveOs(name), 'windows-11', name);
+  }
 });
 
 test('resolveOs refuses any other name, or a value that is not a string', () => {
@@ -19,7 +22,7 @@ test('resolveOs refuses any other name, or a value that is not a string', () => 
     'debian',
     'ubuntu-24.04',
     'fedora-43',
-    'windows-11',
+    'windows-10',
     ' ubuntu',
     '',
     'toString',

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_SCREEN_RESOLUTION,
   GUEST_SCREEN_RESOLUTION_FILE,
+  WINDOWS_SCREEN_RESOLUTION_FILE,
   normalizeScreenResolution,
   vncScreenSize,
   writeGuestScreenResolution
@@ -89,4 +90,15 @@ test('vncScreenSize pads the width to 16 pixels', () => {
   assert.deepEqual(vncScreenSize({ width: 1366, height: 768 }), { width: 1376, height: 768 });
   assert.deepEqual(vncScreenSize({ width: 1290, height: 800 }), { width: 1296, height: 800 });
   assert.deepEqual(vncScreenSize({ width: 1920, height: 1080 }), { width: 1920, height: 1080 });
+});
+
+test('vncScreenSize pads the width to 32 pixels for Windows', () => {
+  assert.deepEqual(vncScreenSize({ width: 1290, height: 800 }, 'windows'), { width: 1312, height: 800 });
+  assert.deepEqual(vncScreenSize({ width: 1920, height: 1080 }, 'windows'), { width: 1920, height: 1080 });
+});
+
+test('writeGuestScreenResolution writes into ProgramData on Windows', async () => {
+  const { writes, connectQmp } = fakeAgent();
+  await writeGuestScreenResolution({ dir: '/vm', screenResolution: null, connectQmp, guest: 'windows' });
+  assert.deepEqual(writes, [{ path: WINDOWS_SCREEN_RESOLUTION_FILE, text: 'default\n' }]);
 });

@@ -2,12 +2,9 @@ import { Hono } from 'hono';
 import { requireUser } from '../../../middleware/auth.js';
 import { requireWorkspaceRole } from '../../../middleware/workspace.js';
 import { getBrowserInstanceByPublicId } from '../../../models/browsers.js';
-import { nextFrame, encodeFrame, SCREENCAST_OPTIONS } from '../../../screencast.js';
+import { nextFrame, encodeFrame, viewerWidth } from '../../../screencast.js';
 
 export const routes = new Hono();
-
-// A viewer on a 3x display gains little from more pixels and costs bandwidth.
-const MAX_PIXEL_RATIO = 2;
 
 // Long poll: a still page sends no frame, so the wait ends with 204.
 routes.get('/:browserId/pages/:pageId/frame', requireUser, requireWorkspaceRole('User'), async (c) => {
@@ -41,19 +38,9 @@ routes.get('/:browserId/pages/:pageId/frame', requireUser, requireWorkspaceRole(
   if (!result.data) {
     return c.body(null, 204);
   }
-  // The client sends CSS pixels, so scale by the viewer's ratio to keep the frame sharp.
-  // A missing or invalid ratio leaves the frame at CSS pixels.
-  const width = Number.parseInt(c.req.query('w') ?? '', 10);
-  const dpr = Number.parseFloat(c.req.query('dpr') ?? '');
-  const pixelRatio = Number.isFinite(dpr) && dpr > 0 ? Math.min(dpr, MAX_PIXEL_RATIO) : 1;
   let body;
   try {
-    body = await encodeFrame(
-      result.data,
-      Number.isSafeInteger(width) && width > 0
-        ? Math.min(Math.round(width * pixelRatio), SCREENCAST_OPTIONS.maxWidth)
-        : 0
-    );
+    body = await encodeFrame(result.data, viewerWidth({ w: c.req.query('w'), dpr: c.req.query('dpr') }));
   } catch {
     return c.text('The live view is unavailable.', 502);
   }

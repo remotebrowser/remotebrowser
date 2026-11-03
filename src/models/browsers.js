@@ -3,6 +3,7 @@ import { generateShortId } from '../id.js';
 import { workspaceExists, repairPersonalWorkspace } from './workspaces.js';
 import { generateBrowserHandle } from '../handle.js';
 import { isWellFormedBrowserId } from '../vms.js';
+import { DEFAULT_OS } from '../vm/os.js';
 
 const db = () => getDatabase();
 
@@ -18,6 +19,11 @@ const map = (r) => ({
   browserHandle: r.browser_handle,
   internalBrowserId: r.internal_browser_id,
   creatorUserId: r.user_id,
+  // The guest OS it was launched on, e.g. 'debian-13' (src/vm/os.js).
+  os: r.os,
+  // Milliseconds since the epoch; null for a browser from before it was kept.
+  // bigint comes back as a string from Postgres.
+  creationTimestamp: r.creation_timestamp === null ? null : Number(r.creation_timestamp),
   // Settings applied to the browser, e.g. { proxy }, with secrets already masked.
   config: r.config || {}
 });
@@ -64,6 +70,7 @@ const launchBrowserInstance = async ({
   browserDescription,
   personalWorkspaceRepair,
   config = null,
+  os = DEFAULT_OS,
   generateId = generatePublicId,
   launchesPerMinute = MAX_BROWSER_LAUNCHES_PER_MINUTE,
   now = Date.now()
@@ -81,7 +88,7 @@ const launchBrowserInstance = async ({
         // Issued before the insert so the row always names a valid browser.
         const browserHandle = generateBrowserHandle();
         const r = await tx.query(
-          `INSERT INTO browser_instances(workspace_id,browser_name,browser_description,status,user_id,internal_browser_id,browser_handle,config,public_id) VALUES($1,$2,$3,'starting',$4,'',$5,$7::jsonb,$6) RETURNING id, public_id`,
+          `INSERT INTO browser_instances(workspace_id,browser_name,browser_description,status,user_id,internal_browser_id,browser_handle,config,public_id,os,creation_timestamp) VALUES($1,$2,$3,'starting',$4,'',$5,$7::jsonb,$6,$8,$9) RETURNING id, public_id`,
           [
             workspaceId,
             browserName,
@@ -89,7 +96,9 @@ const launchBrowserInstance = async ({
             userId,
             browserHandle,
             generateId(),
-            config ? JSON.stringify(config) : null
+            config ? JSON.stringify(config) : null,
+            os,
+            now
           ]
         );
         await tx.query('INSERT INTO browser_launches(workspace_id,user_id,launched_timestamp) VALUES($1,$2,$3)', [

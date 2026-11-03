@@ -2,7 +2,7 @@
 <%~ include('/partials/breadcrumbs', it) %>
 <script src="/htmx.min.js"></script>
 <%~ include('/partials/htmx-form-errors', it) %> <%~ include('/partials/screenshot-refresh', it) %> <%~
-include('/partials/code-copy', it) %>
+include('/partials/screen-refresh', it) %> <%~ include('/partials/code-copy', it) %>
 <script src="/screencast.js" defer></script>
 <script src="/playground.js" defer></script>
 <script nonce="<%= it.scriptNonce %>">
@@ -49,18 +49,6 @@ include('/partials/code-copy', it) %>
   // with the same id until then, and would hide the panel again.
   const revealPlayground = () => document.querySelector('#playground-panel')?.classList.remove('hidden');
   document.body.addEventListener('htmx:afterSettle', revealPlayground);
-
-  // Keep the starting box, so the poll does not restart its progress bar.
-  document.body.addEventListener('htmx:oobBeforeSwap', (event) => {
-    const { target, fragment } = event.detail;
-    if (
-      target.id === 'browser-preview' &&
-      target.querySelector('.browser-preview-starting') &&
-      fragment.querySelector('.browser-preview-starting')
-    ) {
-      event.detail.shouldSwap = false;
-    }
-  });
 
   // Delegated from body, which is never swapped, so it survives a refresh.
   document.body.addEventListener('click', (event) => {
