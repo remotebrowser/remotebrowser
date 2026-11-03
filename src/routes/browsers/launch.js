@@ -317,4 +317,15 @@ const handleLaunch = async (c) => {
 
 routes.post('/launch', requireUser, requireWorkspaceRole('User'), requireSubmittedWorkspace, handleLaunch);
 
-export { generateBrowserName, browsersReady, launchRefusal, launchableOses, startBrowser, INITIAL_URLS };
+export {
+  generateBrowserName,
+  browsersReady,
+  launchRefusal,
+  launchableOses,
+  startBrowser,
+  INITIAL_URLS,
+  SCREEN_RESOLUTIONS,
+  DEFAULT_SCREEN_RESOLUTION_CHOICE,
+  SCREEN_SCALES,
+  DEFAULT_SCREEN_SCALE_CHOICE
+};
