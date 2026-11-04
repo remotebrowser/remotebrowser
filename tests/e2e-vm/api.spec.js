@@ -50,7 +50,10 @@ test('the REST API launches, lists, queries, drives over CDP, and terminates a b
   expect(await (await request.get(`/api/v1/browsers/${browserId}`, { headers })).json()).toEqual({
     browser_id: browserId,
     status: 'starting',
-    description: ''
+    description: '',
+    // The default OS, as its full name.
+    os: 'debian-13',
+    creation_timestamp: expect.any(Number)
   });
 
   // Wait for the VM to start, then for Chromium to answer.
