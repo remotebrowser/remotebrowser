@@ -19,6 +19,100 @@ function Install($msi) {
   }
 }
 
+function SetValue($key, $name, $value) {
+  try {
+    if (-not (Test-Path $key)) { New-Item $key -Force | Out-Null }
+    Set-ItemProperty $key $name $value -Type DWord
+  } catch {
+    Report "could not set $key\${name}: $_"
+  }
+}
+
+# Each Windows build has its own set of apps, services and tasks, and some of
+# them it will not remove or stop. So none of these steps can fail the setup.
+function Debloat {
+  $apps = 'Clipchamp.Clipchamp', 'Microsoft.BingNews', 'Microsoft.BingSearch', 'Microsoft.BingWeather',
+    'Microsoft.GamingApp', 'Microsoft.GetHelp', 'Microsoft.MicrosoftOfficeHub',
+    'Microsoft.MicrosoftSolitaireCollection', 'Microsoft.MicrosoftStickyNotes', 'Microsoft.OutlookForWindows',
+    'Microsoft.Paint', 'Microsoft.PowerAutomateDesktop', 'Microsoft.ScreenSketch', 'Microsoft.Todos',
+    'Microsoft.Windows.DevHome', 'Microsoft.Windows.Photos', 'Microsoft.WindowsAlarms', 'Microsoft.WindowsCamera',
+    'Microsoft.WindowsFeedbackHub', 'Microsoft.WindowsSoundRecorder', 'Microsoft.WindowsStore',
+    'Microsoft.Xbox.TCUI', 'Microsoft.XboxGamingOverlay', 'Microsoft.XboxIdentityProvider',
+    'Microsoft.XboxSpeechToTextOverlay', 'Microsoft.YourPhone', 'Microsoft.ZuneMusic',
+    'MicrosoftCorporationII.QuickAssist', 'MicrosoftWindows.Client.WebExperience', 'MicrosoftWindows.CrossDevice',
+    'MSTeams', 'Microsoft.Copilot', 'Microsoft.Windows.Ai.Copilot.Provider', 'Microsoft.549981C3F5F10'
+  # The user logs in for the first time after this, so an app that is no
+  # longer provisioned is never installed for them.
+  Get-AppxProvisionedPackage -Online | Where-Object DisplayName -in $apps | ForEach-Object {
+    try { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName | Out-Null } catch {}
+  }
+  Get-AppxPackage -AllUsers | Where-Object Name -in $apps | ForEach-Object {
+    try { Remove-AppxPackage -Package $_.PackageFullName -AllUsers } catch {}
+  }
+
+  # No apps, tips, widgets, Copilot or OneDrive that Windows would add or start
+  # on its own, and no telemetry.
+  $policies = 'HKLM:\SOFTWARE\Policies\Microsoft'
+  SetValue "$policies\Windows\CloudContent" DisableWindowsConsumerFeatures 1
+  SetValue "$policies\Windows\CloudContent" DisableSoftLanding 1
+  SetValue "$policies\Windows\CloudContent" DisableCloudOptimizedContent 1
+  SetValue "$policies\Windows\DataCollection" AllowTelemetry 0
+  SetValue "$policies\Dsh" AllowNewsAndInterests 0
+  SetValue "$policies\Windows\Windows Chat" ChatIcon 3
+  SetValue "$policies\Windows\WindowsCopilot" TurnOffWindowsCopilot 1
+  SetValue "$policies\Windows\Windows Search" AllowCortana 0
+  SetValue "$policies\Windows\Windows Search" DisableWebSearch 1
+  SetValue "$policies\Windows\OneDrive" DisableFileSyncNGSC 1
+  SetValue "$policies\Windows\Explorer" DisableSearchBoxSuggestions 1
+
+  # The same for the user, through the profile it is made from.
+  reg load 'HKU\Default' 'C:\Users\Default\NTUSER.DAT' | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    try {
+      Remove-ItemProperty 'Registry::HKU\Default\Software\Microsoft\Windows\CurrentVersion\Run' OneDriveSetup `
+        -ErrorAction SilentlyContinue
+      $delivery = 'Registry::HKU\Default\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+      foreach ($name in 'ContentDeliveryAllowed', 'FeatureManagementEnabled', 'OemPreInstalledAppsEnabled',
+        'PreInstalledAppsEnabled', 'SilentInstalledAppsEnabled', 'SoftLandingEnabled', 'SubscribedContentEnabled',
+        'SystemPaneSuggestionsEnabled') {
+        SetValue $delivery $name 0
+      }
+      $advanced = 'Registry::HKU\Default\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+      SetValue $advanced TaskbarDa 0
+      SetValue $advanced TaskbarMn 0
+      SetValue $advanced ShowCopilotButton 0
+      SetValue 'Registry::HKU\Default\Software\Microsoft\Windows\CurrentVersion\Search' SearchboxTaskbarMode 0
+    } finally {
+      # The hive stays in use while anything still refers to it.
+      [GC]::Collect()
+      [GC]::WaitForPendingFinalizers()
+      reg unload 'HKU\Default' | Out-Null
+    }
+  }
+
+  # Services that fill the memory with file caches and search indexes, or
+  # that serve hardware and features a browser VM does not have.
+  $services = 'SysMain', 'WSearch', 'DiagTrack', 'dmwappushservice', 'DoSvc', 'MapsBroker', 'lfsvc',
+    'WSAIFabricSvc', 'edgeupdate', 'edgeupdatem', 'PcaSvc', 'TrkWks', 'WerSvc', 'RetailDemo', 'PhoneSvc',
+    'Fax', 'WpcMonSvc', 'XblAuthManager', 'XblGameSave', 'XboxGipSvc', 'XboxNetApiSvc', 'wisvc', 'SSDPSRV',
+    'lmhosts', 'WbioSrvc', 'TabletInputService', 'CDPSvc'
+  foreach ($name in $services) {
+    try { Set-Service $name -StartupType Disabled -ErrorAction Stop } catch {}
+  }
+
+  # Tasks that collect data or keep the disk busy after the snapshot.
+  $tasks = '\Microsoft\Windows\Application Experience\', '\Microsoft\Windows\Customer Experience Improvement Program\',
+    '\Microsoft\Windows\Feedback\Siuf\', '\Microsoft\Windows\Windows Error Reporting\',
+    '\Microsoft\Windows\DiskDiagnostic\', '\Microsoft\Windows\Defrag\', '\Microsoft\Windows\Maintenance\',
+    '\Microsoft\Windows\Maps\', '\Microsoft\Windows\CloudExperienceHost\', '\Microsoft\Windows\Autochk\',
+    '\Microsoft\Windows\Flighting\', '\Microsoft\Windows\WindowsAI\'
+  foreach ($path in $tasks) {
+    Get-ScheduledTask -TaskPath $path -ErrorAction SilentlyContinue | ForEach-Object {
+      try { Disable-ScheduledTask -InputObject $_ | Out-Null } catch {}
+    }
+  }
+}
+
 try {
   # The serial driver that the guest agent talks over, the entropy one, and
   # the GPU one, which takes any screen size. Then the agent itself, which
@@ -58,6 +152,12 @@ try {
   # again in each VM. A new image build gets them instead.
   New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Force | Out-Null
   Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' NoAutoUpdate 1 -Type DWord
+
+  # Less of Windows, as tiny11 and NTLite make it, but keeping Edge and
+  # WebView2. What runs in the guest fills its memory, and that memory is in
+  # the snapshot, which every VM loads at launch.
+  Report 'removing apps and services the browser does not need'
+  Debloat
 
   # 10.0.2.2 is the host's loopback in QEMU user-mode networking. Block new
   # connections to it, as vm/linux/files/etc/nftables.conf does for Linux.
