@@ -65,7 +65,8 @@ const snapshotStatus = async ({ snapshotDir, image, os = DEFAULT_OS, arch, memor
   return { current: true };
 };
 
-// The line guest-ready.service writes to the console once the guest is up.
+// The line guest-ready.service writes to the console once the guest is up,
+// or, in Windows, guest-ready.ps1 in vm/windows-11.
 const GUEST_READY = 'remotebrowser: guest ready';
 
 // Boots the image, waits until the guest is ready, and saves the VM. The

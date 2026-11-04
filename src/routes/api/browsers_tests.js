@@ -48,13 +48,15 @@ const makeBrowser = async ({
   userId,
   status = 'running',
   internalBrowserId = 'Qabc12345',
-  description = ''
+  description = '',
+  os = undefined
 }) => {
   const launched = await launchBrowserInstance({
     workspaceId,
     userId,
     browserName: 'calm-otter',
-    browserDescription: description
+    browserDescription: description,
+    os
   });
   const { browserInstanceId, publicId } = launched.data;
   await recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId, userId });
@@ -139,18 +141,28 @@ test('GET /api/v1/browsers lists only the starting and running browsers of the k
   assert.deepEqual((await res.json()).sort(), [running, starting].sort());
 });
 
-test('GET /api/v1/browsers/:id returns the browser’s id, status, and description', async () => {
+test('GET /api/v1/browsers/:id returns the browser’s id, status, description, os, and creation time', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
+  const before = Date.now();
   const publicId = await makeBrowser({ workspaceId, userId, description: 'For QA testing' });
   const res = await call(setupApp(), `/api/v1/browsers/${publicId}`, { apiKey });
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { browser_id: publicId, status: 'running', description: 'For QA testing' });
+  const { creation_timestamp: created, ...body } = await res.json();
+  assert.deepEqual(body, { browser_id: publicId, status: 'running', description: 'For QA testing', os: 'debian-13' });
+  assert.ok(Number.isSafeInteger(created) && created >= before && created <= Date.now(), String(created));
 
   // No description, e.g. one launched through the API, is an empty string.
-  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended', internalBrowserId: 'sleepy' });
+  const suspended = await makeBrowser({
+    workspaceId,
+    userId,
+    status: 'suspended',
+    internalBrowserId: 'sleepy',
+    os: 'windows-11'
+  });
   const res2 = await call(setupApp(), `/api/v1/browsers/${suspended}`, { apiKey });
-  assert.deepEqual(await res2.json(), { browser_id: suspended, status: 'suspended', description: '' });
+  const { creation_timestamp: _, ...body2 } = await res2.json();
+  assert.deepEqual(body2, { browser_id: suspended, status: 'suspended', description: '', os: 'windows-11' });
 });
 
 test('GET and DELETE answer 404 for a browser in another workspace, or none at all', async () => {
@@ -412,6 +424,42 @@ test('PATCH /:id/config refuses a bad body or proxy URL, and changes nothing', a
   assert.deepEqual(proxies, []);
 });
 
+test('PATCH /:id/config takes a proxy with a user and password for a Windows VM', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const publicId = await makeBrowser({ workspaceId, userId, os: 'windows-11' });
+  const proxies = fakeProxyVms();
+  const path = `/api/v1/browsers/${publicId}/config`;
+  const res = await sendJson('PATCH', path, apiKey, { proxy: 'socks5://user:secret@proxy.example.com:1080' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(proxies, ['socks5://user:secret@proxy.example.com:1080']);
+});
+
+test('POST /api/v1/browsers takes a proxy with a user and password for a Windows VM', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const launches = [];
+  fakeVms({
+    launchableOses: async () => ['debian-13', 'windows-11'],
+    launchBrowser: async (options) => {
+      launches.push(options);
+      throw new Error('no VM in tests');
+    }
+  });
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, {
+    os: 'windows',
+    proxy: 'http://user:secret@proxy.example.com:8080'
+  });
+  assert.equal(res.status, 200);
+  for (let i = 0; i < 100 && launches.length < 1; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.deepEqual(
+    launches.map((options) => options.proxy),
+    ['http://user:secret@proxy.example.com:8080']
+  );
+});
+
 test('PATCH /:id/config answers 409 for a browser that is not running', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
@@ -475,18 +523,38 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
   for (let i = 0; i < 100 && launches.length === 0; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.deepEqual(launches, [
-    {
-      os: 'debian-13',
-      proxy: 'http://u:p@proxy.example.com:8080',
-      screenResolution: null,
-      screenScale: null,
-      webgl: true,
-      app: 'chromium'
-    }
-  ]);
+  assert.equal(typeof launches[0]?.onVmStarted, 'function');
+  assert.deepEqual(
+    launches.map(({ onVmStarted, ...settings }) => settings),
+    [
+      {
+        os: 'debian-13',
+        proxy: 'http://u:p@proxy.example.com:8080',
+        screenResolution: null,
+        screenScale: null,
+        webgl: true,
+        app: 'chromium'
+      }
+    ]
+  );
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
   assert.deepEqual(stored.data.config, { proxy: 'http://u:****@proxy.example.com:8080' });
+  assert.equal(stored.data.os, 'debian-13');
+});
+
+test('POST /api/v1/browsers stores the os it launches on', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  fakeVms({
+    launchableOses: async () => ['debian-13', 'windows-11'],
+    launchBrowser: async () => {
+      throw new Error('no VM in tests');
+    }
+  });
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, { os: 'windows' });
+  const { browser_id: publicId } = await res.json();
+  const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
+  assert.equal(stored.data.os, 'windows-11');
 });
 
 // Waits for the launches that the API starts after it answers.
@@ -525,10 +593,12 @@ test('POST /api/v1/browsers refuses an unknown os, and launches nothing', async 
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
   const calls = fakeVms();
-  for (const os of ['windows-11', 'debian', 'ubuntu-24.04', '', 13, null]) {
+  for (const os of ['windows-10', 'debian', 'ubuntu-24.04', '', 13, null]) {
     const res = await sendJson('POST', '/api/v1/browsers', apiKey, { os });
     assert.equal(res.status, 400, String(os));
-    assert.deepEqual(await res.json(), { error: 'The os must be one of debian-13, ubuntu-26.04, fedora-44.' });
+    assert.deepEqual(await res.json(), {
+      error: 'The os must be one of debian-13, ubuntu-26.04, fedora-44, windows-11.'
+    });
   }
   assert.ok(!calls.includes('launchBrowser'));
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);

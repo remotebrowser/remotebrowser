@@ -36,8 +36,9 @@ const orFallback = async (browserId, run, fallback) => {
  * an upstream `proxy` URL (see src/vm/proxy.js), a `screenResolution`, the
  * screen size (see src/vm/screen-resolution.js), a `screenScale` in percent
  * (see src/vm/screen-scale.js), `webgl` on (see src/vm/webgl.js), and the
- * browser `app` (see src/vm/browser-app.js).
- * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean, app?: string}} [params]
+ * browser `app` (see src/vm/browser-app.js). `onVmStarted` gets the id as
+ * soon as the VM runs, before its browser does, so its screen can be shown.
+ * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean, app?: string, onVmStarted?: (started: {browserId: string}) => void}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
 const startBrowser = async ({
@@ -46,10 +47,19 @@ const startBrowser = async ({
   screenResolution = null,
   screenScale = null,
   webgl = false,
-  app = DEFAULT_BROWSER_APP
+  app = DEFAULT_BROWSER_APP,
+  onVmStarted
 } = {}) => {
   try {
-    const { browserId } = await vms.launchBrowser({ os, proxy, screenResolution, screenScale, webgl, app });
+    const { browserId } = await vms.launchBrowser({
+      os,
+      proxy,
+      screenResolution,
+      screenScale,
+      webgl,
+      app,
+      ...(onVmStarted && { onVmStarted })
+    });
     if (!isWellFormedBrowserId(browserId)) {
       return { error: 'INVALID_BROWSER_ID' };
     }
@@ -218,6 +228,14 @@ const setBrowserScreenScale = (browserId, screenScale) =>
   changeBrowser(browserId, () => vms.setScreenScale(browserId, screenScale));
 
 /**
+ * The VM's screen as a JPEG, read over VNC, so it needs no browser in the VM.
+ * Null when it cannot be read.
+ * @param {{browserId: string}} params
+ * @returns {Promise<Buffer | null>}
+ */
+const captureBrowserScreen = ({ browserId }) => orFallback(browserId, () => vms.captureScreen(browserId), null);
+
+/**
  * Builds the CDP websocket URL for a browser. It is discovered from the VM's
  * CDP endpoint, which needs the VM to be up, so this is async. Returns null
  * when no URL can be resolved.
@@ -241,6 +259,7 @@ export {
   saveBrowserScreenshot,
   readBrowserScreenshot,
   readAnyBrowserScreenshot,
+  captureBrowserScreen,
   setBrowserProxy,
   clearBrowserProxy,
   setBrowserScreenResolution,

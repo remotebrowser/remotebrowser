@@ -4,48 +4,30 @@ Remote Browser runs each browser in its own [QEMU](https://www.qemu.org) virtual
 
 ## Behind the scenes
 
-Each browser runs on Debian 13, the default, on Ubuntu 26.04, or on Fedora 44, chosen on the launch page. The launch page offers an OS once its snapshot is ready. The app keeps an image and a snapshot per OS, so a host can run browsers of each at once.
+Each browser runs on one of several guest OSes, such as Debian 13, the default, or Windows 11, chosen on the launch page. See [VM](vm.md) for each OS, and for what runs inside its VM. The launch page offers an OS once its snapshot is ready. The app keeps an image and a snapshot per OS, so a host can run browsers of each at once.
 
 At startup, in the background, the app prepares two things for each OS, all OSes at once. The server does not wait for them, and it logs each step with `event.domain` set to `qemu`.
 
-1. **Image**: the app builds the image of each Linux OS from its Dockerfile with Docker, such as `vm/debian-13/Dockerfile`. It copies in the services from `vm/linux/files`, and an OS may add its own in `vm/<os>/files`. Ubuntu ships Chromium only as a snap, which does not install in a Docker build, so its image takes Chromium, and nothing else, from the [xtradeb PPA](https://launchpad.net/~xtradeb/+archive/ubuntu/apps), with the signing key in `vm/ubuntu-26.04/files/etc/apt`. Each image also has Google Chrome, from Google's own repository. Fedora's tinyproxy unit takes no flags, so its image adds a drop-in in `vm/fedora-44/files`. This happens when the image is missing, or when one of those files changed. Docker only installs the packages; the result never runs as a container. The image goes to `images/<os>` in the [data directory](#data-directory), such as `images/debian-13`, as a qcow2 disk with its kernel and initrd. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
+1. **Image**: the app builds the disk image of each OS from its sources in `vm`. This happens when the image is missing, or when one of its sources changed. The image goes to `images/<os>` in the [data directory](#data-directory), such as `images/debian-13`. It is built for the host's architecture only, `x86_64` or `aarch64`, so that KVM on Linux, or Hypervisor.framework (HVF) on macOS, runs it natively.
 2. **Snapshot**: the app boots the image once, until the guest is ready but before the browser starts, and saves the running VM as a snapshot in `snapshots/<os>` in the data directory. It saves a new one when the image, `VM_MEMORY`, or `VM_CPUS` change.
 
-Then every new browser is a VM started from the snapshot of its OS. The app sets the guest clock, which starts the browser. The browser starts only after the snapshot, so that VMs do not share its random number state.
+Then every new browser is a VM started from the snapshot of its OS. Before the browser starts, the app writes its settings into the guest, such as the proxy and the screen size. Then it sets the guest clock, which stopped when the snapshot was saved, and the browser starts. The browser starts only after the snapshot, so that VMs do not share its random number state. The app waits until the browser answers on CDP.
 
-Each VM gets `VM_MEMORY` of memory (default `2G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
+Each VM gets `VM_MEMORY` of memory (default `4G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
 Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
-## Inside each VM
+## Isolation
 
-The VM is a small Debian 13, Ubuntu 26.04, or Fedora 44 system with systemd. Its services, all in `vm/linux/files`, are:
+The VM is isolated in these ways, on every OS:
 
-| Service            | What it does                                                                                                                                                         |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `systemd-networkd` | Gets the guest address from QEMU user-mode networking by DHCP (`10.0.2.15`, gateway `10.0.2.2`, DNS `10.0.2.3`)                                                      |
-| `nftables`         | Refuses new connections to `10.0.2.2`, which leads to the host's loopback interface                                                                                  |
-| `tinyproxy`        | The HTTP proxy that all of the browser's traffic goes through, on `127.0.0.1:8119`. See [Proxy](proxy.md)                                                            |
-| `seatd`            | Opens the GPU and the input devices for labwc, so labwc needs no root                                                                                                |
-| `display`          | [labwc](https://labwc.github.io), a Wayland compositor, on the VM's virtual GPU, which QEMU shows over VNC. It runs as the `browser` user. See [Display](display.md) |
-| `chromium`         | The distro's Chromium, or Google Chrome, on that display, as the unprivileged `browser` user, with CDP on `127.0.0.1:9221`                                           |
-| `chromium-start`   | A timer that starts `chromium` when the host sets the clock, after a VM starts from the snapshot                                                                     |
-| `guest-ready`      | Writes `remotebrowser: guest ready` to the console once the others are up, so the host can save the snapshot                                                         |
-| `cdp-proxy`        | Exposes CDP on port `9222` of the guest address, which is where QEMU forwards the host port                                                                          |
-
-The browser has a display rather than running headless. The VM has no GPU, and the browser does not render in software, so WebGL and WebGPU are not available. The browser reads its flags from `/etc/remotebrowser/browser.env`.
-
-Each image has every browser that it offers, and the snapshot runs none of them, so one snapshot serves them all. At launch, before it sets the clock, the app writes the binary of the browser that was picked into `/etc/remotebrowser/app.env`, and `/usr/local/bin/browser` runs it, else Chromium. It does not start without `nftables` and `tinyproxy`.
-
-To change what runs in the VMs, edit the files in `vm/linux/files`, or an OS's own Dockerfile. The app builds the images again at its next start.
-
-The VM is isolated in these ways:
-
-- The browser runs as an unprivileged user, so its own sandbox stays on.
 - QEMU has only the devices it needs (`-nodefaults`). On Linux, it also runs under its seccomp sandbox (`-sandbox on`). QEMU on macOS has no seccomp, so there the VM boundary is the main protection.
-- The QEMU guest agent accepts only the commands that set the clock.
+- QEMU user-mode networking gives the VM its own network. A firewall in the VM blocks `10.0.2.2`, which leads to the host's loopback, so a browser cannot reach services there, such as the app or its database. IPv6 is off for the same reason. The VM can still reach other hosts on the network; to limit that, use a host firewall or an [upstream proxy](proxy.md).
+- All of the browser's traffic goes through a local [proxy](proxy.md) in the VM.
 - Only the CDP port is forwarded, and only to `127.0.0.1` on the host. QEMU's own VNC server shows the screen, also only on `127.0.0.1`. It has no password, so do not expose it beyond the host's loopback.
-- A firewall in the VM blocks `10.0.2.2`, so a browser cannot reach services on the host's loopback, such as the app or its database. IPv6 is off for the same reason. The VM can still reach other hosts on the network; to limit that, use a host firewall or an [upstream proxy](proxy.md).
+- The app talks to the QEMU guest agent over a Unix socket, which only the app's user can open. It uses the agent to set the clock and to write the browser's settings.
+
+See [VM](vm.md) for what each OS adds, such as the user that the browser runs as.
 
 ## Lifecycle
 
@@ -69,24 +51,28 @@ The app keeps everything for the VMs in one directory, `.data/vm` by default. Se
 │   │       ├── chromium.kernel
 │   │       └── chromium.initrd
 │   ├── ubuntu-26.04/
-│   └── fedora-44/
+│   ├── fedora-44/
+│   └── windows-11/
 ├── snapshots/
 │   ├── debian-13/
 │   ├── ubuntu-26.04/
-│   └── fedora-44/
+│   ├── fedora-44/
+│   └── windows-11/
+├── iso/
 ├── machines/
 │   └── <id>/
 └── run/
 ```
 
-- **`images`** holds the builds of each OS's image. A build is named after its architecture and a hash of its sources, such as `vm/debian-13/Dockerfile` and `vm/linux/files`. When those change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither a snapshot nor any VM uses it.
+- **`images`** holds the builds of each OS's image. A build is named after its architecture and a hash of its sources, such as `vm/debian-13/Dockerfile` and `vm/linux/files` for Debian 13. When those change, the next build goes to a new directory. A build never changes after it is written, because a VM's disk records only its changes to that exact image. The app deletes a build when it is out of date, and neither a snapshot nor any VM uses it.
 - **`snapshots`** holds the snapshot of each OS that new browsers start from: its disk (`overlay.qcow2`), its memory (`vm.state`), and `machine.json`, which names the OS and the image build it runs on. While the app saves a new snapshot, it works in `snapshots/<os>.new.<pid>` and replaces `snapshots/<os>` only when it is done.
+- **`iso`** holds what the Windows image is installed from; see [VM](vm.md#windows).
 - **`machines`** holds one directory per browser, as described in [Lifecycle](#lifecycle).
 - **`run`** holds the VM that `vm/scripts/run.js` starts, as described in [Manual test](#manual-test).
 
 QEMU talks to the app over Unix sockets in these directories, and Linux limits a socket path to 107 characters (macOS to 103). If `VM_DATA_DIR` is too long for that, the app refuses to start.
 
-In the container, the app can build the VM image only with the host's Docker socket, since it has no Docker of its own. [Getting Started](getting-started.md) gives the server the socket, for a quick try. The socket gives full control of the host, and the server runs untrusted pages, so do not do this for a server that others use. Instead, build the image in a separate container, as [VM image](self-hosting.md#vm-image) shows. The image build does not use bind mounts, so it works from a container.
+In the container, the app can build a Linux image only with the host's Docker socket, since it has no Docker of its own. [Getting Started](getting-started.md) gives the server the socket, for a quick try. The socket gives full control of the host, and the server runs untrusted pages, so do not do this for a server that others use. Instead, build the image in a separate container, as [VM image](self-hosting.md#vm-image) shows. The image build does not use bind mounts, so it works from a container.
 
 To share the data directory between the container and the scripts in `vm/scripts` on the host, mount it at the same path in the container, and set `VM_DATA_DIR` to that path. The snapshot and the VMs refer to their image build by its full path, so the path must be the same on both sides.
 
@@ -99,29 +85,23 @@ npm install
 vm/build-image.sh
 ```
 
-It runs `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`, each of which builds one OS.
+It runs `vm/build-debian-13.sh`, `vm/build-ubuntu-26.04.sh`, and `vm/build-fedora-44.sh`, each of which builds one OS, and `vm/build-windows-11.sh` when the Windows ISO is there.
 
-To start a Debian 13 VM from its snapshot:
+To start a VM from the snapshot of an OS:
 
 ```bash
-vm/scripts/run.js
+vm/scripts/run.js               # Debian 13
+vm/scripts/run.js windows-11    # or any other OS
 ```
 
-`vm/scripts/run.js ubuntu-26.04` starts an Ubuntu 26.04 one instead, and `vm/scripts/run.js fedora-44` a Fedora 44 one.
-
-The VM's console is your terminal, with a root shell; press Enter if no prompt shows. In another terminal, check that the browser answers, and open a page:
+The VM's console is your terminal; on Linux, it has a root shell, and you may need to press Enter for a prompt. In another terminal, check that the browser answers, and open a page:
 
 ```bash
 curl http://127.0.0.1:9222/json/version
 curl -X PUT "http://127.0.0.1:9222/json/new?https://example.com"
 ```
 
-In the VM's root shell, you can look at the services:
-
-```bash
-systemctl status chromium cdp-proxy tinyproxy nftables
-journalctl -u chromium
-```
+See [VM](vm.md) for what else to check in each OS.
 
 To quit, press Ctrl-A then X.
 

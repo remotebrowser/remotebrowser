@@ -4,6 +4,7 @@ import { consola } from 'consola/basic';
 import { compressSuspendedState, hasSuspendedState, loadableSuspendedState, removeSuspendedState } from './compress.js';
 import { checkImage } from './image.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
+import { guestOf, machineOs } from './os.js';
 import { removeSuspendedPreviews, writeSuspendedPreviews } from './previews.js';
 import { suspendVm } from './save.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -104,7 +105,7 @@ const createSuspender = ({
     }
     await removeSuspendedState(dir);
     await removeSuspendedPreviews(dir);
-    await setGuestClock({ dir, name, connectQmp });
+    await setGuestClock({ dir, name, connectQmp, guest: guestOf(machineOs(machine)) });
     consola.log(`QEMU resumed browser VM ${name}`, { 'event.domain': 'qemu', 'rb.runtime': 'qemu' });
     return { browserId };
   };

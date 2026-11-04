@@ -1,0 +1,31 @@
+<script nonce="<%= it.scriptNonce %>">
+  // The VM screen changes faster than the status line's poll, so its <img>
+  // fetches a new frame on its own. A new src on the shown <img> can paint
+  // blank for a moment, since decoding="async" lets the browser drop the old
+  // bitmap before the new one is decoded. So each frame loads and decodes in
+  // a copy off screen, which then takes the shown one's place. The next fetch
+  // waits for this one, so a slow server never gets a pile of them.
+  const SCREEN_REFRESH = 700;
+  const refreshScreen = async () => {
+    const img = document.getElementById('screenshot-screen');
+    if (img && !document.hidden) {
+      const next = /** @type {HTMLImageElement} */ (img.cloneNode());
+      const url = new URL(img.src, window.location.href);
+      url.searchParams.set('t', String(Date.now()));
+      // The server sizes the frame to fit, as for the CDP screencast.
+      url.searchParams.set('w', String(img.clientWidth));
+      url.searchParams.set('dpr', String(window.devicePixelRatio));
+      next.src = url.href;
+      try {
+        await next.decode();
+        // The poll may have swapped the preview meanwhile.
+        const shown = document.getElementById('screenshot-screen');
+        if (shown) {
+          shown.replaceWith(next);
+        }
+      } catch {}
+    }
+    setTimeout(refreshScreen, SCREEN_REFRESH);
+  };
+  setTimeout(refreshScreen, SCREEN_REFRESH);
+</script>

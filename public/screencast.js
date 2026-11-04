@@ -36,7 +36,7 @@
       }
       context.drawImage(bitmap, 0, 0);
       bitmap.close();
-      // Ends the full progress bar that stands in for the first frame (see style.css).
+      // Ends the black box that stands in for the first frame (see style.css).
       delete canvas.dataset.awaitingFrame;
       return true;
     };

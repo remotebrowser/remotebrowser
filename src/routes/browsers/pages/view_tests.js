@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
+import sharp from 'sharp';
 
 process.env.PGLITE_DATA_DIR = 'memory://';
 
 // A VM client with no real VMs. refreshPage resolves a CDP URL through it,
 // which the injected fake pool ignores, so nothing is dialed. Nothing is
 // saved on disk.
+// A real JPEG, since the screen is served as WebP made from it.
+const VNC_JPEG = await sharp({ create: { width: 64, height: 36, channels: 3, background: '#c03030' } })
+  .jpeg()
+  .toBuffer();
 const { setVmClient } = await import('../../../vm/index.js');
 setVmClient({
   resolveCdpUrl: async (browserId) => `ws://vm.test/devtools/browser/${browserId}`,
@@ -14,7 +19,8 @@ setVmClient({
   readSuspendedPreview: async () => null,
   saveScreenshot: async () => {},
   readSavedScreenshot: async () => null,
-  readAnySavedScreenshot: async () => null
+  readAnySavedScreenshot: async () => null,
+  captureScreen: async (browserId) => (['br-windows', 'br-linux'].includes(browserId) ? VNC_JPEG : null)
 });
 
 const FAKE_JPEG = Buffer.from('not a real jpeg, just something to round-trip', 'utf8');
@@ -23,13 +29,17 @@ const BROWSER_ID = 'br-1';
 const { createSessionCookie } = await import('../../../auth/session.js');
 const { routes } = await import('./view.js');
 const { cache } = await import('../../../screenshots.js');
+const { stopScreens } = await import('../../../screens.js');
 const { findOrCreateUser } = await import('../../../models/users.js');
 const { ensurePersonalWorkspace } = await import('../../../models/workspaces.js');
 const { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus, getBrowserInstanceByPublicId } =
   await import('../../../models/browsers.js');
 const { closeDatabase } = await import('../../../db/database.js');
 
-test.afterEach(async () => closeDatabase());
+test.afterEach(async () => {
+  stopScreens();
+  await closeDatabase();
+});
 
 // Each test starts with an empty cache and a fake pool whose capture result it
 // picks, so no worker thread or CDP dial runs.
@@ -44,6 +54,16 @@ const resetScreenshots = () => {
   };
 };
 test.beforeEach(resetScreenshots);
+
+// The VM screen, re-encoded as WebP.
+const assertScreen = async (res, { width = 64 } = {}) => {
+  assert.equal(res.headers.get('content-type'), 'image/webp');
+  const { format, width: served } = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.equal(format, 'webp');
+  assert.equal(served, width);
+};
+
+const isBlackScreen = (res) => res.headers.get('content-type') === 'image/svg+xml';
 
 const isPng = (buffer) => buffer[0] === 0x89 && buffer.subarray(1, 4).toString('latin1') === 'PNG';
 
@@ -263,4 +283,77 @@ test('GET /browsers/:browserId/pages/:pageId/view redirects to / and clears a st
   const res = await app.request('/browsers/999999/pages/page1/view', { headers: { cookie: `session=${cookie}` } });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/');
+});
+
+test('GET /browsers/:browserId/screen serves the VM screen of a running browser, and black before its VM runs', async () => {
+  const workspaceId = await makeUser();
+  const cookie = makeSessionCookie();
+  const running = await makeBrowser(workspaceId, { internalBrowserId: 'br-windows', status: 'running' });
+  const res = await setupApp().request(`/browsers/${running}/screen`, { headers: { cookie: `session=${cookie}` } });
+  assert.match(res.headers.get('cache-control'), /no-store/);
+  await assertScreen(res);
+
+  const starting = await makeBrowser(workspaceId, {});
+  const black = await setupApp().request(`/browsers/${starting}/screen`, {
+    headers: { cookie: `session=${cookie}` }
+  });
+  assert.ok(isBlackScreen(black));
+
+  const missing = await setupApp().request('/browsers/nope/screen', { headers: { cookie: `session=${cookie}` } });
+  assert.equal(missing.status, 404);
+});
+
+test('GET /browsers/:browserId/view shows the VM screen of a running browser with no page frame yet', async () => {
+  const workspaceId = await makeUser();
+  const publicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-windows', status: 'running' });
+  const res = await setupApp().request(`/browsers/${publicId}/view`, {
+    headers: { cookie: `session=${makeSessionCookie()}` }
+  });
+  await assertScreen(res);
+});
+
+test('GET /browsers/:browserId/screen shrinks the VM screen to the viewer, never enlarging it', async () => {
+  const workspaceId = await makeUser();
+  const cookie = makeSessionCookie();
+  const publicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-windows', status: 'running' });
+  const small = await setupApp().request(`/browsers/${publicId}/screen?w=16&dpr=2`, {
+    headers: { cookie: `session=${cookie}` }
+  });
+  await assertScreen(small, { width: 32 });
+  const large = await setupApp().request(`/browsers/${publicId}/screen?w=500`, {
+    headers: { cookie: `session=${cookie}` }
+  });
+  await assertScreen(large, { width: 64 });
+});
+
+test('GET /browsers/:browserId/view is black for a browser whose VM has not started', async () => {
+  const workspaceId = await makeUser();
+  const publicId = await makeBrowser(workspaceId, {});
+  const res = await setupApp().request(`/browsers/${publicId}/view`, {
+    headers: { cookie: `session=${makeSessionCookie()}` }
+  });
+  assert.equal(res.status, 200);
+  assert.ok(isBlackScreen(res));
+});
+
+// Until CDP lists a page, the VM screen stands in for it.
+test('GET /browsers/:browserId/screen and /view serve the VM screen of a running Linux browser with no page yet', async () => {
+  const workspaceId = await makeUser();
+  const cookie = makeSessionCookie();
+  const publicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-linux', status: 'running' });
+  for (const route of ['screen', 'view']) {
+    const res = await setupApp().request(`/browsers/${publicId}/${route}`, {
+      headers: { cookie: `session=${cookie}` }
+    });
+    await assertScreen(res);
+  }
+});
+
+test('GET /browsers/:browserId/screen is black once the browser stops', async () => {
+  const workspaceId = await makeUser();
+  const publicId = await makeBrowser(workspaceId, { internalBrowserId: 'br-linux', status: 'terminated' });
+  const res = await setupApp().request(`/browsers/${publicId}/screen`, {
+    headers: { cookie: `session=${makeSessionCookie()}` }
+  });
+  assert.ok(isBlackScreen(res));
 });

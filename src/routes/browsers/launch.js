@@ -108,7 +108,8 @@ const renderBrowserLaunch = async (c, data = {}) => {
     description: '',
     enableWebgl: true,
     notReady: false,
-    oses: oses.map((os) => ({ value: os, label: OSES[os].label })),
+    // Windows always runs Edge, so it offers no browser choice.
+    oses: oses.map((os) => ({ value: os, label: OSES[os].label, browserChoice: OSES[os].guest !== 'windows' })),
     os: defaultOsChoice(oses),
     browserApps: Object.entries(BROWSER_APPS).map(([value, { label }]) => ({ value, label })),
     browserApp: DEFAULT_BROWSER_APP,
@@ -172,9 +173,27 @@ const startBrowser = async ({
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
-  const started = await startBrowserVm({ os, proxy, screenResolution, screenScale, webgl, app });
+  // The id is recorded as soon as the VM runs, so the page can show its
+  // screen while the browser starts. Both calls share the one write.
+  /** @type {{recording: Promise<{data?: boolean, error?: string}> | null}} */
+  const once = { recording: null };
+  const record = (internalBrowserId) =>
+    (once.recording ??= recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId, userId }));
+  const started = await startBrowserVm({
+    os,
+    proxy,
+    screenResolution,
+    screenScale,
+    webgl,
+    app,
+    onVmStarted: ({ browserId }) => void record(browserId)
+  });
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
+    // The VM is gone, so a row that points at it must not stay starting.
+    if (once.recording && !(await once.recording).error) {
+      await updateBrowserInstanceStatus({ workspaceId, browserInstanceId, toStatus: 'terminated' });
+    }
     return;
   }
   // Fired once CDP exists, in parallel; best-effort, so nothing waits on it.
@@ -184,12 +203,7 @@ const startBrowser = async ({
     }
   });
 
-  const recorded = await recordProvisionedBrowser({
-    workspaceId,
-    browserInstanceId,
-    internalBrowserId: started.data.browserId,
-    userId
-  });
+  const recorded = await record(started.data.browserId);
   if (recorded.error) {
     consola.error(`Unable to record the remote browser id for ${browserInstanceId}: ${recorded.error}`);
     return;
@@ -288,6 +302,7 @@ const handleLaunch = async (c) => {
     browserName: name,
     browserDescription: description,
     config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
+    os,
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const refusal = launchRefusal(launched);

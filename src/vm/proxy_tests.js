@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { GUEST_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy } from './proxy.js';
+import { GUEST_PROXY_FILE, WINDOWS_PROXY_FILE, normalizeProxyUrl, maskProxyUrl, writeGuestProxy } from './proxy.js';
 
 test('normalizeProxyUrl takes http and socks proxies, with or without credentials', () => {
   assert.equal(normalizeProxyUrl('http://proxy.example.com:8080'), 'http://proxy.example.com:8080');
@@ -98,6 +98,14 @@ test('writeGuestProxy writes the proxy URL as one line into the guest file', asy
   assert.deepEqual(commands[0].args, { path: GUEST_PROXY_FILE, mode: 'w' });
   assert.equal(commands[2].args.handle, 7);
   assert.equal(writtenText(commands), 'http://u:p@proxy.example.com:8080\n');
+});
+
+test('writeGuestProxy writes into the Windows file for a Windows guest', async () => {
+  const { commands, connectQmp } = fakeAgent();
+  await writeGuestProxy({ dir: '/vm', proxy: 'socks5://u:p@proxy.example.com:1080', connectQmp, guest: 'windows' });
+  assert.deepEqual(commands[0].args, { path: WINDOWS_PROXY_FILE, mode: 'w' });
+  assert.equal(writtenText(commands), 'socks5://u:p@proxy.example.com:1080\n');
+  assert.equal(WINDOWS_PROXY_FILE, 'C:\\ProgramData\\remotebrowser\\proxy');
 });
 
 test('writeGuestProxy writes "direct" to clear the proxy', async () => {

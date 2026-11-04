@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_SCREEN_SCALE,
   GUEST_SCREEN_SCALE_FILE,
+  WINDOWS_SCREEN_SCALE_FILE,
   normalizeScreenScale,
   writeGuestScreenScale
 } from './screen-scale.js';
@@ -61,6 +62,13 @@ test('writeGuestScreenScale writes one line, or "default"', async () => {
     { path: GUEST_SCREEN_SCALE_FILE, text: '150\n' },
     { path: GUEST_SCREEN_SCALE_FILE, text: 'default\n' }
   ]);
+});
+
+test('writeGuestScreenScale writes into the Windows file for a Windows guest', async () => {
+  const { writes, connectQmp } = fakeAgent();
+  await writeGuestScreenScale({ dir: '/vm', screenScale: 175, connectQmp, guest: 'windows' });
+  assert.deepEqual(writes, [{ path: WINDOWS_SCREEN_SCALE_FILE, text: '175\n' }]);
+  assert.equal(WINDOWS_SCREEN_SCALE_FILE, 'C:\\ProgramData\\remotebrowser\\screen-scale');
 });
 
 test('writeGuestScreenScale refuses a bad scale without reaching the guest', async () => {

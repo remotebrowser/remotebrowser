@@ -26,10 +26,10 @@ describe('QEMU VMs', () => {
     return JSON.parse(result.stdout.toString());
   };
 
-  test('defaults to a data dir at .data/vm, 2G and 2 CPUs', () => {
+  test('defaults to a data dir at .data/vm, 4G of memory, and 2 CPUs', () => {
     const [dataDir, memory, cpus] = readVm({ VM_DATA_DIR: '', VM_MEMORY: '', VM_CPUS: '' });
     assert.match(dataDir, /[/\\]\.data[/\\]vm$/);
-    assert.equal(memory, '2G');
+    assert.equal(memory, '4G');
     assert.equal(cpus, 2);
   });
 

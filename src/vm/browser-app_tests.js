@@ -41,3 +41,15 @@ test('writeGuestBrowserApp says what failed', async () => {
     /unable to pick Google Chrome: no agent/
   );
 });
+
+test('writeGuestBrowserApp succeeds on Windows without reaching the guest', async () => {
+  let reached = false;
+  const connectQmp = async () => {
+    reached = true;
+    throw new Error('no agent');
+  };
+  for (const app of ['chromium', 'chrome']) {
+    await writeGuestBrowserApp({ dir: '/vm', app, connectQmp, guest: 'windows' });
+  }
+  assert.equal(reached, false);
+});

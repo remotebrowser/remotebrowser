@@ -2,6 +2,7 @@ import { access, readFile, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
 import { osLayout, vmLayout } from './layout.js';
+import { guestOf, machineOs } from './os.js';
 import { imageFiles } from './qemu.js';
 import { LOG_ATTRIBUTES } from './step.js';
 
@@ -20,8 +21,8 @@ const exists = (file) =>
     () => false
   );
 
-const hasImageFiles = async (image) => {
-  for (const file of Object.values(imageFiles(image))) {
+const hasImageFiles = async (image, guest = 'linux') => {
+  for (const file of Object.values(imageFiles(image, guest))) {
     if (!(await exists(file))) {
       return false;
     }
@@ -79,7 +80,7 @@ const pruneImages = async ({ dataDir, os, keep, vmDirs = [] }) => {
 // A VM resumes only on the very image files it started on; on others, its
 // disk would no longer match.
 const checkImage = async (machine) => {
-  for (const file of Object.values(imageFiles(machine.image))) {
+  for (const file of Object.values(imageFiles(machine.image, guestOf(machineOs(machine))))) {
     await access(file).catch(() => {
       throw new Error(`its image file ${file} is gone`);
     });

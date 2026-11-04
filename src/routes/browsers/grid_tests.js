@@ -51,7 +51,7 @@ test('GET /browsers/grid renders each browser as a card with its name', async ()
   assert.match(body, /class="browser-grid-name" title="calm-otter">calm-otter</);
 });
 
-test('GET /browsers/grid shows a thumbnail for a running or suspended browser, not a starting one', async () => {
+test('GET /browsers/grid shows a thumbnail for a browser whose VM runs, not for one still without a VM', async () => {
   const created = await findOrCreateUser({ email: 'user@example.com' });
   const workspace = await ensurePersonalWorkspace({
     userId: created.data.id,
@@ -76,6 +76,7 @@ test('GET /browsers/grid shows a thumbnail for a running or suspended browser, n
   const running = await launch('calm-otter', 'running');
   const suspended = await launch('sleepy-otter', 'suspended');
   const starting = await launch('new-otter', null);
+  const booting = await launch('busy-otter', 'starting');
   const cookie = createSessionCookie({
     publicId: created.data.publicId,
     email: 'user@example.com',
@@ -95,5 +96,7 @@ test('GET /browsers/grid shows a thumbnail for a running or suspended browser, n
     body,
     new RegExp(`<figure class="browser-suspended-preview">\\s*<img[^>]*id="screenshot-${running}"`)
   );
-  assert.doesNotMatch(body, new RegExp(`id="screenshot-${starting}"`));
+  // Black until its VM screen can be read, so the card has its shape at once.
+  assert.match(body, new RegExp(`id="screenshot-${starting}"`));
+  assert.match(body, new RegExp(`id="screenshot-${booting}"`));
 });

@@ -15,10 +15,11 @@ const buildVmConfig = (env) => {
   if (!socketPathsFit(VM_DATA_DIR)) {
     errors.push(`VM_DATA_DIR is too long for the VM's sockets: ${VM_DATA_DIR}`);
   }
-  // Chromium needs well over QEMU's 128M default.
-  const VM_MEMORY = env.VM_MEMORY || '2G';
+  // The same for every OS. Windows needs 4G, and Linux runs on less, but
+  // one size keeps the hosts simple to plan.
+  const VM_MEMORY = env.VM_MEMORY || '4G';
   if (!/^[1-9][0-9]*[MG]$/.test(VM_MEMORY)) {
-    errors.push('VM_MEMORY must be a size in M or G, e.g. 2G');
+    errors.push('VM_MEMORY must be a size in M or G, e.g. 4G');
   }
   const vmCpus = env.VM_CPUS ? Number(env.VM_CPUS) : 2;
   if (!Number.isInteger(vmCpus) || vmCpus < 1) {

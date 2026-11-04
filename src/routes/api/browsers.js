@@ -179,7 +179,8 @@ routes.post('/', async (c) => {
     userId: user.id,
     browserName: settings.name ?? generateBrowserName(),
     browserDescription: settings.description ?? '',
-    config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null
+    config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
+    os
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
@@ -221,8 +222,14 @@ routes.get('/:browserId', async (c) => {
   const browser = await loadBrowser(c);
   if (browser.error) return c.json({ error: 'Unable to read the browser. Please try again.' }, 503);
   if (!browser.data) return c.json(NOT_FOUND, 404);
-  const { publicId, status, browserDescription } = browser.data;
-  return c.json({ browser_id: publicId, status, description: browserDescription });
+  const { publicId, status, browserDescription, os, creationTimestamp } = browser.data;
+  return c.json({
+    browser_id: publicId,
+    status,
+    description: browserDescription,
+    os,
+    creation_timestamp: creationTimestamp
+  });
 });
 
 routes.delete('/:browserId', async (c) => {

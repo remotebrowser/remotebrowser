@@ -9,6 +9,8 @@ import { MAX_SOCKET_PATH } from './qemu.js';
 //                                 never changed once written (image.js)
 //   snapshots/<os>/               the VM that new VMs of that OS start from
 //                                 (snapshot.js)
+//   iso/                          what the Windows image is installed from
+//                                 (windows-image.js)
 //   machines/<browser-id>/        one VM per browser (client.js)
 //   run/                          the VM that vm/scripts/run.js starts
 //                                 (local.js)
@@ -17,6 +19,7 @@ const vmLayout = (dataDir) => {
   return {
     images: path.join(root, 'images'),
     snapshots: path.join(root, 'snapshots'),
+    iso: path.join(root, 'iso'),
     machines: path.join(root, 'machines'),
     run: path.join(root, 'run')
   };

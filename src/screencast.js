@@ -116,6 +116,21 @@ const encodeFrame = async (frame, width = 0) => {
   return pending;
 };
 
+// A viewer on a 3x display gains little from more pixels and costs bandwidth.
+const MAX_PIXEL_RATIO = 2;
+
+// The width to encode a frame at for one viewer, from the `w` (CSS pixels)
+// and `dpr` it sends, so the frame stays sharp. 0 keeps the source width,
+// and a missing or invalid ratio leaves the frame at CSS pixels.
+const viewerWidth = ({ w, dpr }) => {
+  const width = Number.parseInt(w ?? '', 10);
+  const ratio = Number.parseFloat(dpr ?? '');
+  const pixelRatio = Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, MAX_PIXEL_RATIO) : 1;
+  return Number.isSafeInteger(width) && width > 0
+    ? Math.min(Math.round(width * pixelRatio), SCREENCAST_OPTIONS.maxWidth)
+    : 0;
+};
+
 const publishFrame = (entry, data) => {
   // Chrome sends JPEG, and this is the frame before any resize for viewers.
   void saveBrowserScreenshot({ browserId: entry.browserId, pageId: entry.pageId, jpeg: data });
@@ -299,4 +314,4 @@ const stopScreencasts = async () => {
   );
 };
 
-export { nextFrame, encodeFrame, stopScreencasts, cache, SCREENCAST_OPTIONS };
+export { nextFrame, encodeFrame, viewerWidth, stopScreencasts, cache, SCREENCAST_OPTIONS };

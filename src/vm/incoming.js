@@ -25,14 +25,15 @@ const continueIncoming = async (qmp, timeoutMs) => {
 // The guest clock stopped when the state was saved. The guest agent sets it
 // from the VM's hardware clock, which follows the host's. A wrong clock breaks
 // TLS and cookies, but not the VM, so a failure here is logged rather than
-// thrown.
-const setGuestClock = async ({ dir, name, connectQmp, attempts = 20 }) => {
+// thrown. The Windows agent cannot read the hardware clock, so it gets the
+// host's time, in nanoseconds.
+const setGuestClock = async ({ dir, name, connectQmp, guest = 'linux', attempts = 20 }) => {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const agent = await connectQmp(path.join(dir, 'qga.sock'), { agent: true, timeoutMs: 3000 });
       try {
-        await agent.execute('guest-set-time');
+        await agent.execute('guest-set-time', guest === 'windows' ? { time: Date.now() * 1e6 } : undefined);
         return;
       } finally {
         agent.close();

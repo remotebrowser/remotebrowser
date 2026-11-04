@@ -3,8 +3,10 @@ import { writeGuestFile } from './guest-file.js';
 // The browser's screen scale, in percent. The host writes it, as one line
 // such as "150", or "default", into this guest file through the guest agent.
 // The guest sets the labwc output scale to it, and Chromium follows at once,
-// without a restart. See screen-scale in vm/linux/files.
+// without a restart. See screen-scale in vm/linux/files, and for Windows,
+// screen-scale.ps1 in vm/windows-11.
 const GUEST_SCREEN_SCALE_FILE = '/etc/remotebrowser/screen-scale';
+const WINDOWS_SCREEN_SCALE_FILE = 'C:\\ProgramData\\remotebrowser\\screen-scale';
 const DEFAULT = 'default';
 
 // What the image uses with no file.
@@ -38,9 +40,9 @@ const normalizeScreenScale = (input) => {
 /**
  * Writes the screen scale into the guest, which sets the output scale to it.
  * Null means the image's default.
- * @param {{dir: string, screenScale: number | null, connectQmp: Function, attempts?: number}} params
+ * @param {{dir: string, screenScale: number | null, connectQmp: Function, guest?: string, attempts?: number}} params
  */
-const writeGuestScreenScale = async ({ dir, screenScale, connectQmp, attempts = 20 }) => {
+const writeGuestScreenScale = async ({ dir, screenScale, connectQmp, guest = 'linux', attempts = 20 }) => {
   const scale = normalizeScreenScale(screenScale);
   const line = scale ? String(scale) : DEFAULT;
   // The guest rejects a file without its closing newline, so a partial write
@@ -48,7 +50,7 @@ const writeGuestScreenScale = async ({ dir, screenScale, connectQmp, attempts = 
   try {
     await writeGuestFile({
       dir,
-      file: GUEST_SCREEN_SCALE_FILE,
+      file: guest === 'windows' ? WINDOWS_SCREEN_SCALE_FILE : GUEST_SCREEN_SCALE_FILE,
       content: Buffer.from(`${line}\n`),
       connectQmp,
       attempts
@@ -60,4 +62,10 @@ const writeGuestScreenScale = async ({ dir, screenScale, connectQmp, attempts = 
   }
 };
 
-export { DEFAULT_SCREEN_SCALE, GUEST_SCREEN_SCALE_FILE, normalizeScreenScale, writeGuestScreenScale };
+export {
+  DEFAULT_SCREEN_SCALE,
+  GUEST_SCREEN_SCALE_FILE,
+  WINDOWS_SCREEN_SCALE_FILE,
+  normalizeScreenScale,
+  writeGuestScreenScale
+};
