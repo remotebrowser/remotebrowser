@@ -8,6 +8,7 @@ After=display.service nftables.service tinyproxy.service cdp-proxy.service netwo
 [Service]
 Type=oneshot
 ExecStartPre=/usr/local/bin/wait-for-display
+ExecStartPre=-/usr/local/bin/clear-memory
 ExecStart=/bin/echo remotebrowser: guest ready
 StandardOutput=journal+console
 
