@@ -96,7 +96,9 @@ test('every endpoint answers 401 with a Bearer challenge without an API key', as
     ['GET', '/api/v1/browsers/Bxxxxxx'],
     ['DELETE', '/api/v1/browsers/Bxxxxxx'],
     ['GET', '/api/v1/browsers/Bxxxxxx/cdp'],
-    ['POST', '/api/v1/browsers/Bxxxxxx/type']
+    ['POST', '/api/v1/browsers/Bxxxxxx/type'],
+    ['POST', '/api/v1/browsers/Bxxxxxx/mouse'],
+    ['GET', '/api/v1/browsers/Bxxxxxx/mouse']
   ]) {
     for (const apiKey of [undefined, 'sk-rb-v1-nope']) {
       const res = await call(app, path, { method, apiKey });
@@ -832,4 +834,90 @@ test('POST /:id/type answers 404 and 409 as the browser is, and only logs a fail
   const running = await makeBrowser({ workspaceId, userId, internalBrowserId: 'Qdef67890' });
   const failed = await sendJson('POST', `/api/v1/browsers/${running}/type`, apiKey, { text: 'hi' });
   assert.equal(failed.status, 202);
+});
+
+test('POST /:id/mouse answers once the VM took the events, or 502 when it did not', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const publicId = await makeBrowser({ workspaceId, userId });
+  const used = [];
+  fakeVms({
+    useMouse: async (browserId, actions) => {
+      used.push([browserId, actions]);
+    }
+  });
+  const actions = [
+    { action: 'click', x: 100, y: 200 },
+    { action: 'scroll', dy: 3 }
+  ];
+  const res = await sendJson('POST', `/api/v1/browsers/${publicId}/mouse`, apiKey, { actions });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { browser_id: publicId });
+  assert.deepEqual(used, [['Qabc12345', actions]]);
+  fakeVms({ useMouse: async () => Promise.reject(new Error('QMP went away')) });
+  const failed = await sendJson('POST', `/api/v1/browsers/${publicId}/mouse`, apiKey, { actions });
+  assert.equal(failed.status, 502);
+  assert.deepEqual(await failed.json(), { error: 'Unable to use the mouse. Please try again.' });
+});
+
+test('POST /:id/mouse refuses a bad body or action, and answers 409 for a browser that is not running', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const publicId = await makeBrowser({ workspaceId, userId });
+  const used = [];
+  fakeVms({ useMouse: async (_browserId, actions) => used.push(actions) });
+  for (const [body, error] of [
+    ['', 'The request body must be JSON.'],
+    [{ actions: [], text: 'hi' }, 'Unknown field: text.'],
+    [{}, 'The actions must be a list.'],
+    [{ actions: [{ action: 'click', button: 'thumb' }] }, /^Action 0 has a button that is not one of/],
+    [{ actions: [{ action: 'move', x: 5000, y: 0 }] }, /^Action 0 needs x from 0 to 3839/]
+  ]) {
+    const res = await sendJson('POST', `/api/v1/browsers/${publicId}/mouse`, apiKey, body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+    const { error: message } = await res.json();
+    if (typeof error === 'string') assert.equal(message, error);
+    else assert.match(message, error);
+  }
+  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended', internalBrowserId: 'Qdef67890' });
+  const asleep = await sendJson('POST', `/api/v1/browsers/${suspended}/mouse`, apiKey, {
+    actions: [{ action: 'click' }]
+  });
+  assert.equal(asleep.status, 409);
+  assert.deepEqual(await asleep.json(), {
+    error: 'Only a running browser can take mouse input.',
+    browser_id: suspended,
+    status: 'suspended'
+  });
+  assert.deepEqual(used, []);
+});
+
+test('GET /:id/mouse answers where the pointer is, or 502 when QEMU cannot tell', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const publicId = await makeBrowser({ workspaceId, userId });
+  const read = (at) => {
+    fakeVms({
+      readMouse: async (browserId) => {
+        assert.equal(browserId, 'Qabc12345');
+        if (at instanceof Error) throw at;
+        return at;
+      }
+    });
+    return call(setupApp(), `/api/v1/browsers/${publicId}/mouse`, { apiKey });
+  };
+  const found = await read({ x: 10, y: 20, visible: true });
+  assert.equal(found.status, 200);
+  assert.deepEqual(await found.json(), { browser_id: publicId, x: 10, y: 20, visible: true });
+  for (const at of [null, new Error('vm/send-fd not found')]) {
+    const res = await read(at);
+    assert.equal(res.status, 502);
+    assert.deepEqual(await res.json(), { error: 'Unable to read the mouse position. Please try again.' });
+  }
+  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended', internalBrowserId: 'Qdef67890' });
+  const asleep = await call(setupApp(), `/api/v1/browsers/${suspended}/mouse`, { apiKey });
+  assert.equal(asleep.status, 409);
+  assert.equal((await asleep.json()).error, 'Only a running browser has a mouse pointer.');
+  const missing = await call(setupApp(), '/api/v1/browsers/Bxxxxxx/mouse', { apiKey });
+  assert.equal(missing.status, 404);
 });

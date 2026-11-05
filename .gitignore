@@ -71,3 +71,5 @@ typings/
 # Documentation (Zensical)
 /site/
 /.venv/
+
+/vm/send-fd

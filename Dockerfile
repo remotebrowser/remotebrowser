@@ -1,3 +1,7 @@
+FROM node:24-trixie AS send-fd
+COPY vm/send-fd.c vm/build-send-fd.sh /src/
+RUN /src/build-send-fd.sh && test -x /src/send-fd
+
 FROM node:24-trixie-slim
 
 # QEMU runs the browser VMs; only the system emulator for this architecture.
@@ -6,18 +10,19 @@ FROM node:24-trixie-slim
 # xorriso makes the unattend CD for a Windows guest.
 RUN apt-get update \
     && case "$(dpkg --print-architecture)" in arm64) qemu=qemu-system-arm ;; *) qemu=qemu-system-x86 ;; esac \
-    && apt-get install -y --no-install-recommends "$qemu" qemu-utils zstd xorriso docker-cli docker-buildx ca-certificates \
+    && apt-get install -y --no-install-recommends "$qemu" qemu-system-modules-opengl qemu-utils zstd xorriso docker-cli docker-buildx ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --chown=node:node package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY --chown=node:node src ./src
 COPY --chown=node:node views ./views
 COPY --chown=node:node public ./public
 COPY --chown=node:node vm ./vm
+COPY --from=send-fd /src/send-fd ./vm/send-fd
 
 # VM_DATA_DIR: the image builds, the snapshot that the server saves at
 # startup, and the VMs. Mount it, writable, to keep it all across restarts,

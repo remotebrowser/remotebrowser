@@ -1,7 +1,8 @@
 #!/bin/sh
 # Check that this host can run the browser VMs. QEMU and hardware
 # virtualization (KVM on Linux, HVF on macOS) are required; without zstd,
-# suspended VMs only take more disk space.
+# suspended VMs only take more disk space, and without QEMU's D-Bus display
+# or vm/send-fd, the API cannot read where the mouse pointer is.
 
 fatal() {
   echo "ERROR: $1" >&2
@@ -37,6 +38,18 @@ if command -v zstd >/dev/null 2>&1; then
   ok "$(zstd --version)"
 else
   warn "zstd is not installed, so the state of suspended VMs stays uncompressed"
+fi
+
+# Reading the guest's pointer needs both of these (src/vm/cursor.js).
+if "$qemu" -display help 2>/dev/null | grep -qx dbus; then
+  ok "QEMU has the D-Bus display"
+else
+  warn "QEMU has no D-Bus display (on Debian or Ubuntu, install qemu-system-modules-opengl), so the API cannot read where the mouse pointer is"
+fi
+if [ -x "$(dirname "$0")/send-fd" ]; then
+  ok "vm/send-fd is built"
+else
+  warn "vm/send-fd is not built (run vm/build-send-fd.sh, which needs a C compiler), so the API cannot read where the mouse pointer is"
 fi
 
 if [ "$(uname -s)" = Darwin ]; then

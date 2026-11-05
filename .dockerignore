@@ -85,3 +85,5 @@ pyproject.toml
 uv.lock
 zensical.toml
 **/*_tests.js
+
+vm/send-fd
