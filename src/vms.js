@@ -228,6 +228,16 @@ const setBrowserScreenScale = (browserId, screenScale) =>
   changeBrowser(browserId, () => vms.setScreenScale(browserId, screenScale));
 
 /**
+ * Types text into a running browser as key presses on a US keyboard, with
+ * a person's pauses between them (see src/vm/keyboard.js). Resolves once the
+ * last key is let go.
+ * @param {string} browserId
+ * @param {string} text
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const typeBrowserText = (browserId, text) => changeBrowser(browserId, () => vms.typeText(browserId, text));
+
+/**
  * The VM's screen as a JPEG, read over VNC, so it needs no browser in the VM.
  * Null when it cannot be read.
  * @param {{browserId: string}} params
@@ -263,5 +273,6 @@ export {
   setBrowserProxy,
   clearBrowserProxy,
   setBrowserScreenResolution,
-  setBrowserScreenScale
+  setBrowserScreenScale,
+  typeBrowserText
 };
