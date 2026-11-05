@@ -21,6 +21,7 @@ import { createVmClient } from './client.js';
 //   screen-scale.js       the browser's screen scale
 //   webgl.js    WebGL on the CPU
 //   browser-app.js  Chromium or Google Chrome
+//   keyboard.js  typing text as key presses
 //   client.js   the VM client that ties these together
 
 // Reassignable so tests (and future callers) can swap the client; importers read
@@ -37,6 +38,7 @@ export { BROWSER_APPS, DEFAULT_BROWSER_APP, isBrowserApp, resolveBrowserApp } fr
 export { DEFAULT_SCREEN_RESOLUTION, normalizeScreenResolution } from './screen-resolution.js';
 export { DEFAULT_SCREEN_SCALE, normalizeScreenScale } from './screen-scale.js';
 export { normalizeProxyUrl, maskProxyUrl } from './proxy.js';
+export { MAX_TEXT_LENGTH, textToKeys } from './keyboard.js';
 export { openQmp } from './qmp.js';
 export { isWellFormedBrowserId } from './state.js';
 export { setVmClient, vms };

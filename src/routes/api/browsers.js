@@ -21,7 +21,7 @@ import {
 } from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
-import { setBrowserProxy, clearBrowserProxy } from '../../vms.js';
+import { setBrowserProxy, clearBrowserProxy, typeBrowserText } from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -30,7 +30,8 @@ import {
   normalizeProxyUrl,
   maskProxyUrl,
   resolveBrowserApp,
-  resolveOs
+  resolveOs,
+  textToKeys
 } from '../../vm/index.js';
 
 // Documented in docs/api.md. A browser_id is the browser's public id, and a key
@@ -365,6 +366,54 @@ routes.patch('/:browserId/config', async (c) => {
     logAction(c, 'API browser configured', browser.data);
   }
   return c.json(configResponse(browser.data, config));
+});
+
+// Any key of the workspace may type, as it may drive the browser over CDP.
+routes.post('/:browserId/type', async (c) => {
+  /** @type {any} */
+  let body;
+  try {
+    body = JSON.parse(await c.req.text());
+  } catch {
+    return c.json({ error: 'The request body must be JSON.' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return c.json({ error: 'The request body must be a JSON object.' }, 400);
+  }
+  const unknown = Object.keys(body).find((key) => key !== 'text');
+  if (unknown) {
+    return c.json({ error: `Unknown field: ${unknown}.` }, 400);
+  }
+  try {
+    textToKeys(body.text);
+  } catch (error) {
+    return c.json({ error: `${error.message}.` }, 400);
+  }
+  const browser = await loadBrowser(c);
+  if (browser.error) return c.json({ error: 'Unable to read the browser. Please try again.' }, 503);
+  if (!browser.data) return c.json(NOT_FOUND, 404);
+  if (browser.data.status !== 'running') {
+    return c.json(
+      {
+        error: 'Only a running browser can take key presses.',
+        browser_id: browser.data.publicId,
+        status: browser.data.status
+      },
+      409
+    );
+  }
+  // Typing takes as long as a person would, so the caller does not wait for it.
+  void typeBrowserText(browser.data.internalBrowserId, body.text).then((typed) => {
+    if (typed.error) {
+      consola.error('API could not type into a browser', {
+        'event.domain': 'api',
+        'error.type': String(typed.error),
+        'browser.public_id': browser.data.publicId
+      });
+    }
+  });
+  logAction(c, 'API browser typing', browser.data);
+  return c.json({ browser_id: browser.data.publicId, status: 'typing' }, 202);
 });
 
 // The real CDP endpoint is a WebSocket upgrade, served by the relay in src/cdp.js.

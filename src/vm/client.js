@@ -28,6 +28,7 @@ import {
   readSuspendedPreviewList,
   writeScreenshot
 } from './previews.js';
+import { textToKeys, typeText as typeGuestText } from './keyboard.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -592,6 +593,41 @@ const createVmClient = ({
     });
   };
 
+  // One text at a time per browser, so the keys of two calls do not mix.
+  /** @type {Map<string, Promise<unknown>>} */
+  const typing = new Map();
+
+  // Types text into a running browser, as key presses (keyboard.js).
+  const typeText = async (browserId, text) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    textToKeys(text);
+    const name = vmName(browserId);
+    const previous = typing.get(browserId) ?? Promise.resolve();
+    const run = previous.then(async () => {
+      if (!(await browserIsRunning(browserId))) {
+        throw new Error(`${name} is not running`);
+      }
+      await typeGuestText({ dir: vmDir(browserId), text, connectQmp, delay });
+    });
+    const settled = run.catch(() => {});
+    typing.set(browserId, settled);
+    try {
+      await run;
+    } finally {
+      if (typing.get(browserId) === settled) {
+        typing.delete(browserId);
+      }
+    }
+    // Never the text itself, which may be a password.
+    consola.log(`QEMU typed text into browser VM ${name}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.text_length': Array.from(text).length
+    });
+  };
+
   // The OS of a browser's VM, or null for a bad id.
   const browserOs = async (browserId) => (isWellFormedBrowserId(browserId) ? vmOs(browserId) : null);
 
@@ -636,6 +672,7 @@ const createVmClient = ({
     clearProxy,
     setScreenResolution,
     setScreenScale,
+    typeText,
     resolveCdpUrl
   };
 };
