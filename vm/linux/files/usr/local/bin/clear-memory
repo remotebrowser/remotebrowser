@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs just before the host saves the snapshot (see guest-ready.service). The
+# snapshot saves every page that is not all zeros, so drop what the boot
+# read, and zero the freed pages, which keep their old data otherwise.
+set -eu
+sync
+echo 3 >/proc/sys/vm/drop_caches
+# All the free memory but a margin, so nothing runs out meanwhile.
+size=$(awk '/MemAvailable/ { print int($2 / 1024) - 256 }' /proc/meminfo)
+dir=$(mktemp -d)
+mount -t tmpfs -o "size=${size}m" zero "$dir"
+dd if=/dev/zero of="$dir/zero" bs=1M count="$size" 2>/dev/null || true
+umount "$dir"
+rmdir "$dir"
