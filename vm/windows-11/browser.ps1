@@ -29,6 +29,17 @@ function ProxyApplied {
   }
 }
 
+# The browser process, not its helpers, which have a --type flag.
+function Running {
+  Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
+    Where-Object { $_.CommandLine -like "*--remote-debugging-port=$port*" -and $_.CommandLine -notlike '*--type=*' }
+}
+
+# The first WMI query and COM call in a process are slow. Make them now, so
+# they are done in the snapshot and not at every launch.
+$shell = New-Object -ComObject WScript.Shell
+$null = Running
+
 # Not before the proxy is in use, so even the first request takes that
 # route. A proxy that is never set keeps the browser from starting, and the
 # host gives up on it.
@@ -38,13 +49,7 @@ while (-not (Test-Path $start) -or -not (ProxyApplied)) {
 
 # Windows opens the Start menu at the first logon, so the snapshot has it
 # open, above the browser window. Esc closes it.
-(New-Object -ComObject WScript.Shell).SendKeys('{ESC}')
-
-# The browser process, not its helpers, which have a --type flag.
-function Running {
-  Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
-    Where-Object { $_.CommandLine -like "*--remote-debugging-port=$port*" -and $_.CommandLine -notlike '*--type=*' }
-}
+$shell.SendKeys('{ESC}')
 
 while ($true) {
   if (-not (Running)) {
