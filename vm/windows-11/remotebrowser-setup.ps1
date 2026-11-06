@@ -111,6 +111,34 @@ function Debloat {
       try { Disable-ScheduledTask -InputObject $_ | Out-Null } catch {}
     }
   }
+
+  # A VM starts from a snapshot that may be days old, and the host moves its
+  # clock to now. Every timer that was due in between then fires at once, and
+  # takes the CPU from Edge as it starts. Edge Update's are among them, though
+  # its policies keep Edge as it is.
+  Get-ScheduledTask -TaskName 'MicrosoftEdgeUpdate*' -ErrorAction SilentlyContinue | ForEach-Object {
+    try { Disable-ScheduledTask -InputObject $_ | Out-Null } catch {}
+  }
+  # Defender still scans what is written and run, but no longer scans on a
+  # schedule, catches up on scans it missed, or checks for new signatures.
+  try {
+    Set-MpPreference -ScanScheduleDay 8 -RemediationScheduleDay 8 -DisableCatchupQuickScan $true `
+      -DisableCatchupFullScan $true -SignatureScheduleDay 8 -SignatureUpdateInterval 0 `
+      -SignatureDisableUpdateOnStartupWithoutEngine $true
+  } catch {
+    Report "could not change the Defender schedule: $_"
+  }
+  # So the snapshot has the signatures of the build date, not of the ISO.
+  # Real-time protection still works with older ones, so the build goes on.
+  Report 'updating Defender signatures'
+  try {
+    Update-MpSignature -ErrorAction Stop
+  } catch {
+    Report "could not update the Defender signatures: $_"
+  }
+  Get-ScheduledTask -TaskPath '\Microsoft\Windows\Windows Defender\' -ErrorAction SilentlyContinue | ForEach-Object {
+    try { Disable-ScheduledTask -InputObject $_ | Out-Null } catch {}
+  }
 }
 
 try {
