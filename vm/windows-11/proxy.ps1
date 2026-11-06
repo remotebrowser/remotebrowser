@@ -87,7 +87,18 @@ while ($true) {
       $applied = $wanted
     } catch {}
   }
+  # Not applied until 3proxy listens, so the browser never starts without it.
+  $listening = $false
   if ($wanted -eq $applied) {
+    try {
+      if ((Get-Service 3proxy).Status -ne 'Running') {
+        Start-Service 3proxy
+      }
+    } catch {}
+    $listening = [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
+      Where-Object { $_.Port -eq 8119 -and $_.Address -eq [Net.IPAddress]::Loopback }
+  }
+  if ($listening) {
     try {
       if (-not (Test-Path $done) -or [IO.File]::ReadAllText($done) -ne $source) {
         [IO.File]::WriteAllText($done, $source)

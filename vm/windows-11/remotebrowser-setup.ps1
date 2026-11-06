@@ -220,6 +220,9 @@ try {
   # the upstream proxy that the host sets. The image as it was built goes out
   # directly; proxy.ps1 rewrites this config and restarts the service.
   Report 'installing 3proxy'
+  # Defender flags 3proxy.exe and removes it.
+  Add-MpPreference -ExclusionPath 'C:\Program Files\3proxy'
+  Add-MpPreference -ExclusionProcess 'C:\Program Files\3proxy\3proxy.exe'
   $three = 'C:\Program Files\3proxy'
   New-Item $three -ItemType Directory -Force | Out-Null
   Expand-Archive -Path (Join-Path $unattend.Root '3proxy.zip') -DestinationPath $three -Force
