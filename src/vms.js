@@ -238,6 +238,21 @@ const setBrowserScreenScale = (browserId, screenScale) =>
 const typeBrowserText = (browserId, text) => changeBrowser(browserId, () => vms.typeText(browserId, text));
 
 /**
+ * Moves, clicks, and scrolls the mouse of a running browser (src/vm/mouse.js).
+ * @param {string} browserId
+ * @param {unknown[]} actions
+ * @returns {Promise<{data?: true, error?: string}>}
+ */
+const useBrowserMouse = (browserId, actions) => changeBrowser(browserId, () => vms.useMouse(browserId, actions));
+
+/**
+ * The mouse pointer of a running browser in screen pixels, or null if QEMU cannot tell.
+ * @param {string} browserId
+ * @returns {Promise<{data?: {x: number, y: number, visible: boolean} | null, error?: string}>}
+ */
+const readBrowserMouse = (browserId) => attempt(browserId, () => vms.readMouse(browserId));
+
+/**
  * The VM's screen as a JPEG, read over VNC, so it needs no browser in the VM.
  * Null when it cannot be read.
  * @param {{browserId: string}} params
@@ -274,5 +289,7 @@ export {
   clearBrowserProxy,
   setBrowserScreenResolution,
   setBrowserScreenScale,
-  typeBrowserText
+  typeBrowserText,
+  useBrowserMouse,
+  readBrowserMouse
 };

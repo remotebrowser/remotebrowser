@@ -29,6 +29,8 @@ import {
   writeScreenshot
 } from './previews.js';
 import { textToKeys, typeText as typeGuestText } from './keyboard.js';
+import { readPointer as readGuestPointer } from './cursor.js';
+import { parseMouseActions, runMouseActions } from './mouse.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
@@ -70,7 +72,9 @@ const createVmClient = ({
   suspendTimeoutMs = SUSPEND_TIMEOUT_MS,
   zstd = 'zstd',
   readScreenSize = readVncScreenSize,
-  readFrame = readVncFrame
+  readFrame = readVncFrame,
+  readPointer = readGuestPointer,
+  runCommand = host.run
 } = {}) => {
   const { binary } = ARCHES[arch];
   const { machines: machinesDir } = vmLayout(dataDir);
@@ -78,6 +82,12 @@ const createVmClient = ({
   const vmDir = (browserId) => path.join(machinesDir, browserId);
   let accelPromise = accel ? Promise.resolve(accel) : null;
   const getAccel = () => (accelPromise ??= detectAccel());
+  // QEMU does not start with a display that its build lacks.
+  let dbusDisplayPromise = null;
+  const hasDbusDisplay = () =>
+    (dbusDisplayPromise ??= runCommand([binary, '-display', 'help']).then(
+      ({ code, stdout }) => code === 0 && /^dbus$/m.test(stdout)
+    ));
 
   // Starts QEMU for the machine in `dir`, booting it or, with `incoming`,
   // loading that saved state, and waits until its CDP port is forwarded.
@@ -100,6 +110,7 @@ const createVmClient = ({
         incoming,
         cdpHostPort,
         vncHostPort,
+        dbusDisplay: await hasDbusDisplay(),
         ...machine
       });
       const { pid, exited } = await start([binary, ...args], logFile);
@@ -216,6 +227,7 @@ const createVmClient = ({
       if (screenResolution) {
         await writeGuestScreenResolution({ dir, screenResolution, connectQmp, guest });
         await waitForScreenResolution(started.vncHostPort, screenResolution, guest);
+        await keepScreenResolution(dir, screenResolution);
       }
       // After the size, since the largest scale Windows offers depends on it.
       if (screenScale) {
@@ -236,6 +248,10 @@ const createVmClient = ({
     }
     return started;
   };
+
+  // The mouse needs the exact size, which VNC loses when the GPU pads the rows.
+  const keepScreenResolution = (dir, { width, height }) =>
+    writeFile(path.join(dir, 'screen-resolution'), `${width}x${height}\n`);
 
   // The guest sets the screen size a moment after the host writes it, and a
   // change while it sets one would be missed, so wait until it shows.
@@ -563,6 +579,7 @@ const createVmClient = ({
     const guest = guestOf(await vmOs(browserId));
     await writeGuestScreenResolution({ dir, screenResolution: resolution, connectQmp, guest });
     await waitForScreenResolution(vncPort, resolution ?? DEFAULT_SCREEN_RESOLUTION, guest);
+    await keepScreenResolution(dir, resolution ?? DEFAULT_SCREEN_RESOLUTION);
     consola.log(`QEMU set the screen resolution of browser VM ${name}`, {
       'event.domain': 'qemu',
       'rb.runtime': 'qemu',
@@ -628,6 +645,58 @@ const createVmClient = ({
     });
   };
 
+  // Older VMs did not keep the size, so fall back to VNC's (screen-resolution.js).
+  const screenSize = async (browserId) => {
+    const dir = vmDir(browserId);
+    const kept = await readFile(path.join(dir, 'screen-resolution'), 'utf8').catch(() => '');
+    const match = /^(\d+)x(\d+)$/.exec(kept.trim());
+    if (match) {
+      return { width: Number(match[1]), height: Number(match[2]) };
+    }
+    const vncPort = await readPort(dir, 'vnc-port');
+    if (!Number.isInteger(vncPort)) {
+      throw new Error(`VNC port not found for ${vmName(browserId)}`);
+    }
+    return readScreenSize(vncPort, cdpRetry.timeoutMs);
+  };
+
+  // Null without QEMU's D-Bus display, or when the guest has no hardware cursor.
+  const pointerOf = async (browserId) => {
+    if (!(await hasDbusDisplay())) {
+      return null;
+    }
+    return readPointer({ dir: vmDir(browserId) });
+  };
+
+  // Moves, clicks, and scrolls the mouse of a running browser (mouse.js).
+  const useMouse = async (browserId, actions) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    parseMouseActions(actions);
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${vmName(browserId)} is not running`);
+    }
+    const screen = await screenSize(browserId);
+    await runMouseActions({ dir: vmDir(browserId), actions, screen, connectQmp });
+    consola.log(`QEMU used the mouse of browser VM ${vmName(browserId)}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.mouse_actions': actions.length
+    });
+  };
+
+  // Where the pointer of a running browser is, or null when QEMU cannot tell.
+  const readMouse = async (browserId) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${vmName(browserId)} is not running`);
+    }
+    return pointerOf(browserId);
+  };
+
   // The OS of a browser's VM, or null for a bad id.
   const browserOs = async (browserId) => (isWellFormedBrowserId(browserId) ? vmOs(browserId) : null);
 
@@ -673,6 +742,8 @@ const createVmClient = ({
     setScreenResolution,
     setScreenScale,
     typeText,
+    useMouse,
+    readMouse,
     resolveCdpUrl
   };
 };

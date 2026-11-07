@@ -64,6 +64,7 @@ const client = (overrides = {}) =>
     cdpRetry: { attempts: 2, delayMs: 0, timeoutMs: 1000 },
     stopGraceMs: 0,
     browserStartTimeoutMs: 100,
+    runCommand: async () => ({ code: 0, stdout: 'none\n', stderr: '' }),
     ...overrides
   });
 
@@ -1105,4 +1106,76 @@ test('typeText types one text at a time per browser, and only into a running VM'
   const stopped = client({ dataDir, connectQmp, isAlive: async () => false });
   await assert.rejects(stopped.typeText('Qabc12345', 'x'), /is not running/);
   assert.equal(commands.length, 8);
+});
+
+// A QEMU that has the D-Bus display, with the guest pointer at `at`.
+const withPointer = (at) => ({
+  runCommand: async (argv) => {
+    assert.deepEqual(argv.slice(1), ['-display', 'help']);
+    return { code: 0, stdout: 'Available display backend types:\nnone\ndbus\n', stderr: '' };
+  },
+  readPointer: async () => at
+});
+
+test('useMouse maps pixels on the kept screen size, and moves at once', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  writeFileSync(path.join(dir, 'screen-resolution'), '1366x768\n');
+  const { commands, connectQmp } = fakeQmp();
+  const vm = client({ dataDir, connectQmp, isAlive: async () => true });
+  await vm.useMouse('Qabc12345', [{ action: 'move', x: 683, y: 0 }]);
+  await vm.useMouse('Qabc12345', [{ action: 'move', x: 700, y: 10 }]);
+  assert.deepEqual(
+    commands.map(({ args }) => args.events.map(({ data }) => data.value)),
+    [
+      [16395, 21],
+      [16803, 448]
+    ]
+  );
+  assert.ok(commands.every(({ socket, command }) => socket === 'qmp.sock' && command === 'input-send-event'));
+  await assert.rejects(vm.useMouse('Qabc12345', [{ action: 'jump' }]), /Action 0/);
+  await assert.rejects(vm.useMouse('a/../b', [{ action: 'click' }]), /Invalid browser id/);
+  const stopped = client({ dataDir, connectQmp, isAlive: async () => false });
+  await assert.rejects(stopped.useMouse('Qabc12345', [{ action: 'click' }]), /is not running/);
+});
+
+test('readMouse reports where the guest pointer is, or why it cannot', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const vm = client({
+    dataDir,
+    isAlive: async () => true,
+    ...withPointer(null),
+    readPointer: async () => Promise.reject(new Error('vm/send-fd not found'))
+  });
+  await assert.rejects(vm.readMouse('Qabc12345'), /send-fd not found/);
+  const at = { x: 5, y: 6, visible: true };
+  assert.deepEqual(await client({ dataDir, isAlive: async () => true, ...withPointer(at) }).readMouse('Qabc12345'), at);
+  // A QEMU without the D-Bus display cannot tell.
+  const plain = client({
+    dataDir,
+    isAlive: async () => true,
+    runCommand: async () => ({ code: 0, stdout: 'none\ngtk\n', stderr: '' }),
+    readPointer: async () => assert.fail('no D-Bus display')
+  });
+  assert.equal(await plain.readMouse('Qabc12345'), null);
+  await assert.rejects(vm.readMouse('a/../b'), /Invalid browser id/);
+  await assert.rejects(client({ dataDir }).readMouse('Qabc12345'), /is not running/);
+});
+
+test('useMouse reads the screen size from VNC when it was not kept', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  writeFileSync(path.join(dir, 'vnc-port'), '35901');
+  const { commands, connectQmp } = fakeQmp();
+  const readScreenSize = async (port) => {
+    assert.equal(port, 35901);
+    return { width: 800, height: 600 };
+  };
+  const vm = client({ dataDir, connectQmp, readScreenSize, isAlive: async () => true });
+  await vm.useMouse('Qabc12345', [{ action: 'click', x: 1, y: 1 }]);
+  assert.deepEqual(
+    commands.map(({ args }) => args.events[0].type),
+    ['abs', 'btn', 'btn']
+  );
 });

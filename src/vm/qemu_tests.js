@@ -266,3 +266,8 @@ test('buildQemuArgs boots the Windows install from its first CD, and lets Setup 
 test('imageFiles has only the disk for Windows', () => {
   assert.deepEqual(imageFiles('/i/windows.qcow2', 'windows'), { disk: '/i/windows.qcow2' });
 });
+
+test('buildQemuArgs has no window, and a D-Bus display only when asked', () => {
+  assert.equal(valueAfter(windowsArgs(), '-display'), 'none');
+  assert.equal(valueAfter(windowsArgs({ dbusDisplay: true }), '-display'), 'dbus,p2p=yes');
+});

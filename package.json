@@ -9,6 +9,7 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "postinstall": "vm/build-send-fd.sh",
     "start": "node src/index",
     "db:console": "node src/db/console.js",
     "test": "node --test --test-concurrency=4 \"src/**/*_tests.js\"",
