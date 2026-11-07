@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GUEST_WEBGL_FILE, writeGuestWebgl } from './webgl.js';
+import { DRIRC, GUEST_WEBGL_FILE, writeGuestWebgl } from './webgl.js';
 
-test('writeGuestWebgl writes the flag that ignores the GPU blocklist', async () => {
+test('writeGuestWebgl writes the Mesa config that passes the GPU blocklist', async () => {
   const writes = [];
   const connectQmp = async () => ({
     execute: async (command, args) => {
@@ -20,7 +20,9 @@ test('writeGuestWebgl writes the flag that ignores the GPU blocklist', async () 
     close: () => {}
   });
   await writeGuestWebgl({ dir: '/vm', connectQmp });
-  assert.deepEqual(writes, [{ path: GUEST_WEBGL_FILE, text: 'WEBGL_FLAGS=--ignore-gpu-blocklist\n' }]);
+  assert.deepEqual(writes, [{ path: GUEST_WEBGL_FILE, text: DRIRC }]);
+  assert.match(DRIRC, /force_gl_renderer" value="Mesa Intel\(R\) HD Graphics 4400 \(HSW GT2\)"/);
+  assert.doesNotMatch(DRIRC, /llvmpipe/);
 });
 
 test('writeGuestWebgl says what failed', async () => {
