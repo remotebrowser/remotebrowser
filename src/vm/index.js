@@ -22,6 +22,8 @@ import { createVmClient } from './client.js';
 //   webgl.js    WebGL on the CPU
 //   browser-app.js  Chromium or Google Chrome
 //   keyboard.js  typing text as key presses
+//   mouse.js    moving, clicking, and scrolling the mouse
+//   cursor.js   reading where the guest's pointer is, over dbus.js
 //   client.js   the VM client that ties these together
 
 // Reassignable so tests (and future callers) can swap the client; importers read
@@ -39,6 +41,7 @@ export { DEFAULT_SCREEN_RESOLUTION, normalizeScreenResolution } from './screen-r
 export { DEFAULT_SCREEN_SCALE, normalizeScreenScale } from './screen-scale.js';
 export { normalizeProxyUrl, maskProxyUrl } from './proxy.js';
 export { MAX_TEXT_LENGTH, textToKeys } from './keyboard.js';
+export { MAX_MOUSE_ACTIONS, parseMouseActions } from './mouse.js';
 export { openQmp } from './qmp.js';
 export { isWellFormedBrowserId } from './state.js';
 export { setVmClient, vms };

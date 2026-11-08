@@ -168,7 +168,8 @@ const buildQemuArgs = ({
   // Windows Setup reboots several times.
   reboot = false,
   // QEMU has seccomp only on Linux.
-  seccomp = process.platform === 'linux'
+  seccomp = process.platform === 'linux',
+  dbusDisplay = false
 }) => {
   const windows = guestOf(os) === 'windows';
   const { vmgenid } = ARCHES[arch];
@@ -206,8 +207,9 @@ const buildQemuArgs = ({
     // the app's user, which keeps everyone else off both sockets.
     '-qmp',
     `unix:${path.join(dir, 'qmp.sock')},server=on,wait=off`,
+    // No window; D-Bus tells where the guest's pointer is, as VNC does not (cursor.js).
     '-display',
-    'none',
+    dbusDisplay ? 'dbus,p2p=yes' : 'none',
     // The terminal is the console only for a VM started by hand.
     '-serial',
     consoleOnStdio ? 'mon:stdio' : `file:${path.join(dir, 'console.log')}`,

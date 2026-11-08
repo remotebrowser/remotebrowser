@@ -21,7 +21,7 @@ import {
 } from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
-import { setBrowserProxy, clearBrowserProxy, typeBrowserText } from '../../vms.js';
+import { setBrowserProxy, clearBrowserProxy, typeBrowserText, useBrowserMouse, readBrowserMouse } from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -30,6 +30,7 @@ import {
   normalizeProxyUrl,
   maskProxyUrl,
   resolveBrowserApp,
+  parseMouseActions,
   resolveOs,
   textToKeys
 } from '../../vm/index.js';
@@ -368,52 +369,110 @@ routes.patch('/:browserId/config', async (c) => {
   return c.json(configResponse(browser.data, config));
 });
 
-// Any key of the workspace may type, as it may drive the browser over CDP.
-routes.post('/:browserId/type', async (c) => {
+// The body's `name` field, or the 400 response that says why the body is wrong.
+const readInputBody = async (c, name) => {
   /** @type {any} */
   let body;
   try {
     body = JSON.parse(await c.req.text());
   } catch {
-    return c.json({ error: 'The request body must be JSON.' }, 400);
+    return { response: c.json({ error: 'The request body must be JSON.' }, 400) };
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return c.json({ error: 'The request body must be a JSON object.' }, 400);
+    return { response: c.json({ error: 'The request body must be a JSON object.' }, 400) };
   }
-  const unknown = Object.keys(body).find((key) => key !== 'text');
+  const unknown = Object.keys(body).find((key) => key !== name);
   if (unknown) {
-    return c.json({ error: `Unknown field: ${unknown}.` }, 400);
+    return { response: c.json({ error: `Unknown field: ${unknown}.` }, 400) };
   }
+  return { value: body[name] };
+};
+
+// Input goes only to a running browser. Returns its row, or the response.
+const loadInputBrowser = async (c, refusal) => {
+  const browser = await loadBrowser(c);
+  if (browser.error) {
+    return { response: c.json({ error: 'Unable to read the browser. Please try again.' }, 503) };
+  }
+  if (!browser.data) return { response: c.json(NOT_FOUND, 404) };
+  if (browser.data.status !== 'running') {
+    return {
+      response: c.json({ error: refusal, browser_id: browser.data.publicId, status: browser.data.status }, 409)
+    };
+  }
+  return { browser: browser.data };
+};
+
+// Any key of the workspace may type, as it may drive the browser over CDP.
+routes.post('/:browserId/type', async (c) => {
+  const { value: text, response } = await readInputBody(c, 'text');
+  if (response) return response;
   try {
-    textToKeys(body.text);
+    textToKeys(text);
   } catch (error) {
     return c.json({ error: `${error.message}.` }, 400);
   }
-  const browser = await loadBrowser(c);
-  if (browser.error) return c.json({ error: 'Unable to read the browser. Please try again.' }, 503);
-  if (!browser.data) return c.json(NOT_FOUND, 404);
-  if (browser.data.status !== 'running') {
-    return c.json(
-      {
-        error: 'Only a running browser can take key presses.',
-        browser_id: browser.data.publicId,
-        status: browser.data.status
-      },
-      409
-    );
-  }
+  const loaded = await loadInputBrowser(c, 'Only a running browser can take key presses.');
+  if (loaded.response) return loaded.response;
+  const { browser } = loaded;
   // Typing takes as long as a person would, so the caller does not wait for it.
-  void typeBrowserText(browser.data.internalBrowserId, body.text).then((typed) => {
+  void typeBrowserText(browser.internalBrowserId, text).then((typed) => {
     if (typed.error) {
       consola.error('API could not type into a browser', {
         'event.domain': 'api',
         'error.type': String(typed.error),
-        'browser.public_id': browser.data.publicId
+        'browser.public_id': browser.publicId
       });
     }
   });
-  logAction(c, 'API browser typing', browser.data);
-  return c.json({ browser_id: browser.data.publicId, status: 'typing' }, 202);
+  logAction(c, 'API browser typing', browser);
+  return c.json({ browser_id: browser.publicId, status: 'typing' }, 202);
+});
+
+// The same rights as typing.
+routes.post('/:browserId/mouse', async (c) => {
+  const { value: actions, response } = await readInputBody(c, 'actions');
+  if (response) return response;
+  try {
+    parseMouseActions(actions);
+  } catch (error) {
+    return c.json({ error: `${error.message}.` }, 400);
+  }
+  const loaded = await loadInputBrowser(c, 'Only a running browser can take mouse input.');
+  if (loaded.response) return loaded.response;
+  const { browser } = loaded;
+  // Every event is sent at once, so the caller waits and learns of a failure.
+  const used = await useBrowserMouse(browser.internalBrowserId, actions);
+  if (used.error) {
+    consola.error('API could not use the mouse of a browser', {
+      'event.domain': 'api',
+      'error.type': String(used.error),
+      'browser.public_id': browser.publicId
+    });
+    return c.json({ error: 'Unable to use the mouse. Please try again.' }, 502);
+  }
+  logAction(c, 'API browser mouse', browser);
+  return c.json({ browser_id: browser.publicId });
+});
+
+// Read from the guest, so it is right even after a VNC viewer moved the pointer.
+routes.get('/:browserId/mouse', async (c) => {
+  const loaded = await loadInputBrowser(c, 'Only a running browser has a mouse pointer.');
+  if (loaded.response) return loaded.response;
+  const { browser } = loaded;
+  const read = await readBrowserMouse(browser.internalBrowserId);
+  if (read.error || !read.data) {
+    if (read.error) {
+      consola.error('API could not read the mouse of a browser', {
+        'event.domain': 'api',
+        'error.type': String(read.error),
+        'browser.public_id': browser.publicId
+      });
+    }
+    return c.json({ error: 'Unable to read the mouse position. Please try again.' }, 502);
+  }
+  const { x, y, visible } = read.data;
+  return c.json({ browser_id: browser.publicId, x, y, visible });
 });
 
 // The real CDP endpoint is a WebSocket upgrade, served by the relay in src/cdp.js.

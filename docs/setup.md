@@ -8,17 +8,18 @@ You need:
 
 - A Linux host, either x86_64 (Intel or AMD) or aarch64 (Arm).
 - The latest [Node.js LTS](https://nodejs.org).
-- [QEMU](https://www.qemu.org): `qemu-system-x86_64` (or `qemu-system-aarch64` on Arm) and `qemu-img`.
+- [QEMU](https://www.qemu.org): `qemu-system-x86_64` (or `qemu-system-aarch64` on Arm) and `qemu-img`, with its D-Bus display
 - [KVM](https://linux-kvm.org), and a user in the `kvm` group.
 - [Docker](https://www.docker.com), to build the VM image.
 - About 10 GB of free disk space, for building the VM image.
 - [Zstandard](https://facebook.github.io/zstd/), to compress the suspended virtual machines.
+- A C compiler.
 
 On Debian or Ubuntu, install them with:
 
 ```bash
-sudo apt-get install qemu-system-x86 qemu-utils zstd    # on Arm: qemu-system-arm
-sudo usermod -aG kvm "$USER"                            # then log out and log back in
+sudo apt-get install qemu-system-x86 qemu-system-modules-opengl qemu-utils zstd build-essential    # on Arm: qemu-system-arm
+sudo usermod -aG kvm "$USER"                                                                    # then log out and log back in
 ```
 
 Get the source:
@@ -28,18 +29,25 @@ git clone https://github.com/remotebrowser/remotebrowser.git
 cd remotebrowser
 ```
 
+Install the dependencies:
+
+```bash
+npm install
+```
+
+This also compiles `vm/send-fd`, a small helper that passes sockets to QEMU. The API needs it to read where the mouse pointer is.
+
 Check that your host can run the browser VMs:
 
 ```bash
 vm/doctor.sh
 ```
 
-It checks QEMU, KVM, and Zstandard. If QEMU or KVM is missing, it stops with an error. A missing Zstandard only gives a warning. Fix any problems before you continue.
+It checks QEMU, KVM, Zstandard, QEMU's D-Bus display, and `vm/send-fd`. If QEMU or KVM is missing, it stops with an error. The others only give a warning. Fix any problems before you continue.
 
 Start Remote Browser:
 
 ```bash
-npm install
 npm start
 ```
 
@@ -57,11 +65,12 @@ You need:
 
 - A Mac with Apple silicon.
 - The latest [Node.js LTS](https://nodejs.org).
-- [QEMU](https://www.qemu.org): `qemu-system-aarch64` and `qemu-img`.
+- [QEMU](https://www.qemu.org): `qemu-system-aarch64` and `qemu-img`, with its D-Bus display
 - Hypervisor.framework (HVF), which macOS has built in. QEMU uses it to run the VMs natively.
 - [Docker](https://www.docker.com), to build the VM image. [Docker Desktop](https://www.docker.com/products/docker-desktop/) works, and so does another Docker engine.
 - About 10 GB of free disk space, for building the VM image.
 - [Zstandard](https://facebook.github.io/zstd/), to compress the suspended virtual machines.
+- A C compiler (`xcode-select --install`).
 
 Install them with your package manager. The QEMU binary must be signed with the `com.apple.security.hypervisor` entitlement, because macOS lets only such a binary use Hypervisor.framework. Without it, the VMs run only under slow emulation.
 
@@ -72,18 +81,25 @@ git clone https://github.com/remotebrowser/remotebrowser.git
 cd remotebrowser
 ```
 
+Install the dependencies:
+
+```bash
+npm install
+```
+
+This also compiles `vm/send-fd`, a small helper that passes sockets to QEMU. The API needs it to read where the mouse pointer is.
+
 Check that your host can run the browser VMs:
 
 ```bash
 vm/doctor.sh
 ```
 
-It checks QEMU, Hypervisor.framework, the signature of QEMU, and Zstandard. If QEMU or Hypervisor.framework is missing, or QEMU is not signed for it, it stops with an error. A missing Zstandard only gives a warning. Fix any problems before you continue.
+It checks QEMU, Hypervisor.framework, the signature of QEMU, Zstandard, QEMU's D-Bus display, and `vm/send-fd`. If QEMU or Hypervisor.framework is missing, or QEMU is not signed for it, it stops with an error. The others only give a warning. Fix any problems before you continue.
 
 Start Remote Browser:
 
 ```bash
-npm install
 npm start
 ```
 
