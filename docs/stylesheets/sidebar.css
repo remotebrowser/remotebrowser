@@ -64,4 +64,25 @@
     visibility: visible;
     opacity: 1;
   }
+
+  /* Material also hides the tabs below 76.25em and lists every tab in the
+     sidebar instead. Since the sidebar is docked here, show the tabs and only
+     the active tab's pages, as on desktop. */
+  .md-tabs {
+    display: block;
+  }
+
+  .md-nav--lifted > .md-nav__list > .md-nav__item {
+    display: none;
+  }
+
+  .md-nav--lifted > .md-nav__list > .md-nav__item--active {
+    display: block;
+    margin: 0;
+  }
+
+  .md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav__link,
+  .md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav > .md-nav__list::before {
+    display: none;
+  }
 }
