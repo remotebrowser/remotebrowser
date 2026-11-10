@@ -28,8 +28,8 @@ import {
   readSuspendedPreviewList,
   writeScreenshot
 } from './previews.js';
-import { textToKeys, typeText as typeGuestText } from './keyboard.js';
 import { readPointer as readGuestPointer } from './cursor.js';
+import { parseKeyActions, runKeyActions } from './keyboard.js';
 import { parseMouseActions, runMouseActions } from './mouse.js';
 import { openQmp } from './qmp.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
@@ -610,41 +610,6 @@ const createVmClient = ({
     });
   };
 
-  // One text at a time per browser, so the keys of two calls do not mix.
-  /** @type {Map<string, Promise<unknown>>} */
-  const typing = new Map();
-
-  // Types text into a running browser, as key presses (keyboard.js).
-  const typeText = async (browserId, text) => {
-    if (!isWellFormedBrowserId(browserId)) {
-      throw new Error('Invalid browser id');
-    }
-    textToKeys(text);
-    const name = vmName(browserId);
-    const previous = typing.get(browserId) ?? Promise.resolve();
-    const run = previous.then(async () => {
-      if (!(await browserIsRunning(browserId))) {
-        throw new Error(`${name} is not running`);
-      }
-      await typeGuestText({ dir: vmDir(browserId), text, connectQmp, delay });
-    });
-    const settled = run.catch(() => {});
-    typing.set(browserId, settled);
-    try {
-      await run;
-    } finally {
-      if (typing.get(browserId) === settled) {
-        typing.delete(browserId);
-      }
-    }
-    // Never the text itself, which may be a password.
-    consola.log(`QEMU typed text into browser VM ${name}`, {
-      'event.domain': 'qemu',
-      'rb.runtime': 'qemu',
-      'rb.text_length': Array.from(text).length
-    });
-  };
-
   // Older VMs did not keep the size, so fall back to VNC's (screen-resolution.js).
   const screenSize = async (browserId) => {
     const dir = vmDir(browserId);
@@ -666,6 +631,23 @@ const createVmClient = ({
       return null;
     }
     return readPointer({ dir: vmDir(browserId) });
+  };
+
+  // Presses and lets go of keys in a running browser (keyboard.js).
+  const useKeyboard = async (browserId, actions) => {
+    if (!isWellFormedBrowserId(browserId)) {
+      throw new Error('Invalid browser id');
+    }
+    parseKeyActions(actions);
+    if (!(await browserIsRunning(browserId))) {
+      throw new Error(`${vmName(browserId)} is not running`);
+    }
+    await runKeyActions({ dir: vmDir(browserId), actions, connectQmp });
+    consola.log(`QEMU used the keyboard of browser VM ${vmName(browserId)}`, {
+      'event.domain': 'qemu',
+      'rb.runtime': 'qemu',
+      'rb.key_actions': actions.length
+    });
   };
 
   // Moves, clicks, and scrolls the mouse of a running browser (mouse.js).
@@ -741,7 +723,7 @@ const createVmClient = ({
     clearProxy,
     setScreenResolution,
     setScreenScale,
-    typeText,
+    useKeyboard,
     useMouse,
     readMouse,
     resolveCdpUrl

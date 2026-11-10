@@ -96,7 +96,7 @@ test('every endpoint answers 401 with a Bearer challenge without an API key', as
     ['GET', '/api/v1/browsers/Bxxxxxx'],
     ['DELETE', '/api/v1/browsers/Bxxxxxx'],
     ['GET', '/api/v1/browsers/Bxxxxxx/cdp'],
-    ['POST', '/api/v1/browsers/Bxxxxxx/type'],
+    ['POST', '/api/v1/browsers/Bxxxxxx/keyboard'],
     ['POST', '/api/v1/browsers/Bxxxxxx/mouse'],
     ['GET', '/api/v1/browsers/Bxxxxxx/mouse']
   ]) {
@@ -775,65 +775,64 @@ test('POST /api/v1/browsers refuses a screen resolution or scale outside the lis
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
 });
 
-test('POST /:id/type answers at once, and types the text into the VM in the background', async () => {
+test('POST /:id/keyboard answers once the VM took the events, or 502 when it did not', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
   const publicId = await makeBrowser({ workspaceId, userId });
-  const typed = [];
-  // Never finishes, as a long text would not by the time the call answers.
+  const used = [];
   fakeVms({
-    typeText: (browserId, text) => {
-      typed.push([browserId, text]);
-      return new Promise(() => {});
+    useKeyboard: async (browserId, actions) => {
+      used.push([browserId, actions]);
     }
   });
-  const res = await sendJson('POST', `/api/v1/browsers/${publicId}/type`, apiKey, { text: 'Hello, World!\n' });
-  assert.equal(res.status, 202);
-  assert.deepEqual(await res.json(), { browser_id: publicId, status: 'typing' });
-  assert.deepEqual(typed, [['Qabc12345', 'Hello, World!\n']]);
+  const actions = [
+    { action: 'down', key: 'ControlLeft' },
+    { action: 'press', key: 'KeyL' },
+    { action: 'up', key: 'ControlLeft' }
+  ];
+  const res = await sendJson('POST', `/api/v1/browsers/${publicId}/keyboard`, apiKey, { actions });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { browser_id: publicId });
+  assert.deepEqual(used, [['Qabc12345', actions]]);
+  fakeVms({ useKeyboard: async () => Promise.reject(new Error('QMP went away')) });
+  const failed = await sendJson('POST', `/api/v1/browsers/${publicId}/keyboard`, apiKey, { actions });
+  assert.equal(failed.status, 502);
+  assert.deepEqual(await failed.json(), { error: 'Unable to use the keyboard. Please try again.' });
 });
 
-test('POST /:id/type refuses a bad body or text, and types nothing', async () => {
+test('POST /:id/keyboard refuses a bad body or action, and answers 409 for a browser that is not running', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
   const publicId = await makeBrowser({ workspaceId, userId });
-  const typed = [];
-  fakeVms({ typeText: async (_browserId, text) => typed.push(text) });
+  const used = [];
+  fakeVms({ useKeyboard: async (_browserId, actions) => used.push(actions) });
   for (const [body, error] of [
     ['', 'The request body must be JSON.'],
-    ['[]', 'The request body must be a JSON object.'],
-    [{ text: 'hi', delay: 5 }, 'Unknown field: delay.'],
-    [{}, 'The text must be a string.'],
-    [{ text: '' }, 'The text is empty.'],
-    [{ text: 'naïve' }, 'The text has a character that a US keyboard cannot type: "ï".']
+    [{ actions: [], text: 'hi' }, 'Unknown field: text.'],
+    [{}, 'The actions must be a list.'],
+    [{ actions: [{ action: 'press', key: 'Ctrl' }] }, /^Action 0 needs a key named as KeyboardEvent.code/]
   ]) {
-    const res = await sendJson('POST', `/api/v1/browsers/${publicId}/type`, apiKey, body);
+    const res = await sendJson('POST', `/api/v1/browsers/${publicId}/keyboard`, apiKey, body);
     assert.equal(res.status, 400, JSON.stringify(body));
-    assert.deepEqual(await res.json(), { error });
+    const { error: message } = await res.json();
+    if (typeof error === 'string') assert.equal(message, error);
+    else assert.match(message, error);
   }
-  assert.deepEqual(typed, []);
-});
-
-test('POST /:id/type answers 404 and 409 as the browser is, and only logs a failure to type', async () => {
-  const { userId, workspaceId } = await makeUser();
-  const apiKey = await makeKey({ workspaceId, userId });
-  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended' });
-  fakeVms({ typeText: async () => Promise.reject(new Error('QMP did not answer')) });
-
-  const missing = await sendJson('POST', '/api/v1/browsers/Bxxxxxx/type', apiKey, { text: 'hi' });
-  assert.equal(missing.status, 404);
-
-  const asleep = await sendJson('POST', `/api/v1/browsers/${suspended}/type`, apiKey, { text: 'hi' });
+  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended', internalBrowserId: 'Qdef67890' });
+  const asleep = await sendJson('POST', `/api/v1/browsers/${suspended}/keyboard`, apiKey, {
+    actions: [{ action: 'press', key: 'Enter' }]
+  });
   assert.equal(asleep.status, 409);
   assert.deepEqual(await asleep.json(), {
     error: 'Only a running browser can take key presses.',
     browser_id: suspended,
     status: 'suspended'
   });
-
-  const running = await makeBrowser({ workspaceId, userId, internalBrowserId: 'Qdef67890' });
-  const failed = await sendJson('POST', `/api/v1/browsers/${running}/type`, apiKey, { text: 'hi' });
-  assert.equal(failed.status, 202);
+  const missing = await sendJson('POST', '/api/v1/browsers/Bxxxxxx/keyboard', apiKey, {
+    actions: [{ action: 'press', key: 'Enter' }]
+  });
+  assert.equal(missing.status, 404);
+  assert.deepEqual(used, []);
 });
 
 test('POST /:id/mouse answers once the VM took the events, or 502 when it did not', async () => {

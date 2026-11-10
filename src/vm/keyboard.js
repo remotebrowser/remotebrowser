@@ -1,145 +1,111 @@
 import path from 'node:path';
-import { delay as hostDelay } from './host.js';
 
-// Enough for a form field, short enough to finish in about a minute.
-const MAX_TEXT_LENGTH = 500;
+// Enough for a few shortcuts, short enough to finish soon.
+const MAX_KEY_ACTIONS = 50;
 
-const SHIFTED_DIGITS = ')!@#$%^&*(';
-// US layout: each key's char, then the char with Shift.
-const PUNCTUATION = [
-  ['minus', '-', '_'],
-  ['equal', '=', '+'],
-  ['bracket_left', '[', '{'],
-  ['bracket_right', ']', '}'],
-  ['backslash', '\\', '|'],
-  ['semicolon', ';', ':'],
-  ['apostrophe', "'", '"'],
-  ['grave_accent', '`', '~'],
-  ['comma', ',', '<'],
-  ['dot', '.', '>'],
-  ['slash', '/', '?']
-];
-
-/** @type {Map<string, string[]>} */
+// KeyboardEvent.code names, as they do not change with the layout, like QEMU's qcodes.
+/** @type {Map<string, string>} */
 const KEYS = new Map([
-  [' ', ['spc']],
-  ['\n', ['ret']],
-  ['\t', ['tab']]
+  ['Enter', 'ret'],
+  ['Escape', 'esc'],
+  ['Backspace', 'backspace'],
+  ['Tab', 'tab'],
+  ['Space', 'spc'],
+  ['Minus', 'minus'],
+  ['Equal', 'equal'],
+  ['BracketLeft', 'bracket_left'],
+  ['BracketRight', 'bracket_right'],
+  ['Backslash', 'backslash'],
+  ['Semicolon', 'semicolon'],
+  ['Quote', 'apostrophe'],
+  ['Backquote', 'grave_accent'],
+  ['Comma', 'comma'],
+  ['Period', 'dot'],
+  ['Slash', 'slash'],
+  ['IntlBackslash', 'less'],
+  ['CapsLock', 'caps_lock'],
+  ['ShiftLeft', 'shift'],
+  ['ShiftRight', 'shift_r'],
+  ['ControlLeft', 'ctrl'],
+  ['ControlRight', 'ctrl_r'],
+  ['AltLeft', 'alt'],
+  ['AltRight', 'alt_r'],
+  ['MetaLeft', 'meta_l'],
+  ['MetaRight', 'meta_r'],
+  ['ContextMenu', 'menu'],
+  ['Insert', 'insert'],
+  ['Delete', 'delete'],
+  ['Home', 'home'],
+  ['End', 'end'],
+  ['PageUp', 'pgup'],
+  ['PageDown', 'pgdn'],
+  ['ArrowUp', 'up'],
+  ['ArrowDown', 'down'],
+  ['ArrowLeft', 'left'],
+  ['ArrowRight', 'right'],
+  ['PrintScreen', 'print'],
+  ['ScrollLock', 'scroll_lock'],
+  ['Pause', 'pause'],
+  ['NumLock', 'num_lock'],
+  ['NumpadAdd', 'kp_add'],
+  ['NumpadSubtract', 'kp_subtract'],
+  ['NumpadMultiply', 'kp_multiply'],
+  ['NumpadDivide', 'kp_divide'],
+  ['NumpadDecimal', 'kp_decimal'],
+  ['NumpadEnter', 'kp_enter'],
+  ['NumpadEqual', 'kp_equals']
 ]);
 for (let code = 0; code < 26; code += 1) {
   const letter = String.fromCharCode(97 + code);
-  KEYS.set(letter, [letter]);
-  KEYS.set(letter.toUpperCase(), ['shift', letter]);
+  KEYS.set(`Key${letter.toUpperCase()}`, letter);
 }
 for (let digit = 0; digit < 10; digit += 1) {
-  KEYS.set(String(digit), [String(digit)]);
-  KEYS.set(SHIFTED_DIGITS[digit], ['shift', String(digit)]);
+  KEYS.set(`Digit${digit}`, String(digit));
+  KEYS.set(`Numpad${digit}`, `kp_${digit}`);
 }
-for (const [qcode, plain, shifted] of PUNCTUATION) {
-  KEYS.set(plain, [qcode]);
-  KEYS.set(shifted, ['shift', qcode]);
+for (let number = 1; number <= 12; number += 1) {
+  KEYS.set(`F${number}`, `f${number}`);
 }
 
+const ACTIONS = ['down', 'up', 'press'];
+
 /**
- * Maps each char to QEMU qcodes; CR and CRLF become Enter, as pasted text may have them.
- * @param {unknown} text
- * @returns {string[][]}
+ * Validates key actions and maps each key to its QEMU qcode; errors name the index.
+ * @param {unknown} actions
+ * @returns {{action: string, key: string}[]}
  */
-const textToKeys = (text) => {
-  if (typeof text !== 'string') {
-    throw new Error('The text must be a string');
+const parseKeyActions = (actions) => {
+  if (!Array.isArray(actions)) {
+    throw new Error('The actions must be a list');
   }
-  const chars = Array.from(text.replace(/\r\n?/g, '\n'));
-  if (chars.length === 0) {
-    throw new Error('The text is empty');
+  if (actions.length === 0) {
+    throw new Error('The actions are empty');
   }
-  if (chars.length > MAX_TEXT_LENGTH) {
-    throw new Error(`The text is longer than ${MAX_TEXT_LENGTH} characters`);
+  if (actions.length > MAX_KEY_ACTIONS) {
+    throw new Error(`There are more than ${MAX_KEY_ACTIONS} actions`);
   }
-  return chars.map((char) => {
-    const keys = KEYS.get(char);
-    if (!keys) {
-      throw new Error(`The text has a character that a US keyboard cannot type: ${JSON.stringify(char)}`);
+  return actions.map((item, index) => {
+    const where = `Action ${index}`;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${where} must be an object`);
     }
-    return keys;
+    const { action, key } = item;
+    if (typeof action !== 'string' || !ACTIONS.includes(action)) {
+      throw new Error(`${where} must be one of: ${ACTIONS.join(', ')}`);
+    }
+    const unknown = Object.keys(item).find((field) => field !== 'action' && field !== 'key');
+    if (unknown) {
+      throw new Error(`${where} has an unknown field: ${unknown}`);
+    }
+    const qcode = typeof key === 'string' ? KEYS.get(key) : undefined;
+    if (!qcode) {
+      throw new Error(`${where} needs a key named as KeyboardEvent.code, such as KeyA, Enter, or ShiftLeft`);
+    }
+    return { action, key: qcode };
   });
 };
 
-// Roughly normal, from the sum of uniform draws, so it needs no extra math.
-const normal = (random, mean, spread) => mean + (random() + random() + random() - 1.5) * spread;
-
-const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
-
-/**
- * Human-like key timing in ms: about 40-70 wpm, slower at word ends and before Shift.
- * @param {{keys: string[], next?: string[], random?: () => number}} params
- * @returns {{holdMs: number, gapMs: number, leadMs: number, lagMs: number}}
- */
-const keyTiming = ({ keys, next, random = Math.random }) => {
-  const holdMs = Math.round(clamp(normal(random, 85, 50), 40, 160));
-  let gapMs = clamp(normal(random, 110, 120), 30, 300);
-  const qcode = keys.at(-1);
-  if (qcode === 'spc' || qcode === 'ret' || qcode === 'tab' || PUNCTUATION.some(([key]) => key === qcode)) {
-    gapMs += random() * 150;
-  }
-  if (next?.[0] === 'shift') {
-    gapMs += random() * 80;
-  }
-  if (random() < 0.04) {
-    gapMs += 300 + random() * 500;
-  }
-  const leadMs = keys.length > 1 ? Math.round(20 + random() * 50) : 0;
-  const lagMs = keys.length > 1 ? Math.round(10 + random() * 40) : 0;
-  return { holdMs, gapMs: Math.round(gapMs), leadMs, lagMs };
-};
-
 const keyEvent = (qcode, down) => ({ type: 'key', data: { down, key: { type: 'qcode', data: qcode } } });
-
-/**
- * One QMP session per key, as QEMU serves only one at a time and a suspend must not wait.
- * @param {{dir: string, text: string, connectQmp: Function, random?: () => number, delay?: (ms: number) => Promise<unknown>}} params
- */
-const typeText = async ({ dir, text, connectQmp, random = Math.random, delay = hostDelay }) => {
-  const presses = textToKeys(text);
-  const socket = path.join(dir, 'qmp.sock');
-  for (const [index, keys] of presses.entries()) {
-    const { holdMs, gapMs, leadMs, lagMs } = keyTiming({ keys, next: presses[index + 1], random });
-    const [key, ...modifiers] = keys.toReversed();
-    /** @type {string[]} */
-    const down = [];
-    const qmp = await connectQmp(socket);
-    const send = async (qcode, isDown) => {
-      await qmp.execute('input-send-event', { events: [keyEvent(qcode, isDown)] });
-      if (isDown) {
-        down.push(qcode);
-      } else {
-        down.splice(down.lastIndexOf(qcode), 1);
-      }
-    };
-    try {
-      for (const modifier of modifiers.toReversed()) {
-        await send(modifier, true);
-        await delay(leadMs);
-      }
-      await send(key, true);
-      await delay(holdMs);
-      await send(key, false);
-      for (const modifier of modifiers) {
-        await delay(lagMs);
-        await send(modifier, false);
-      }
-    } finally {
-      // A key left down would repeat, and a stuck Shift would change every later key.
-      if (down.length > 0) {
-        await releaseKeys({ qmp, socket, keys: down.toReversed(), connectQmp });
-      }
-      qmp.close();
-    }
-    if (index < presses.length - 1) {
-      await delay(gapMs);
-    }
-  }
-};
 
 // Best effort, so the original error is what shows.
 const releaseKeys = async ({ qmp, socket, keys, connectQmp }) => {
@@ -153,4 +119,43 @@ const releaseKeys = async ({ qmp, socket, keys, connectQmp }) => {
   }
 };
 
-export { MAX_TEXT_LENGTH, keyTiming, textToKeys, typeText };
+/**
+ * Sends every event at once. Keys still down at the end stay down, for a
+ * Ctrl+click with the mouse; the caller lets go of them.
+ * @param {{dir: string, actions: unknown, connectQmp: Function}} params
+ */
+const runKeyActions = async ({ dir, actions, connectQmp }) => {
+  const parsed = parseKeyActions(actions);
+  const socket = path.join(dir, 'qmp.sock');
+  const qmp = await connectQmp(socket);
+  /** @type {string[]} */
+  const down = [];
+  const send = async (qcode, isDown) => {
+    await qmp.execute('input-send-event', { events: [keyEvent(qcode, isDown)] });
+    if (isDown) {
+      down.push(qcode);
+    } else if (down.includes(qcode)) {
+      down.splice(down.lastIndexOf(qcode), 1);
+    }
+  };
+  try {
+    for (const { action, key } of parsed) {
+      if (action === 'down' || action === 'press') {
+        await send(key, true);
+      }
+      if (action === 'up' || action === 'press') {
+        await send(key, false);
+      }
+    }
+  } catch (error) {
+    // A key left down by a failed call would repeat until someone lets go of it.
+    if (down.length > 0) {
+      await releaseKeys({ qmp, socket, keys: down.toReversed(), connectQmp });
+    }
+    throw error;
+  } finally {
+    qmp.close();
+  }
+};
+
+export { MAX_KEY_ACTIONS, parseKeyActions, runKeyActions };
