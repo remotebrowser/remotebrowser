@@ -29,3 +29,15 @@
     margin-right: 1.4rem;
   }
 }
+
+/* Material hides the repository link below 60em; show it where the sidebar is
+   docked too (see sidebar.css). */
+@media screen and (min-width: 52em) and (max-width: 59.984375em) {
+  .md-header .md-header__source {
+    display: block;
+    width: 11.5rem;
+    max-width: 11.5rem;
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+}
