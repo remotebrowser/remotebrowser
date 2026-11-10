@@ -7,11 +7,13 @@ docs_dir = "docs"
 site_dir = "site"
 extra_css = ["stylesheets/font.css", "stylesheets/header.css", "stylesheets/sidebar.css"]
 nav = [
-  { "Overview" = "index.md" },
-  { "Isolation" = "isolation.md" },
-  { "Getting Started" = "getting-started.md" },
-  { "API" = "api.md" },
-  { "Playground" = "playground.md" },
+  { "Guide" = [
+    { "Overview" = "index.md" },
+    { "Isolation" = "isolation.md" },
+    { "Getting Started" = "getting-started.md" },
+    { "API" = "api.md" },
+    { "Playground" = "playground.md" },
+  ] },
   { "Self-Hosting" = [
     { "Overview" = "self-hosting.md" },
     { "Controls" = "controls.md" },
@@ -38,6 +40,7 @@ features = [
   "navigation.footer",
   "navigation.instant",
   "navigation.sections",
+  "navigation.tabs",
   "search.highlight",
 ]
 
