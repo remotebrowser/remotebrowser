@@ -24,6 +24,7 @@ const { hostArch } = await import('./qemu.js');
 const { MACHINE_VERSION } = await import('./qemu.js');
 const { fileStamp } = await import('./snapshot.js');
 const { writeSuspendedPreviews } = await import('./previews.js');
+const { DRIRC } = await import('./webgl.js');
 const { consola } = await import('consola/basic');
 
 // Stands in for spawning QEMU. `fails(argv)` returns a log line for a QEMU
@@ -599,7 +600,7 @@ test('launchBrowser enables WebGL before the clock, which starts the browser', a
   const { vm } = await launcher({ start, portOpen, connectQmp });
   await vm.launchBrowser({ webgl: true });
   assert.equal(names(commands).at(-1), 'guest-set-time');
-  assert.deepEqual(guestWrites(commands), [['/etc/remotebrowser/webgl.env', 'WEBGL_FLAGS=--ignore-gpu-blocklist\n']]);
+  assert.deepEqual(guestWrites(commands), [['/etc/drirc', DRIRC]]);
 });
 
 test('launchBrowser picks Google Chrome before the clock, which starts the browser', async () => {

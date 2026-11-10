@@ -36,7 +36,7 @@ The services are all in `vm/linux/files`:
 
 ### Browser
 
-The browser has a display rather than running headless. It reads its flags from `/etc/remotebrowser/browser.env`, which points it at tinyproxy. The VM has no GPU, so WebGL is off, unless the host enables it at launch. Then the app writes `/etc/remotebrowser/webgl.env`, and the browser renders WebGL on the CPU. WebGPU is not available.
+The browser has a display rather than running headless. It reads its flags from `/etc/remotebrowser/browser.env`, which points it at tinyproxy. The VM has no GPU, so WebGL is off, unless the host enables it at launch. Then the app writes `/etc/drirc`, so the GPU blocklist lets WebGL through, and the browser renders WebGL on the CPU. WebGPU is not available.
 
 Each image has every browser that it offers, and the snapshot runs none of them, so one snapshot serves them all. At launch, before it sets the clock, the app writes the binary of the browser that was picked into `/etc/remotebrowser/app.env`, and `/usr/local/bin/browser` runs it, else Chromium. The browser does not start without `nftables` and `tinyproxy`.
 
