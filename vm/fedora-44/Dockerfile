@@ -87,6 +87,8 @@ RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path
     && truncate -s 0 /etc/machine-id \
     # The upstream proxy may hold a password, which the browser must not read.
     && install -d -m 0700 /etc/remotebrowser/proxy \
+    # The host writes extension policies here, and the guest agent cannot make dirs.
+    && install -d /etc/chromium/policies/managed /etc/opt/chrome/policies/managed \
     # Mark /etc and /var as up to date with /usr. Otherwise each boot rebuilds
     # the linker cache and the hwdb, which the packages already built, and
     # ldconfig leaves most libraries in the snapshot's page cache.

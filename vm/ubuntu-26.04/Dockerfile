@@ -78,4 +78,6 @@ RUN systemctl enable systemd-networkd nftables tinyproxy tinyproxy-upstream.path
     # A random machine id per boot, instead of one baked into the image.
     && truncate -s 0 /etc/machine-id \
     # The upstream proxy may hold a password, which the browser must not read.
-    && install -d -m 0700 /etc/remotebrowser/proxy
+    && install -d -m 0700 /etc/remotebrowser/proxy \
+    # The host writes extension policies here, and the guest agent cannot make dirs.
+    && install -d /etc/chromium/policies/managed /etc/opt/chrome/policies/managed

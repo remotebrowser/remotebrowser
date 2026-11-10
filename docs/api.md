@@ -50,6 +50,7 @@ To choose how the browser is set up, send a JSON body. Every setting is optional
 | `screen_scale`      | `100`, `125`, `150`, `175`, `200` (percent, a number)                           | `150`                            |
 | `webgl`             | `true` or `false`                                                               | `true`                           |
 | `proxy`             | A proxy URL, or `null` to connect directly                                      | `null`                           |
+| `extensions`        | A list of up to 10 Chrome Web Store URLs or extension IDs                       | `[]`                             |
 
 _Example_, with several settings:
 
@@ -72,6 +73,8 @@ Notes on some settings:
 - **`browser`**: Case does not matter. `google-chrome` is short for `chrome`. A Windows browser runs Microsoft Edge either way.
 - **`webgl`**: The VM has no GPU, so the browser draws WebGL on the CPU, with a software renderer (Mesa's llvmpipe). This is much slower than a real GPU. Set it to `false` if you do not need WebGL.
 - **`proxy`**: The browser's traffic goes through this proxy. The URL starts with `http://`, `socks4://`, or `socks5://`; see [Proxy](proxy.md) for what it may hold. The proxy is set before the browser starts, so even its first request takes that route. It is the only setting you can [change later](#configure-a-browser).
+
+- **`extensions`**: The browser installs these from the Chrome Web Store when it starts. Give the store URL, such as `https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh`, or just the 32-letter ID at its end. Only extensions published on the store work, and the user cannot remove them. The install takes a few seconds, so the browser may be `running` before they are ready. Not available on `windows-11` yet.
 
 The other settings apply only when the browser starts, so they cannot be changed later.
 

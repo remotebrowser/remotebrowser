@@ -536,7 +536,8 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
         screenResolution: null,
         screenScale: null,
         webgl: true,
-        app: 'chromium'
+        app: 'chromium',
+        extensions: []
       }
     ]
   );
@@ -683,6 +684,58 @@ test('POST /api/v1/browsers refuses a webgl setting that is not true or false, a
     const res = await sendJson('POST', '/api/v1/browsers', apiKey, { webgl });
     assert.equal(res.status, 400, String(webgl));
     assert.deepEqual(await res.json(), { error: 'The webgl setting must be true or false.' });
+  }
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /api/v1/browsers passes the extension ids that its URLs and ids name', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const launches = [];
+  fakeVms({
+    canLaunchBrowser: async () => true,
+    launchBrowser: async (options) => {
+      launches.push(options);
+      throw new Error('no VM in tests');
+    }
+  });
+  const ublock = 'ddkjiahejlhfcafbddmgiahcphecmpfh';
+  const other = 'cjpalhdlnbpafiamejdnhcphjbkeiagm';
+  const res = await sendJson('POST', '/api/v1/browsers', apiKey, {
+    extensions: [`https://chromewebstore.google.com/detail/ublock-origin-lite/${ublock}`, other, ublock]
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await sendJson('POST', '/api/v1/browsers', apiKey, {})).status, 200);
+  for (let i = 0; i < 100 && launches.length < 2; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.deepEqual(
+    launches.map((options) => options.extensions).sort((a, b) => a.length - b.length),
+    [[], [ublock, other]]
+  );
+});
+
+test('POST /api/v1/browsers refuses bad extensions, or any on Windows, and launches nothing', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms();
+  const many = Array.from({ length: 11 }, (_, i) => 'a'.repeat(31) + 'abcdefghijklmnop'[i]);
+  for (const [body, error] of [
+    [
+      { extensions: 'ddkjiahejlhfcafbddmgiahcphecmpfh' },
+      'The extensions must be a list of Chrome Web Store URLs or extension ids.'
+    ],
+    [{ extensions: ['https://example.com/x'] }, 'Not a Chrome Web Store URL or extension id: https://example.com/x.'],
+    [{ extensions: many }, 'At most 10 extensions are allowed.'],
+    [
+      { os: 'windows', extensions: ['ddkjiahejlhfcafbddmgiahcphecmpfh'] },
+      'Extensions are not available on windows-11 yet.'
+    ]
+  ]) {
+    const res = await sendJson('POST', '/api/v1/browsers', apiKey, body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.deepEqual(await res.json(), { error });
   }
   assert.ok(!calls.includes('launchBrowser'));
   assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);

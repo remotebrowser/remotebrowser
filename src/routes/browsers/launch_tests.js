@@ -674,7 +674,15 @@ test('POST /browsers/launch enables WebGL when the box is checked', async () => 
   assert.equal((await postLaunch(workspaceId, { enableWebgl: 'on' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: true, app: 'chromium' }
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: null,
+      screenScale: null,
+      webgl: true,
+      app: 'chromium',
+      extensions: []
+    }
   ]);
 });
 
@@ -741,8 +749,24 @@ test('POST /browsers/launch sets the chosen screen scale, and nothing for 150%',
   }
   assert.ok(await settle(() => launches.length > 1));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: 175, webgl: false, app: 'chromium' },
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: null,
+      screenScale: 175,
+      webgl: false,
+      app: 'chromium',
+      extensions: []
+    },
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: null,
+      screenScale: null,
+      webgl: false,
+      app: 'chromium',
+      extensions: []
+    }
   ]);
 });
 
@@ -783,7 +807,8 @@ test('POST /browsers/launch sets the chosen screen resolution', async () => {
       screenResolution: { width: 1920, height: 1200 },
       screenScale: null,
       webgl: false,
-      app: 'chromium'
+      app: 'chromium',
+      extensions: []
     },
     {
       os: 'debian-13',
@@ -791,7 +816,8 @@ test('POST /browsers/launch sets the chosen screen resolution', async () => {
       screenResolution: { width: 3840, height: 2160 },
       screenScale: null,
       webgl: false,
-      app: 'chromium'
+      app: 'chromium',
+      extensions: []
     }
   ]);
 });
@@ -802,7 +828,15 @@ test('POST /browsers/launch keeps the image default for Full HD', async () => {
   assert.equal((await postLaunch(workspaceId, { screenResolution: 'full-hd' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: null,
+      screenScale: null,
+      webgl: false,
+      app: 'chromium',
+      extensions: []
+    }
   ]);
 });
 
@@ -842,7 +876,8 @@ test('POST /browsers/launch passes the proxy to the new VM when the box is check
       screenResolution: null,
       screenScale: null,
       webgl: false,
-      app: 'chromium'
+      app: 'chromium',
+      extensions: []
     }
   ]);
   // Kept with the browser, so the REST API can report it, but never with the password.
@@ -857,7 +892,15 @@ test('POST /browsers/launch ignores the proxy URL when the box is not checked', 
   assert.equal((await postLaunch(workspaceId, { proxy: 'not a url' })).status, 303);
   assert.ok(await settle(() => launches.length > 0));
   assert.deepEqual(launches, [
-    { os: 'debian-13', proxy: null, screenResolution: null, screenScale: null, webgl: false, app: 'chromium' }
+    {
+      os: 'debian-13',
+      proxy: null,
+      screenResolution: null,
+      screenScale: null,
+      webgl: false,
+      app: 'chromium',
+      extensions: []
+    }
   ]);
 });
 
@@ -957,7 +1000,8 @@ test('POST /browsers/launch starts the chosen OS, with its settings', async () =
       screenResolution: null,
       screenScale: 200,
       webgl: false,
-      app: 'chromium'
+      app: 'chromium',
+      extensions: []
     }
   ]);
 });

@@ -20,6 +20,7 @@ import {
 import { normalizeScreenScale, writeGuestScreenScale } from './screen-scale.js';
 import { normalizeProxyUrl, writeGuestProxy } from './proxy.js';
 import { writeGuestWebgl } from './webgl.js';
+import { normalizeExtensions, writeGuestExtensions } from './extensions.js';
 import { DEFAULT_BROWSER_APP, isBrowserApp, startGuestBrowser, writeGuestBrowserApp } from './browser-app.js';
 import {
   readAnyScreenshot,
@@ -180,6 +181,7 @@ const createVmClient = ({
     screenScale,
     webgl,
     app,
+    extensions,
     onVmStarted
   }) => {
     const snapshotDir = snapshotDirOf(os);
@@ -220,6 +222,9 @@ const createVmClient = ({
       }
       if (webgl) {
         await writeGuestWebgl({ dir, connectQmp, guest });
+      }
+      if (extensions.length > 0) {
+        await writeGuestExtensions({ dir, app, ids: extensions, connectQmp });
       }
       if (proxy) {
         await writeGuestProxy({ dir, proxy, connectQmp, guest });
@@ -315,6 +320,7 @@ const createVmClient = ({
   // `screenScale` is the screen scale in percent; see screen-scale.js.
   // `webgl` enables WebGL, on the CPU; see webgl.js.
   // `app` is the browser, Chromium or Google Chrome; see browser-app.js.
+  // `extensions` are Chrome Web Store URLs or ids; see extensions.js.
   // `onVmStarted` is called with the id once the VM runs, before its browser does.
   const launchBrowser = async ({
     os = DEFAULT_OS,
@@ -323,6 +329,7 @@ const createVmClient = ({
     screenScale = null,
     webgl = false,
     app = DEFAULT_BROWSER_APP,
+    extensions = [],
     onVmStarted
   } = {}) => {
     if (!isOs(os)) {
@@ -331,7 +338,11 @@ const createVmClient = ({
     if (!isBrowserApp(app)) {
       throw new Error(`Unknown browser ${app}`);
     }
-    // A bad URL, screen resolution, or scale fails here, before a VM starts.
+    // A bad URL, screen resolution, scale, or extension fails here, before a VM starts.
+    const extensionIds = normalizeExtensions(extensions);
+    if (extensionIds.length > 0 && guestOf(os) === 'windows') {
+      throw new Error('Extensions are not available on Windows yet');
+    }
     const upstreamProxy = normalizeProxyUrl(proxy);
     const resolution = normalizeScreenResolution(screenResolution);
     const scale = normalizeScreenScale(screenScale);
@@ -377,6 +388,7 @@ const createVmClient = ({
         screenScale: scale,
         webgl: Boolean(webgl),
         app,
+        extensions: extensionIds,
         onVmStarted: onVmStarted && (() => onVmStarted({ browserId }))
       });
       consola.log(`QEMU started browser VM ${name}`, {
@@ -388,7 +400,8 @@ const createVmClient = ({
         'rb.screen_resolution': screenResolutionLabel(resolution),
         'rb.screen_scale': screenScaleLabel(scale),
         'rb.webgl': Boolean(webgl),
-        'rb.browser_app': app
+        'rb.browser_app': app,
+        'rb.extensions': extensionIds.length
       });
       return { browserId };
     } catch (error) {

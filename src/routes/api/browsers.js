@@ -27,6 +27,8 @@ import {
   DEFAULT_BROWSER_APP,
   DEFAULT_OS,
   OSES,
+  guestOf,
+  normalizeExtensions,
   normalizeProxyUrl,
   maskProxyUrl,
   resolveBrowserApp,
@@ -72,7 +74,8 @@ const LAUNCH_SETTINGS = new Set([
   'browser',
   'webgl',
   'screen_resolution',
-  'screen_scale'
+  'screen_scale',
+  'extensions'
 ]);
 
 // Returns the settings, or the response that says what is wrong with them. An
@@ -147,6 +150,13 @@ const readSettings = async (c, { launch = false } = {}) => {
     }
     settings.webgl = body.webgl;
   }
+  if ('extensions' in body) {
+    try {
+      settings.extensions = normalizeExtensions(body.extensions);
+    } catch (error) {
+      return { response: c.json({ error: `${error.message}.` }, 400) };
+    }
+  }
   if ('proxy' in body) {
     if (body.proxy !== null && typeof body.proxy !== 'string') {
       return { response: c.json({ error: 'The proxy must be a URL, or null to connect directly.' }, 400) };
@@ -171,6 +181,9 @@ routes.post('/', async (c) => {
     return c.json({ error: 'Browsers are still being prepared. Please try again in a few minutes.' }, 503);
   }
   const os = settings.os ?? DEFAULT_OS;
+  if (settings.extensions?.length && guestOf(os) === 'windows') {
+    return c.json({ error: `Extensions are not available on ${os} yet.` }, 400);
+  }
   if (!(await launchableOses()).includes(os)) {
     return c.json({ error: `${OSES[os].label} browsers are not available here yet. Please try again later.` }, 503);
   }
@@ -203,7 +216,8 @@ routes.post('/', async (c) => {
     screenResolution: settings.screenResolution ?? null,
     screenScale: settings.screenScale ?? null,
     webgl: settings.webgl ?? true,
-    app: settings.browser ?? DEFAULT_BROWSER_APP
+    app: settings.browser ?? DEFAULT_BROWSER_APP,
+    extensions: settings.extensions ?? []
   });
   logAction(c, 'API browser launched', launched.data);
   return c.json({ browser_id: launched.data.publicId, status: 'launched' });

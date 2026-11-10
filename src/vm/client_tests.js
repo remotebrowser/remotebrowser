@@ -614,6 +614,35 @@ test('launchBrowser picks Google Chrome before the clock, which starts the brows
   ]);
 });
 
+test('launchBrowser writes the extension policy before the clock, which starts the browser', async () => {
+  const { start, portOpen } = startStub();
+  const { commands, connectQmp } = writingQmp({ 'query-status': { status: 'paused' } });
+  const { vm } = await launcher({ start, portOpen, connectQmp });
+  const id = 'ddkjiahejlhfcafbddmgiahcphecmpfh';
+  await vm.launchBrowser({ app: 'chrome', extensions: [`https://chromewebstore.google.com/detail/x/${id}`] });
+  assert.equal(names(commands).at(-1), 'guest-set-time');
+  assert.deepEqual(guestWrites(commands), [
+    ['/etc/remotebrowser/app.env', 'BROWSER_APP=/usr/bin/google-chrome-stable\n'],
+    [
+      '/etc/opt/chrome/policies/managed/extensions.json',
+      `{"ExtensionInstallForcelist":["${id};https://clients2.google.com/service/update2/crx"]}\n`
+    ]
+  ]);
+});
+
+test('launchBrowser refuses extensions on Windows, or bad ones, before it starts a VM', async () => {
+  const dataDir = tempDataDir();
+  const { starts, start, portOpen } = startStub();
+  const { vm } = await launcher({ start, portOpen, dataDir });
+  await assert.rejects(
+    vm.launchBrowser({ os: 'windows-11', extensions: ['ddkjiahejlhfcafbddmgiahcphecmpfh'] }),
+    /Extensions are not available on Windows yet/
+  );
+  await assert.rejects(vm.launchBrowser({ extensions: ['nope'] }), /Not a Chrome Web Store URL or extension id/);
+  assert.equal(starts.length, 0);
+  assert.deepEqual(machines(dataDir), []);
+});
+
 test('launchBrowser refuses an unknown browser before it starts a VM', async () => {
   const dataDir = tempDataDir();
   const { starts, start, portOpen } = startStub();

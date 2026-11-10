@@ -1,4 +1,14 @@
 #!/bin/sh
 # Runs the browser that the host picked at launch (src/vm/browser-app.js),
 # else Chromium. systemd cannot take the program itself from a variable.
+
+# With --disable-background-networking, the browser loads the policy that the
+# host writes for extensions (src/vm/extensions.js), but never downloads them.
+if [ -e /etc/chromium/policies/managed/extensions.json ] || [ -e /etc/opt/chrome/policies/managed/extensions.json ]; then
+  for arg do
+    shift
+    [ "$arg" = --disable-background-networking ] && continue
+    set -- "$@" "$arg"
+  done
+fi
 exec "${BROWSER_APP:-/usr/bin/chromium}" "$@"

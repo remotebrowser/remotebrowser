@@ -36,9 +36,10 @@ const orFallback = async (browserId, run, fallback) => {
  * an upstream `proxy` URL (see src/vm/proxy.js), a `screenResolution`, the
  * screen size (see src/vm/screen-resolution.js), a `screenScale` in percent
  * (see src/vm/screen-scale.js), `webgl` on (see src/vm/webgl.js), and the
- * browser `app` (see src/vm/browser-app.js). `onVmStarted` gets the id as
- * soon as the VM runs, before its browser does, so its screen can be shown.
- * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean, app?: string, onVmStarted?: (started: {browserId: string}) => void}} [params]
+ * browser `app` (see src/vm/browser-app.js), with `extensions` (see
+ * src/vm/extensions.js). `onVmStarted` gets the id as soon as the VM runs,
+ * before its browser does, so its screen can be shown.
+ * @param {{os?: string, proxy?: string | null, screenResolution?: {width: number, height: number} | null, screenScale?: number | null, webgl?: boolean, app?: string, extensions?: string[], onVmStarted?: (started: {browserId: string}) => void}} [params]
  * @returns {Promise<{data?: {browserId: string}, error?: string}>}
  */
 const startBrowser = async ({
@@ -48,6 +49,7 @@ const startBrowser = async ({
   screenScale = null,
   webgl = false,
   app = DEFAULT_BROWSER_APP,
+  extensions = [],
   onVmStarted
 } = {}) => {
   try {
@@ -58,6 +60,7 @@ const startBrowser = async ({
       screenScale,
       webgl,
       app,
+      extensions,
       ...(onVmStarted && { onVmStarted })
     });
     if (!isWellFormedBrowserId(browserId)) {

@@ -170,6 +170,7 @@ const startBrowser = async ({
   screenScale = null,
   webgl = false,
   app = DEFAULT_BROWSER_APP,
+  extensions = [],
   navigate = navigateBrowserToUrl,
   startMonitor = browserMonitors.startBrowserMonitor
 }) => {
@@ -186,6 +187,7 @@ const startBrowser = async ({
     screenScale,
     webgl,
     app,
+    extensions,
     onVmStarted: ({ browserId }) => void record(browserId)
   });
   if (started.error) {

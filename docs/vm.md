@@ -40,6 +40,8 @@ The browser has a display rather than running headless. It reads its flags from 
 
 Each image has every browser that it offers, and the snapshot runs none of them, so one snapshot serves them all. At launch, before it sets the clock, the app writes the binary of the browser that was picked into `/etc/remotebrowser/app.env`, and `/usr/local/bin/browser` runs it, else Chromium. The browser does not start without `nftables` and `tinyproxy`.
 
+A launch may also ask for [extensions](api.md#launch-settings). Then, before it sets the clock, the app writes an `ExtensionInstallForcelist` policy to `extensions.json` in the browser's policy dir: `/etc/chromium/policies/managed` for Chromium, and `/etc/opt/chrome/policies/managed` for Google Chrome. The browser downloads the extensions from the Chrome Web Store when it starts. `--disable-background-networking` would stop that download, so `/usr/local/bin/browser` drops this flag when the policy is there.
+
 ### Isolation
 
 - The browser runs as an unprivileged user, so its own sandbox stays on.
