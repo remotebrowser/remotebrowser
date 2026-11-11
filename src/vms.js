@@ -228,14 +228,12 @@ const setBrowserScreenScale = (browserId, screenScale) =>
   changeBrowser(browserId, () => vms.setScreenScale(browserId, screenScale));
 
 /**
- * Types text into a running browser as key presses on a US keyboard, with
- * a person's pauses between them (see src/vm/keyboard.js). Resolves once the
- * last key is let go.
+ * Presses and lets go of keys in a running browser (src/vm/keyboard.js).
  * @param {string} browserId
- * @param {string} text
+ * @param {unknown[]} actions
  * @returns {Promise<{data?: true, error?: string}>}
  */
-const typeBrowserText = (browserId, text) => changeBrowser(browserId, () => vms.typeText(browserId, text));
+const useBrowserKeyboard = (browserId, actions) => changeBrowser(browserId, () => vms.useKeyboard(browserId, actions));
 
 /**
  * Moves, clicks, and scrolls the mouse of a running browser (src/vm/mouse.js).
@@ -289,7 +287,7 @@ export {
   clearBrowserProxy,
   setBrowserScreenResolution,
   setBrowserScreenScale,
-  typeBrowserText,
+  useBrowserKeyboard,
   useBrowserMouse,
   readBrowserMouse
 };

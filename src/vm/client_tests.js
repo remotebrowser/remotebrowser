@@ -1091,22 +1091,22 @@ test('captureScreen turns the VNC frame into a JPEG, and browserOs reads the OS 
   await assert.rejects(vm.captureScreen('Qmissing1'), /VNC port not found/);
 });
 
-test('typeText types one text at a time per browser, and only into a running VM', async () => {
+test('useKeyboard sends the keys, and only to a running VM', async () => {
   const dataDir = tempDataDir();
   fakeVmDir(dataDir, 'Qabc12345');
   const { commands, connectQmp } = fakeQmp();
   const vm = client({ dataDir, connectQmp, isAlive: async () => true });
-  await Promise.all([vm.typeText('Qabc12345', 'ab'), vm.typeText('Qabc12345', 'C')]);
+  await vm.useKeyboard('Qabc12345', [{ action: 'press', key: 'Enter' }]);
   assert.ok(commands.every(({ socket, command }) => socket === 'qmp.sock' && command === 'input-send-event'));
   const keys = commands.flatMap(({ args }) =>
     args.events.map(({ data }) => `${data.down ? '+' : '-'}${data.key.data}`)
   );
-  assert.deepEqual(keys, ['+a', '-a', '+b', '-b', '+shift', '+c', '-c', '-shift']);
-  await assert.rejects(vm.typeText('Qabc12345', 'é'), /cannot type/);
-  await assert.rejects(vm.typeText('a/../b', 'x'), /Invalid browser id/);
+  assert.deepEqual(keys, ['+ret', '-ret']);
+  await assert.rejects(vm.useKeyboard('Qabc12345', [{ action: 'press', key: 'a' }]), /Action 0/);
+  await assert.rejects(vm.useKeyboard('a/../b', [{ action: 'press', key: 'KeyA' }]), /Invalid browser id/);
   const stopped = client({ dataDir, connectQmp, isAlive: async () => false });
-  await assert.rejects(stopped.typeText('Qabc12345', 'x'), /is not running/);
-  assert.equal(commands.length, 8);
+  await assert.rejects(stopped.useKeyboard('Qabc12345', [{ action: 'press', key: 'KeyA' }]), /is not running/);
+  assert.equal(commands.length, 2);
 });
 
 // A QEMU that has the D-Bus display, with the guest pointer at `at`.

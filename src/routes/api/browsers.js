@@ -21,7 +21,13 @@ import {
 } from '../browsers/launch.js';
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
-import { setBrowserProxy, clearBrowserProxy, typeBrowserText, useBrowserMouse, readBrowserMouse } from '../../vms.js';
+import {
+  setBrowserProxy,
+  clearBrowserProxy,
+  useBrowserKeyboard,
+  useBrowserMouse,
+  readBrowserMouse
+} from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -30,9 +36,9 @@ import {
   normalizeProxyUrl,
   maskProxyUrl,
   resolveBrowserApp,
+  parseKeyActions,
   parseMouseActions,
-  resolveOs,
-  textToKeys
+  resolveOs
 } from '../../vm/index.js';
 
 // Documented in docs/api.md. A browser_id is the browser's public id, and a key
@@ -403,33 +409,33 @@ const loadInputBrowser = async (c, refusal) => {
   return { browser: browser.data };
 };
 
-// Any key of the workspace may type, as it may drive the browser over CDP.
-routes.post('/:browserId/type', async (c) => {
-  const { value: text, response } = await readInputBody(c, 'text');
+// Any key of the workspace may use it, as it may drive the browser over CDP.
+routes.post('/:browserId/keyboard', async (c) => {
+  const { value: actions, response } = await readInputBody(c, 'actions');
   if (response) return response;
   try {
-    textToKeys(text);
+    parseKeyActions(actions);
   } catch (error) {
     return c.json({ error: `${error.message}.` }, 400);
   }
   const loaded = await loadInputBrowser(c, 'Only a running browser can take key presses.');
   if (loaded.response) return loaded.response;
   const { browser } = loaded;
-  // Typing takes as long as a person would, so the caller does not wait for it.
-  void typeBrowserText(browser.internalBrowserId, text).then((typed) => {
-    if (typed.error) {
-      consola.error('API could not type into a browser', {
-        'event.domain': 'api',
-        'error.type': String(typed.error),
-        'browser.public_id': browser.publicId
-      });
-    }
-  });
-  logAction(c, 'API browser typing', browser);
-  return c.json({ browser_id: browser.publicId, status: 'typing' }, 202);
+  // Every event is sent at once, so the caller waits and learns of a failure.
+  const used = await useBrowserKeyboard(browser.internalBrowserId, actions);
+  if (used.error) {
+    consola.error('API could not use the keyboard of a browser', {
+      'event.domain': 'api',
+      'error.type': String(used.error),
+      'browser.public_id': browser.publicId
+    });
+    return c.json({ error: 'Unable to use the keyboard. Please try again.' }, 502);
+  }
+  logAction(c, 'API browser keyboard', browser);
+  return c.json({ browser_id: browser.publicId });
 });
 
-// The same rights as typing.
+// The same rights as the keyboard.
 routes.post('/:browserId/mouse', async (c) => {
   const { value: actions, response } = await readInputBody(c, 'actions');
   if (response) return response;
