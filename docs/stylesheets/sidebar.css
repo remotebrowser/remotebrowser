@@ -1,7 +1,7 @@
 /* Material turns the primary sidebar into a drawer below 76.25em, which hides
-   it on tablets in landscape. Keep it docked from 60em and reuse the desktop
-   rules for the section nav. */
-@media screen and (min-width: 60em) and (max-width: 76.234375em) {
+   it on tablets in landscape and on the Pixel Fold inner screen (841px). Keep
+   it docked from 52em and reuse the desktop rules for the section nav. */
+@media screen and (min-width: 52em) and (max-width: 76.234375em) {
   .md-header__button[for='__drawer'],
   .md-overlay,
   .md-nav .md-nav__title[for='__drawer'] {
