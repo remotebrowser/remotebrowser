@@ -15,6 +15,8 @@ Then every new browser is a VM started from the snapshot of its OS. Before the b
 
 Each VM gets `VM_MEMORY` of memory (default `4G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
+Starting a VM is heavy on the CPU. When many start at once, they slow each other down until none of them start in time. So at most `VM_START_CONCURRENCY` VMs start or resume at once (default `4`), and the others wait their turn, with the status `starting`. The start timeouts begin only when a VM's turn comes.
+
 Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
 ## Isolation

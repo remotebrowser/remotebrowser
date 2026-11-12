@@ -25,11 +25,18 @@ const buildVmConfig = (env) => {
   if (!Number.isInteger(vmCpus) || vmCpus < 1) {
     errors.push('VM_CPUS must be a positive integer, e.g. 2');
   }
+  // Starting a VM is CPU-heavy. When too many start at once, the host runs out
+  // of CPU and they time out before the browser answers. More wait their turn.
+  const vmStartConcurrency = env.VM_START_CONCURRENCY ? Number(env.VM_START_CONCURRENCY) : 4;
+  if (!Number.isInteger(vmStartConcurrency) || vmStartConcurrency < 1) {
+    errors.push('VM_START_CONCURRENCY must be a positive integer, e.g. 4');
+  }
 
   const vmConfig = Object.freeze({
     vmDataDir: VM_DATA_DIR,
     vmMemory: VM_MEMORY,
-    vmCpus
+    vmCpus,
+    vmStartConcurrency
   });
 
   return { vmConfig, errors };

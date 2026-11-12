@@ -468,6 +468,28 @@ test('launchBrowser starts QEMU from the snapshot, sets the clock, and records t
   assert.equal(readFileSync(path.join(dir, 'vnc-port'), 'utf8'), '34568');
 });
 
+test('launchBrowser starts no more VMs at once than startConcurrency', async () => {
+  const { starts, start, portOpen } = startStub();
+  /** @type {() => void} */
+  let answer = () => {};
+  const answered = new Promise((resolve) => {
+    answer = () => resolve(undefined);
+  });
+  // The first browser does not answer until told to, so it holds its slot.
+  const fetchImpl = async () => {
+    await answered;
+    return jsonResponse({ webSocketDebuggerUrl: 'ws://localhost:9222/devtools/browser/b' });
+  };
+  const { vm } = await launcher({ start, portOpen, fetchImpl, startConcurrency: 1, browserStartTimeoutMs: 5000 });
+
+  const launches = [vm.launchBrowser(), vm.launchBrowser()];
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(starts.length, 1);
+  answer();
+  await Promise.all(launches);
+  assert.equal(starts.length, 2);
+});
+
 test('launchBrowser sets the upstream proxy before the clock, which starts the browser', async () => {
   const { start, portOpen } = startStub();
   const { commands, connectQmp } = fakeQmp({

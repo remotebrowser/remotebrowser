@@ -34,6 +34,7 @@ The table below lists the environment variables that the app uses in production:
 | `VM_CPUS`                     | No       | Virtual CPUs per browser VM (default: `2`)                  |
 | `VM_DATA_DIR`                 | No       | VM images, snapshots, VMs (default: `.data/vm`)             |
 | `VM_MEMORY`                   | No       | Memory per browser VM (default: `4G`)                       |
+| `VM_START_CONCURRENCY`        | No       | Browser VMs that start at once; more wait (default: `4`)    |
 
 Each browser runs Debian 13, Ubuntu 26.04, or Fedora 44, chosen when it is launched, or Windows 11 on a host with its ISO. See [VM](vm.md).
 

@@ -32,6 +32,7 @@ import { readPointer as readGuestPointer } from './cursor.js';
 import { parseKeyActions, runKeyActions } from './keyboard.js';
 import { parseMouseActions, runMouseActions } from './mouse.js';
 import { openQmp } from './qmp.js';
+import { createLimit } from './limit.js';
 import { readSnapshot, snapshotStatus } from './snapshot.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
 import { createSuspender } from './suspend.js';
@@ -58,6 +59,7 @@ const createVmClient = ({
   dataDir = vmConfig.vmDataDir,
   memory = vmConfig.vmMemory,
   cpus = vmConfig.vmCpus,
+  startConcurrency = vmConfig.vmStartConcurrency,
   start = host.start,
   portOpen = host.portOpen,
   freePort = host.freePort,
@@ -82,6 +84,9 @@ const createVmClient = ({
   const vmDir = (browserId) => path.join(machinesDir, browserId);
   let accelPromise = accel ? Promise.resolve(accel) : null;
   const getAccel = () => (accelPromise ??= detectAccel());
+  // Launches and resumes share these slots. Their timeouts start only once a
+  // slot is theirs, so a long queue does not fail them.
+  const startSlot = createLimit(startConcurrency);
   // QEMU does not start with a display that its build lacks.
   let dbusDisplayPromise = null;
   const hasDbusDisplay = () =>
@@ -367,18 +372,20 @@ const createVmClient = ({
       'rb.vm_snapshot_dir': snapshotDirOf(os)
     });
     try {
-      const started = await startFromSnapshot({
-        name,
-        dir,
-        os,
-        saved,
-        proxy: upstreamProxy,
-        screenResolution: resolution,
-        screenScale: scale,
-        webgl: Boolean(webgl),
-        app,
-        onVmStarted: onVmStarted && (() => onVmStarted({ browserId }))
-      });
+      const started = await startSlot(() =>
+        startFromSnapshot({
+          name,
+          dir,
+          os,
+          saved,
+          proxy: upstreamProxy,
+          screenResolution: resolution,
+          screenScale: scale,
+          webgl: Boolean(webgl),
+          app,
+          onVmStarted: onVmStarted && (() => onVmStarted({ browserId }))
+        })
+      );
       consola.log(`QEMU started browser VM ${name}`, {
         'event.domain': 'qemu',
         'rb.runtime': 'qemu',
@@ -481,7 +488,7 @@ const createVmClient = ({
     await applyProxy(browserId, null);
   };
 
-  const { browserIsSuspended, suspendBrowser, resumeBrowser } = createSuspender({
+  const suspender = createSuspender({
     vmDir,
     isAlive,
     kill,
@@ -492,6 +499,9 @@ const createVmClient = ({
     suspendTimeoutMs,
     zstd
   });
+  const { browserIsSuspended, suspendBrowser } = suspender;
+  // Loading a saved VM is as heavy as starting one.
+  const resumeBrowser = (browserId) => startSlot(() => suspender.resumeBrowser(browserId));
 
   // The pages a suspended browser had, with a picture of each (previews.js).
   const listSuspendedPreviews = async (browserId) =>
