@@ -15,6 +15,8 @@ Then every new browser is a VM started from the snapshot of its OS. Before the b
 
 Each VM gets `VM_MEMORY` of memory (default `4G`) and `VM_CPUS` virtual CPUs (default `2`). Memory is the main limit on how many browsers one host can run.
 
+Starting a VM is heavy on the CPU. When many start at once, they slow each other down until none of them start in time. So the host starts at most one VM for every `2 × VM_CPUS` cores at once (4 on 16 cores with the default `VM_CPUS`), and VMs that resume count too. A launch over that limit is refused with HTTP 429 and a `Retry-After` header. A resume is never refused, because its browser already exists.
+
 Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
 ## Isolation

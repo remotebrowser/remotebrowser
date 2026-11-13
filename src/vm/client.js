@@ -1,4 +1,5 @@
 import { constants as fsConstants } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
@@ -50,6 +51,10 @@ const BROWSER_START_TIMEOUT_MS = 30000;
 // Saving or loading a few GB of memory takes a while on a busy host.
 const SUSPEND_TIMEOUT_MS = 120000;
 
+// Starting a VM is CPU-heavy. In a load test on 16 cores with 2 vCPUs per VM,
+// 24 starts at once mostly missed the browser start timeout, and 4 never did.
+const defaultMaxStarts = (cpus) => Math.max(1, Math.floor(availableParallelism() / (cpus * 2)));
+
 // Everything host-facing is behind this factory so tests can inject fakes; the
 // singleton in index.js is what the app uses.
 const createVmClient = ({
@@ -58,6 +63,7 @@ const createVmClient = ({
   dataDir = vmConfig.vmDataDir,
   memory = vmConfig.vmMemory,
   cpus = vmConfig.vmCpus,
+  maxStarts = defaultMaxStarts(cpus),
   start = host.start,
   portOpen = host.portOpen,
   freePort = host.freePort,
@@ -481,7 +487,22 @@ const createVmClient = ({
     await applyProxy(browserId, null);
   };
 
-  const { browserIsSuspended, suspendBrowser, resumeBrowser } = createSuspender({
+  // VMs starting or resuming now. A launch over maxStarts is refused before
+  // its request is answered, as a queued one would wait with no limit.
+  let starting = 0;
+  /** @returns {(() => void) | null} frees the slot; null when none is free */
+  const reserveStart = () => {
+    if (starting >= maxStarts) return null;
+    starting += 1;
+    let freed = false;
+    return () => {
+      if (freed) return;
+      freed = true;
+      starting -= 1;
+    };
+  };
+
+  const suspender = createSuspender({
     vmDir,
     isAlive,
     kill,
@@ -492,6 +513,17 @@ const createVmClient = ({
     suspendTimeoutMs,
     zstd
   });
+  const { browserIsSuspended, suspendBrowser } = suspender;
+  // A resume loads as much as a start, so it counts. It is never refused: the
+  // browser already exists, and its user is waiting for it.
+  const resumeBrowser = async (browserId) => {
+    starting += 1;
+    try {
+      return await suspender.resumeBrowser(browserId);
+    } finally {
+      starting -= 1;
+    }
+  };
 
   // The pages a suspended browser had, with a picture of each (previews.js).
   const listSuspendedPreviews = async (browserId) =>
@@ -705,6 +737,7 @@ const createVmClient = ({
     getAccel,
     launchableOses,
     canLaunchBrowser,
+    reserveStart,
     launchBrowser,
     browserExists,
     browserIsRunning,
