@@ -406,7 +406,6 @@ test('a resume takes a start slot while it runs, and is never refused', async ()
   const dataDir = tempDataDir();
   suspendedVmDir(dataDir, 'Qabc12345');
   const { start, portOpen } = startStub();
-  /** @type {() => void} */
   let open = () => {};
   const opened = new Promise((resolve) => {
     open = () => resolve(undefined);
@@ -429,7 +428,6 @@ test('a resume takes a start slot while it runs, and is never refused', async ()
   });
   const launch = vm.reserveStart();
   assert.ok(launch);
-  // Every slot is taken, and the resume still goes ahead.
   const resumed = vm.resumeBrowser('Qabc12345');
   await atPort;
   launch();

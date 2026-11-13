@@ -70,9 +70,8 @@ const startBrowser = async ({
 };
 
 /**
- * Takes one of the host's few start slots for a launch, or null when they are
- * all taken, so the launch should be refused. Call the returned function once
- * the start has ended, whether it worked or not.
+ * Takes a start slot for a launch, or null when all are taken. Call the
+ * returned function once the start ends, whether it worked or not.
  * @returns {(() => void) | null}
  */
 const reserveBrowserStart = () => vms.reserveStart();

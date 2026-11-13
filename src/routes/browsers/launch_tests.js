@@ -575,7 +575,6 @@ test('POST /browsers/launch answers 429 with Retry-After once the workspace is o
   assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });
 
-// Start slots like the VM client's, which count how many are taken.
 const startSlots = (max) => {
   let taken = 0;
   const reserveStart = () => {
@@ -603,7 +602,6 @@ test('POST /browsers/launch answers 429 with Retry-After while the host starts a
 test('POST /browsers/launch holds a start slot until the start ends, even when it fails', async () => {
   const workspaceId = await makeUser();
   const slots = startSlots(1);
-  /** @type {(error: Error) => void} */
   let fail = () => {};
   fakeVms({
     reserveStart: slots.reserveStart,

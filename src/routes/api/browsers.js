@@ -182,7 +182,6 @@ routes.post('/', async (c) => {
   if (!(await launchableOses()).includes(os)) {
     return c.json({ error: `${OSES[os].label} browsers are not available here yet. Please try again later.` }, 503);
   }
-  // Taken before the instance row exists, so a refused launch leaves nothing behind.
   const freeStart = reserveBrowserStart();
   if (!freeStart) {
     c.header('Retry-After', String(BUSY_REFUSAL.retryAfterSeconds));

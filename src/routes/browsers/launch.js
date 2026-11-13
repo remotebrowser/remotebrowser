@@ -78,8 +78,7 @@ const launchRefusal = (launched) => {
   };
 };
 
-// For a launch while the host already starts as many VMs as it can. A start
-// takes about 12s, so a slot is likely free again by then.
+// A start takes about 12s, so a slot is likely free again by then.
 const BUSY_REFUSAL = {
   message: 'Too many browsers are starting on this server right now. Please try again in a few seconds.',
   retryAfterSeconds: 15
@@ -306,7 +305,6 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, 'Choose a browser from the list.'), 400);
   }
 
-  // Taken before the instance row exists, so a refused launch leaves nothing behind.
   const freeStart = reserveBrowserStart();
   if (!freeStart) {
     c.header('Retry-After', String(BUSY_REFUSAL.retryAfterSeconds));

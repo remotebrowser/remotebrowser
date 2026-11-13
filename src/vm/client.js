@@ -487,10 +487,8 @@ const createVmClient = ({
     await applyProxy(browserId, null);
   };
 
-  // VMs starting or resuming now. A launch over maxStarts is refused before
-  // its request is answered, as a queued one would wait with no limit.
+  // Refused rather than queued, so no launch waits without a limit.
   let starting = 0;
-  /** @returns {(() => void) | null} frees the slot; null when none is free */
   const reserveStart = () => {
     if (starting >= maxStarts) return null;
     starting += 1;
