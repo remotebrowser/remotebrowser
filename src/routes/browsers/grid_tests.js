@@ -100,3 +100,30 @@ test('GET /browsers/grid shows a thumbnail for a browser whose VM runs, not for 
   assert.match(body, new RegExp(`id="screenshot-${starting}"`));
   assert.match(body, new RegExp(`id="screenshot-${booting}"`));
 });
+
+test('GET /browsers/grid leaves out terminated browsers', async () => {
+  const created = await findOrCreateUser({ email: 'user@example.com' });
+  const workspace = await ensurePersonalWorkspace({
+    userId: created.data.id,
+    email: 'user@example.com',
+    personalWorkspaceId: null
+  });
+  const gone = await launchBrowserInstance({
+    workspaceId: workspace.data.workspaceId,
+    userId: created.data.id,
+    browserName: 'gone-lynx',
+    browserDescription: ''
+  });
+  await updateBrowserInstanceStatus({
+    workspaceId: workspace.data.workspaceId,
+    browserInstanceId: gone.data.browserInstanceId,
+    status: 'terminated'
+  });
+  const cookie = createSessionCookie({
+    publicId: created.data.publicId,
+    email: 'user@example.com',
+    issuedAt: Date.now()
+  });
+  const res = await setupApp().request('/browsers/grid', { headers: { cookie: `session=${cookie}` } });
+  assert.doesNotMatch(await res.text(), /gone-lynx/);
+});

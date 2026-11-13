@@ -22,7 +22,7 @@ const renderBrowsers = async (c) => {
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const instances = listResult.error ? [] : listResult.data;
-  const browsers = instances.map(summarizeBrowserInstance);
+  const browsers = instances.filter((instance) => instance.status !== 'terminated').map(summarizeBrowserInstance);
   return eta.render('browsers/index', {
     email: user.email,
     csrfToken: createCsrfToken(c),
