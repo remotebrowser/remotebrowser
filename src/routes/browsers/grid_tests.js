@@ -117,7 +117,7 @@ test('GET /browsers/grid leaves out terminated browsers', async () => {
   await updateBrowserInstanceStatus({
     workspaceId: workspace.data.workspaceId,
     browserInstanceId: gone.data.browserInstanceId,
-    status: 'terminated'
+    toStatus: 'terminated'
   });
   const cookie = createSessionCookie({
     publicId: created.data.publicId,
