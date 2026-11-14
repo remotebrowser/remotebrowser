@@ -39,7 +39,7 @@ const renderGrid = async (c) => {
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, 'Grid'),
     view: 'grid',
-    browsers: instances.map(summarizeBrowserInstance),
+    browsers: instances.filter((instance) => instance.status !== 'terminated').map(summarizeBrowserInstance),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // A new value every poll so the browser reloads the thumbnail.
