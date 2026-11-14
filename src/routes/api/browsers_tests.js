@@ -76,6 +76,7 @@ const fakeVms = (overrides = {}) => {
   setVmClient({
     canLaunchBrowser: record('canLaunchBrowser', true),
     launchableOses: record('launchableOses', ['debian-13', 'ubuntu-26.04', 'fedora-44']),
+    reserveStart: () => () => {},
     launchBrowser: record('launchBrowser', { browserId: 'Qabc12345' }),
     browserExists: record('browserExists', true),
     stopBrowser: record('stopBrowser', undefined),
@@ -251,6 +252,40 @@ test('POST /api/v1/browsers answers 429 with Retry-After once the workspace is o
   assert.match(res.headers.get('retry-after'), /^\d+$/);
   assert.match((await res.json()).error, /^This workspace launched too many browsers in the last minute\./);
   assert.ok(!calls.includes('launchBrowser'));
+});
+
+test('POST /api/v1/browsers answers 429 with Retry-After while the host starts as many VMs as it can', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms({ reserveStart: () => null });
+  const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '15');
+  assert.match((await res.json()).error, /^Too many browsers are starting on this server right now\./);
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.deepEqual((await listBrowserInstancesByWorkspace({ workspaceId })).data, []);
+});
+
+test('POST /api/v1/browsers frees its start slot once the start ends, even when it fails', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  let taken = 0;
+  fakeVms({
+    launchBrowser: async () => {
+      throw new Error('the browser did not start');
+    },
+    reserveStart: () => {
+      taken += 1;
+      return () => {
+        taken -= 1;
+      };
+    }
+  });
+  const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
+  assert.equal(res.status, 200);
+  const deadline = Date.now() + 2000;
+  while (taken > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(taken, 0);
 });
 
 const statusOf = async (workspaceId, publicId) =>

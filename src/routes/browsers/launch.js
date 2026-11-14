@@ -12,7 +12,7 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canStartBrowser, listLaunchableOses, startBrowser as startBrowserVm } from '../../vms.js';
+import { canStartBrowser, listLaunchableOses, reserveBrowserStart, startBrowser as startBrowserVm } from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -76,6 +76,12 @@ const launchRefusal = (launched) => {
     message: `This workspace launched too many browsers in the last minute. Please try again in ${seconds} second${seconds === 1 ? '' : 's'}.`,
     retryAfterSeconds: seconds
   };
+};
+
+// A start takes about 12s, so a slot is likely free again by then.
+const BUSY_REFUSAL = {
+  message: 'Too many browsers are starting on this server right now. Please try again in a few seconds.',
+  retryAfterSeconds: 15
 };
 
 const generateBrowserName = () => `${randomItem(ADJECTIVES)}-${randomItem(SOLITARY_ANIMALS)}`;
@@ -171,7 +177,8 @@ const startBrowser = async ({
   webgl = false,
   app = DEFAULT_BROWSER_APP,
   navigate = navigateBrowserToUrl,
-  startMonitor = browserMonitors.startBrowserMonitor
+  startMonitor = browserMonitors.startBrowserMonitor,
+  freeStart = () => {}
 }) => {
   // The id is recorded as soon as the VM runs, so the page can show its
   // screen while the browser starts. Both calls share the one write.
@@ -179,15 +186,20 @@ const startBrowser = async ({
   const once = { recording: null };
   const record = (internalBrowserId) =>
     (once.recording ??= recordProvisionedBrowser({ workspaceId, browserInstanceId, internalBrowserId, userId }));
-  const started = await startBrowserVm({
-    os,
-    proxy,
-    screenResolution,
-    screenScale,
-    webgl,
-    app,
-    onVmStarted: ({ browserId }) => void record(browserId)
-  });
+  let started;
+  try {
+    started = await startBrowserVm({
+      os,
+      proxy,
+      screenResolution,
+      screenScale,
+      webgl,
+      app,
+      onVmStarted: ({ browserId }) => void record(browserId)
+    });
+  } finally {
+    freeStart();
+  }
   if (started.error) {
     consola.error(`Unable to start browser ${browserInstanceId}: ${started.error}`);
     // The VM is gone, so a row that points at it must not stay starting.
@@ -293,6 +305,12 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, 'Choose a browser from the list.'), 400);
   }
 
+  const freeStart = reserveBrowserStart();
+  if (!freeStart) {
+    c.header('Retry-After', String(BUSY_REFUSAL.retryAfterSeconds));
+    return c.html(renderBrowserLaunchError(c, body, BUSY_REFUSAL.message), 429);
+  }
+
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -307,10 +325,12 @@ const handleLaunch = async (c) => {
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
+    freeStart();
     c.header('Retry-After', String(refusal.retryAfterSeconds));
     return c.html(renderBrowserLaunchError(c, body, refusal.message), 429);
   }
   if (launched.error) {
+    freeStart();
     consola.error('launchBrowserInstance failed:', launched.error);
     return c.html(renderBrowserLaunchError(c, body, 'Unable to launch the browser. Please try again.'), 400);
   }
@@ -324,7 +344,8 @@ const handleLaunch = async (c) => {
     screenResolution,
     screenScale,
     webgl: Boolean(body.enableWebgl),
-    app
+    app,
+    freeStart
   });
 
   return c.redirect(`/browsers/${launched.data.publicId}`, 303);
@@ -336,6 +357,7 @@ export {
   generateBrowserName,
   browsersReady,
   launchRefusal,
+  BUSY_REFUSAL,
   launchableOses,
   startBrowser,
   INITIAL_URLS,

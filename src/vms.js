@@ -70,6 +70,13 @@ const startBrowser = async ({
 };
 
 /**
+ * Takes a start slot for a launch, or null when all are taken. Call the
+ * returned function once the start ends, whether it worked or not.
+ * @returns {(() => void) | null}
+ */
+const reserveBrowserStart = () => vms.reserveStart();
+
+/**
  * Whether a browser can be started now, on any OS. That needs a VM snapshot,
  * which the server saves in the background at startup.
  * @returns {Promise<{data?: boolean, error?: string}>}
@@ -271,6 +278,7 @@ export {
   isWellFormedBrowserId,
   startBrowser,
   canStartBrowser,
+  reserveBrowserStart,
   listLaunchableOses,
   browserExists,
   browserCdpUrl,
