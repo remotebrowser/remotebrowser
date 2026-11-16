@@ -25,13 +25,28 @@
     );
   };
 
+  // Setting .src drops the old bitmap at once, so the <img> goes blank until
+  // the new frame loads. Decode the new frame off-screen first, then switch.
+  const swapWhenDecoded = (img, src) => {
+    if (img.src === src) return;
+    img.dataset.pendingSrc = src;
+    const next = new Image();
+    next.src = src;
+    next
+      .decode()
+      .then(() => {
+        if (img.dataset.pendingSrc === src) img.src = src;
+      })
+      .catch(() => {});
+  };
+
   const restoreScreenshots = (swapped) => {
     for (const img of swapped.querySelectorAll('img[id^="screenshot-"]')) {
       const outgoing = outgoingScreenshots.get(img.id);
       if (outgoing) {
         // One that fetches its own frames already has a newer one.
         if (!('refreshSelf' in outgoing.dataset)) {
-          outgoing.src = img.src;
+          swapWhenDecoded(outgoing, img.src);
         }
         img.replaceWith(outgoing);
       }
