@@ -132,6 +132,15 @@ include('/partials/screen-refresh', it) %> <%~ include('/partials/code-copy', it
         <div id="playground-output" class="playground-output" aria-live="polite"></div>
         <p id="playground-status" class="playground-status" role="status">Loading...</p>
       </div>
+      <section class="browser-config" aria-labelledby="browser-config-heading">
+        <h2 id="browser-config-heading">Configuration</h2>
+        <dl>
+          <% it.configRows.forEach(function (row) { %>
+          <dt><%= row.label %></dt>
+          <dd><%= row.value %></dd>
+          <% }) %>
+        </dl>
+      </section>
     </div>
   </article>
 </main>

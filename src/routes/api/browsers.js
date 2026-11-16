@@ -14,6 +14,7 @@ import {
   launchRefusal,
   launchableOses,
   startBrowser,
+  launchConfig,
   SCREEN_RESOLUTIONS,
   DEFAULT_SCREEN_RESOLUTION_CHOICE,
   SCREEN_SCALES,
@@ -180,6 +181,8 @@ routes.post('/', async (c) => {
   if (!(await launchableOses()).includes(os)) {
     return c.json({ error: `${OSES[os].label} browsers are not available here yet. Please try again later.` }, 503);
   }
+  const webgl = settings.webgl ?? true;
+  const app = settings.browser ?? DEFAULT_BROWSER_APP;
   const user = c.get('user');
   const workspace = c.get('workspace');
   const launched = await launchBrowserInstance({
@@ -187,7 +190,7 @@ routes.post('/', async (c) => {
     userId: user.id,
     browserName: settings.name ?? generateBrowserName(),
     browserDescription: settings.description ?? '',
-    config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
+    config: launchConfig({ ...settings, webgl, app }),
     os
   });
   const refusal = launchRefusal(launched);
@@ -208,8 +211,8 @@ routes.post('/', async (c) => {
     proxy: settings.proxy ?? null,
     screenResolution: settings.screenResolution ?? null,
     screenScale: settings.screenScale ?? null,
-    webgl: settings.webgl ?? true,
-    app: settings.browser ?? DEFAULT_BROWSER_APP
+    webgl,
+    app
   });
   logAction(c, 'API browser launched', launched.data);
   return c.json({ browser_id: launched.data.publicId, status: 'launched' });

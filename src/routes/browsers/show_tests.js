@@ -125,13 +125,22 @@ const makeSharedWorkspace = async ({ workspaceId, role = 'User' } = {}) => {
 // yet, unless `vmStarted` says it has).
 const makeBrowser = async (
   workspaceId,
-  { browserName = 'calm-otter', status = 'running', internalBrowserId = 'br-happy', vmStarted = false } = {}
+  {
+    browserName = 'calm-otter',
+    status = 'running',
+    internalBrowserId = 'br-happy',
+    vmStarted = false,
+    os = undefined,
+    config = null
+  } = {}
 ) => {
   const launched = await launchBrowserInstance({
     workspaceId,
     userId,
     browserName,
-    browserDescription: ''
+    browserDescription: '',
+    os,
+    config
   });
   const browserInstanceId = launched.data.browserInstanceId;
   if (status !== 'starting' || vmStarted) {
@@ -654,4 +663,46 @@ test('GET /browsers/:browserId shows the VM screen while the browser starts, wit
   assert.match(body, /This browser is starting\./);
   assert.doesNotMatch(body, /This VM has no browser yet/);
   assert.doesNotMatch(body, /class="[^"]*browser-preview-starting/);
+});
+
+test('GET /browsers/:browserId shows the configuration the browser was launched with', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, {
+    os: 'ubuntu-26.04',
+    config: {
+      proxy: 'http://u:****@proxy.example.com:8080',
+      browser: 'chrome',
+      screenResolution: { width: 2560, height: 1440 },
+      screenScale: 125,
+      webgl: false
+    }
+  });
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  const config = body.match(/<section class="browser-config"[\s\S]*?<\/section>/)?.[0] ?? '';
+  const rows = [...config.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>([^<]*)<\/dd>/g)].map(([, label, value]) => [label, value]);
+  assert.deepEqual(rows, [
+    ['Operating system', 'Ubuntu 26.04'],
+    ['Browser', 'Google Chrome'],
+    ['Screen', '2560×1440'],
+    ['Screen scale', '125%'],
+    ['WebGL', 'Off'],
+    ['Proxy', 'http://u:****@proxy.example.com:8080']
+  ]);
+});
+
+test('GET /browsers/:browserId shows only the known configuration of an older browser', async () => {
+  const workspaceId = await makeUser();
+  const browserPublicId = await makeBrowser(workspaceId, { os: 'windows-11' });
+  const cookie = makeSessionCookie();
+  const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
+  const body = await res.text();
+  const config = body.match(/<section class="browser-config"[\s\S]*?<\/section>/)?.[0] ?? '';
+  const rows = [...config.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>([^<]*)<\/dd>/g)].map(([, label, value]) => [label, value]);
+  assert.deepEqual(rows, [
+    ['Operating system', 'Windows 11'],
+    ['Browser', 'Microsoft Edge'],
+    ['Proxy', 'None']
+  ]);
 });

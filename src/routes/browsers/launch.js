@@ -50,6 +50,14 @@ const SCREEN_SCALES = [100, 125, DEFAULT_SCREEN_SCALE, 175, 200].map((scale) => 
 }));
 const DEFAULT_SCREEN_SCALE_CHOICE = String(DEFAULT_SCREEN_SCALE);
 
+const launchConfig = ({ proxy = null, screenResolution = null, screenScale = null, webgl, app }) => ({
+  ...(proxy && { proxy: maskProxyUrl(proxy) }),
+  browser: app,
+  screenResolution: screenResolution ?? { ...DEFAULT_SCREEN_RESOLUTION },
+  screenScale: screenScale ?? DEFAULT_SCREEN_SCALE,
+  webgl
+});
+
 export const routes = new Hono();
 
 const NOT_READY_ERROR =
@@ -293,6 +301,7 @@ const handleLaunch = async (c) => {
     return c.html(renderBrowserLaunchError(c, body, 'Choose a browser from the list.'), 400);
   }
 
+  const webgl = Boolean(body.enableWebgl);
   const user = c.get('user');
   const workspace = c.get('workspace');
 
@@ -301,7 +310,7 @@ const handleLaunch = async (c) => {
     userId: user.id,
     browserName: name,
     browserDescription: description,
-    config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
+    config: launchConfig({ proxy, screenResolution, screenScale, webgl, app }),
     os,
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
@@ -323,7 +332,7 @@ const handleLaunch = async (c) => {
     proxy,
     screenResolution,
     screenScale,
-    webgl: Boolean(body.enableWebgl),
+    webgl,
     app
   });
 
@@ -338,6 +347,7 @@ export {
   launchRefusal,
   launchableOses,
   startBrowser,
+  launchConfig,
   INITIAL_URLS,
   SCREEN_RESOLUTIONS,
   DEFAULT_SCREEN_RESOLUTION_CHOICE,
