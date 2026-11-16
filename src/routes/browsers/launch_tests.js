@@ -37,16 +37,16 @@ const { setVmClient, createVmClient } = await import('../../vm/index.js');
 // A VM client with no real VMs: a launch gets `foobar`, which has no CDP URL,
 // so nothing is ever dialed. It records the options of each launch.
 const fakeVms = ({
+  maxStarts,
   launchBrowser = async () => ({ browserId: 'foobar' }),
   canLaunchBrowser = async () => true,
-  launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : []),
-  reserveStart = () => () => {}
+  launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : [])
 } = {}) => {
   const launches = [];
   setVmClient({
+    maxStarts,
     canLaunchBrowser,
     launchableOses,
-    reserveStart,
     launchBrowser: async (options) => {
       // The callback is a fresh function each time, so tests compare the rest.
       const { onVmStarted, ...settings } = options;
@@ -575,57 +575,25 @@ test('POST /browsers/launch answers 429 with Retry-After once the workspace is o
   assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });
 
-const startSlots = (max) => {
-  let taken = 0;
-  const reserveStart = () => {
-    if (taken >= max) return null;
-    taken += 1;
-    return () => {
-      taken -= 1;
-    };
-  };
-  return { reserveStart, taken: () => taken };
-};
-
-test('POST /browsers/launch answers 429 with Retry-After while the host starts as many VMs as it can', async () => {
+test('POST /browsers/launch answers 429 with Retry-After while the server starts as many browsers as it can', async () => {
   const workspaceId = await makeUser();
-  const launches = fakeVms({ reserveStart: () => null });
+  await makeLaunchedInstance({ workspaceId });
+  const launches = fakeVms({ maxStarts: 1 });
   const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
-  const res = await postLaunch(workspaceId, {});
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({ name: 'calm-otter', workspace: workspaceId, csrf: makeCsrfToken(csrfId) }).toString()
+  });
   assert.equal(res.status, 429);
   assert.equal(res.headers.get('retry-after'), '15');
   assert.match(await res.text(), /Too many browsers are starting on this server right now\./);
-  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
   assert.equal(launches.length, 0);
-});
-
-test('POST /browsers/launch holds a start slot until the start ends, even when it fails', async () => {
-  const workspaceId = await makeUser();
-  const slots = startSlots(1);
-  let fail = () => {};
-  fakeVms({
-    reserveStart: slots.reserveStart,
-    launchBrowser: () =>
-      new Promise((_resolve, reject) => {
-        fail = reject;
-      })
-  });
-  assert.equal((await postLaunch(workspaceId, {})).status, 303);
-  assert.equal(slots.taken(), 1);
-  assert.equal((await postLaunch(workspaceId, {})).status, 429);
-  fail(new Error('the browser did not start'));
-  assert.ok(await settle(async () => slots.taken() === 0 || null));
-});
-
-test('POST /browsers/launch frees its start slot when the workspace is over the launch rate', async () => {
-  const workspaceId = await makeUser();
-  await fillLaunchRate(workspaceId);
-  const slots = startSlots(1);
-  fakeVms({ reserveStart: slots.reserveStart });
-  const res = await postLaunch(workspaceId, {});
-  assert.equal(res.status, 429);
-  assert.match(await res.text(), /This workspace launched too many browsers/);
-  assert.equal(slots.taken(), 0);
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });
 
 const postLaunch = (workspaceId, fields) => {

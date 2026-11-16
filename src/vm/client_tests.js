@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { availableParallelism } from 'node:os';
 import {
   mkdtempSync,
   mkdirSync,
@@ -389,52 +390,9 @@ test('resumeBrowser refuses a VM that is not suspended', async () => {
   assert.equal(starts.length, 0);
 });
 
-test('reserveStart hands out at most maxStarts slots, and a freed one again', () => {
-  const vm = client({ maxStarts: 2 });
-  const first = vm.reserveStart();
-  assert.ok(first);
-  assert.ok(vm.reserveStart());
-  assert.equal(vm.reserveStart(), null);
-  first();
-  // Freeing twice gives back only the one slot.
-  first();
-  assert.ok(vm.reserveStart());
-  assert.equal(vm.reserveStart(), null);
-});
-
-test('a resume takes a start slot while it runs, and is never refused', async () => {
-  const dataDir = tempDataDir();
-  suspendedVmDir(dataDir, 'Qabc12345');
-  const { start, portOpen } = startStub();
-  let open = () => {};
-  const opened = new Promise((resolve) => {
-    open = () => resolve(undefined);
-  });
-  let reached = () => {};
-  const atPort = new Promise((resolve) => {
-    reached = () => resolve(undefined);
-  });
-  const { connectQmp } = fakeQmp({ 'query-status': { status: 'paused' } });
-  const vm = client({
-    start,
-    portOpen: async (...args) => {
-      reached();
-      await opened;
-      return portOpen(...args);
-    },
-    dataDir,
-    connectQmp,
-    maxStarts: 1
-  });
-  const launch = vm.reserveStart();
-  assert.ok(launch);
-  const resumed = vm.resumeBrowser('Qabc12345');
-  await atPort;
-  launch();
-  assert.equal(vm.reserveStart(), null);
-  open();
-  assert.deepEqual(await resumed, { browserId: 'Qabc12345' });
-  assert.ok(vm.reserveStart());
+test('maxStarts allows one start per 2 x VM_CPUS cores, and at least one', () => {
+  assert.equal(client({ cpus: 1 }).maxStarts, Math.max(1, Math.floor(availableParallelism() / 2)));
+  assert.equal(client({ cpus: 10_000 }).maxStarts, 1);
 });
 
 // A QMP session that records commands and answers like QEMU would.

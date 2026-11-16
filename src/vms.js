@@ -69,12 +69,8 @@ const startBrowser = async ({
   }
 };
 
-/**
- * Takes a start slot for a launch, or null when all are taken. Call the
- * returned function once the start ends, whether it worked or not.
- * @returns {(() => void) | null}
- */
-const reserveBrowserStart = () => vms.reserveStart();
+/** How many browsers this host can start at once. Test fakes set none. @returns {number} */
+const maxBrowserStarts = () => vms.maxStarts ?? Infinity;
 
 /**
  * Whether a browser can be started now, on any OS. That needs a VM snapshot,
@@ -278,7 +274,7 @@ export {
   isWellFormedBrowserId,
   startBrowser,
   canStartBrowser,
-  reserveBrowserStart,
+  maxBrowserStarts,
   listLaunchableOses,
   browserExists,
   browserCdpUrl,

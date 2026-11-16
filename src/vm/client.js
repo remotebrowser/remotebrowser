@@ -487,20 +487,7 @@ const createVmClient = ({
     await applyProxy(browserId, null);
   };
 
-  // Refused rather than queued, so no launch waits without a limit.
-  let starting = 0;
-  const reserveStart = () => {
-    if (starting >= maxStarts) return null;
-    starting += 1;
-    let freed = false;
-    return () => {
-      if (freed) return;
-      freed = true;
-      starting -= 1;
-    };
-  };
-
-  const suspender = createSuspender({
+  const { browserIsSuspended, suspendBrowser, resumeBrowser } = createSuspender({
     vmDir,
     isAlive,
     kill,
@@ -511,17 +498,6 @@ const createVmClient = ({
     suspendTimeoutMs,
     zstd
   });
-  const { browserIsSuspended, suspendBrowser } = suspender;
-  // A resume loads as much as a start, so it counts. It is never refused: the
-  // browser already exists, and its user is waiting for it.
-  const resumeBrowser = async (browserId) => {
-    starting += 1;
-    try {
-      return await suspender.resumeBrowser(browserId);
-    } finally {
-      starting -= 1;
-    }
-  };
 
   // The pages a suspended browser had, with a picture of each (previews.js).
   const listSuspendedPreviews = async (browserId) =>
@@ -735,7 +711,7 @@ const createVmClient = ({
     getAccel,
     launchableOses,
     canLaunchBrowser,
-    reserveStart,
+    maxStarts,
     launchBrowser,
     browserExists,
     browserIsRunning,

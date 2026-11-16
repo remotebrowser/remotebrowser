@@ -12,7 +12,6 @@ import {
   generateBrowserName,
   browsersReady,
   launchRefusal,
-  BUSY_REFUSAL,
   launchableOses,
   startBrowser,
   SCREEN_RESOLUTIONS,
@@ -23,12 +22,12 @@ import {
 import { terminateBrowser } from '../browsers/terminate.js';
 import { suspendBrowserInstance, resumeBrowserInstance } from '../browsers/suspend.js';
 import {
-  reserveBrowserStart,
   setBrowserProxy,
   clearBrowserProxy,
   useBrowserKeyboard,
   useBrowserMouse,
-  readBrowserMouse
+  readBrowserMouse,
+  maxBrowserStarts
 } from '../../vms.js';
 import {
   BROWSER_APPS,
@@ -182,11 +181,6 @@ routes.post('/', async (c) => {
   if (!(await launchableOses()).includes(os)) {
     return c.json({ error: `${OSES[os].label} browsers are not available here yet. Please try again later.` }, 503);
   }
-  const freeStart = reserveBrowserStart();
-  if (!freeStart) {
-    c.header('Retry-After', String(BUSY_REFUSAL.retryAfterSeconds));
-    return c.json({ error: BUSY_REFUSAL.message }, 429);
-  }
   const user = c.get('user');
   const workspace = c.get('workspace');
   const launched = await launchBrowserInstance({
@@ -195,16 +189,15 @@ routes.post('/', async (c) => {
     browserName: settings.name ?? generateBrowserName(),
     browserDescription: settings.description ?? '',
     config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
-    os
+    os,
+    maxStarting: maxBrowserStarts()
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
-    freeStart();
     c.header('Retry-After', String(refusal.retryAfterSeconds));
     return c.json({ error: refusal.message }, 429);
   }
   if (launched.error) {
-    freeStart();
     consola.error('API could not launch a browser', { 'event.domain': 'api', 'error.type': String(launched.error) });
     return c.json({ error: 'Unable to launch the browser. Please try again.' }, 500);
   }
@@ -218,8 +211,7 @@ routes.post('/', async (c) => {
     screenResolution: settings.screenResolution ?? null,
     screenScale: settings.screenScale ?? null,
     webgl: settings.webgl ?? true,
-    app: settings.browser ?? DEFAULT_BROWSER_APP,
-    freeStart
+    app: settings.browser ?? DEFAULT_BROWSER_APP
   });
   logAction(c, 'API browser launched', launched.data);
   return c.json({ browser_id: launched.data.publicId, status: 'launched' });
