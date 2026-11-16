@@ -15,6 +15,7 @@ import { listBrowserPages } from '../../cdp.js';
 import { listSuspendedPreviews } from '../../vms.js';
 import { INSTRUCTION_PREAMBLE, fullInstructionSource, playwrightJavascriptDisplaySource } from './code-sample.js';
 import { isLlmWorking } from '../../llm/harness.js';
+import { BROWSER_APPS, OSES } from '../../vm/index.js';
 
 export const routes = new Hono();
 
@@ -110,6 +111,22 @@ const listSuspendedPages = async (browser) =>
     ? listSuspendedPreviews({ browserId: browser.internalBrowserId })
     : [];
 
+// Browsers from before the full config was stored lack some settings, so
+// those rows are left out rather than guessed.
+const configRows = ({ os, config }) => {
+  const guest = OSES[os]?.guest;
+  const app = guest === 'windows' ? 'Microsoft Edge' : BROWSER_APPS[config.browser]?.label;
+  const screen = config.screenResolution;
+  return [
+    { label: 'Operating system', value: OSES[os]?.label ?? os },
+    { label: 'Browser', value: app },
+    { label: 'Screen', value: screen && `${screen.width}×${screen.height}` },
+    { label: 'Screen scale', value: config.screenScale && `${config.screenScale}%` },
+    { label: 'WebGL', value: typeof config.webgl === 'boolean' ? (config.webgl ? 'On' : 'Off') : null },
+    { label: 'Proxy', value: config.proxy ?? 'None' }
+  ].filter((row) => row.value);
+};
+
 // What the status bar (views/browsers/status-bar.eta.html) needs.
 const statusBarData = (c, browser) => {
   const user = c.get('user');
@@ -173,6 +190,7 @@ const renderBrowser = async (c, { error = null } = {}) => {
     pages,
     showScreen: showsScreenFor(browser, pages),
     suspendedPages: await listSuspendedPages(browser),
+    configRows: configRows(browser),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // GET /browsers/:browserId/pages (src/routes/browsers/pages/index.js).
@@ -229,4 +247,4 @@ routes.get('/:browserId/status', requireUser, requireWorkspaceRole('User'), asyn
   return c.html(html);
 });
 
-export { renderBrowser, PLAYGROUND_TEMPLATES };
+export { renderBrowser, configRows, PLAYGROUND_TEMPLATES };

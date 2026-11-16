@@ -1288,6 +1288,34 @@ pre {
   border-radius: 0.25rem;
 }
 
+/* The settings a browser was launched with, under its previews: labels on
+   the left, values on the right, so the list reads like a spec sheet. */
+.browser-config {
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.browser-config h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.browser-config dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.browser-config dt {
+  color: var(--text-muted);
+}
+
+.browser-config dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 /* The boxes in a browser's connection panel, stacked one under another. */
 .browser-panel {
   margin-bottom: 1.5rem;
