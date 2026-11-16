@@ -1288,8 +1288,6 @@ pre {
   border-radius: 0.25rem;
 }
 
-/* The settings a browser was launched with, under its previews: labels on
-   the left, values on the right, so the list reads like a spec sheet. */
 .browser-config {
   margin-top: 1.5rem;
   font-size: 0.875rem;

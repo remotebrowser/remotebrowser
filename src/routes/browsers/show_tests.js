@@ -692,7 +692,6 @@ test('GET /browsers/:browserId shows the configuration the browser was launched 
   ]);
 });
 
-// Older browsers kept only their OS and proxy, so the rest is left out.
 test('GET /browsers/:browserId shows only the known configuration of an older browser', async () => {
   const workspaceId = await makeUser();
   const browserPublicId = await makeBrowser(workspaceId, { os: 'windows-11' });

@@ -111,8 +111,6 @@ const listSuspendedPages = async (browser) =>
     ? listSuspendedPreviews({ browserId: browser.internalBrowserId })
     : [];
 
-// Browsers from before the full config was stored lack some settings, so
-// those rows are left out rather than guessed.
 const configRows = ({ os, config }) => {
   const guest = OSES[os]?.guest;
   const app = guest === 'windows' ? 'Microsoft Edge' : BROWSER_APPS[config.browser]?.label;

@@ -50,8 +50,6 @@ const SCREEN_SCALES = [100, 125, DEFAULT_SCREEN_SCALE, 175, 200].map((scale) => 
 }));
 const DEFAULT_SCREEN_SCALE_CHOICE = String(DEFAULT_SCREEN_SCALE);
 
-// What the browser page shows of a launch. Null settings are the image's own,
-// so they are stored as their values. The proxy is masked, as it holds secrets.
 const launchConfig = ({ proxy = null, screenResolution = null, screenScale = null, webgl, app }) => ({
   ...(proxy && { proxy: maskProxyUrl(proxy) }),
   browser: app,
