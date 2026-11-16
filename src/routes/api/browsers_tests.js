@@ -253,6 +253,20 @@ test('POST /api/v1/browsers answers 429 with Retry-After once the workspace is o
   assert.ok(!calls.includes('launchBrowser'));
 });
 
+test('POST /api/v1/browsers answers 429 with Retry-After while the server starts as many browsers as it can', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  await launchBrowserInstance({ workspaceId, userId, browserName: 'starting' });
+  const calls = fakeVms({ maxStarts: 1 });
+  const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
+  const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '15');
+  assert.match((await res.json()).error, /^Too many browsers are starting on this server right now\./);
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
+});
+
 const statusOf = async (workspaceId, publicId) =>
   (await getBrowserInstanceByPublicId({ workspaceId, publicId })).data.status;
 

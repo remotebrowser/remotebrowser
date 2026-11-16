@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { availableParallelism } from 'node:os';
 import {
   mkdtempSync,
   mkdirSync,
@@ -387,6 +388,11 @@ test('resumeBrowser refuses a VM that is not suspended', async () => {
   await assert.rejects(vm.resumeBrowser('Qabc12345'), /is not suspended/);
   await assert.rejects(vm.resumeBrowser('Qmissing1'), /is not suspended/);
   assert.equal(starts.length, 0);
+});
+
+test('maxStarts allows one start per 2 x VM_CPUS cores, and at least one', () => {
+  assert.equal(client({ cpus: 1 }).maxStarts, Math.max(1, Math.floor(availableParallelism() / 2)));
+  assert.equal(client({ cpus: 10_000 }).maxStarts, 1);
 });
 
 // A QMP session that records commands and answers like QEMU would.

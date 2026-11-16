@@ -37,12 +37,14 @@ const { setVmClient, createVmClient } = await import('../../vm/index.js');
 // A VM client with no real VMs: a launch gets `foobar`, which has no CDP URL,
 // so nothing is ever dialed. It records the options of each launch.
 const fakeVms = ({
+  maxStarts,
   launchBrowser = async () => ({ browserId: 'foobar' }),
   canLaunchBrowser = async () => true,
   launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : [])
 } = {}) => {
   const launches = [];
   setVmClient({
+    maxStarts,
     canLaunchBrowser,
     launchableOses,
     launchBrowser: async (options) => {
@@ -570,6 +572,27 @@ test('POST /browsers/launch answers 429 with Retry-After once the workspace is o
     await res.text(),
     /This workspace launched too many browsers in the last minute\. Please try again in \d+ seconds?\./
   );
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
+});
+
+test('POST /browsers/launch answers 429 with Retry-After while the server starts as many browsers as it can', async () => {
+  const workspaceId = await makeUser();
+  await makeLaunchedInstance({ workspaceId });
+  const launches = fakeVms({ maxStarts: 1 });
+  const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
+  const csrfId = 'a'.repeat(32);
+  const res = await setupApp().request('/browsers/launch', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'cookie': `session=${makeSessionCookie()}; csrf_id=${csrfId}`
+    },
+    body: new URLSearchParams({ name: 'calm-otter', workspace: workspaceId, csrf: makeCsrfToken(csrfId) }).toString()
+  });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '15');
+  assert.match(await res.text(), /Too many browsers are starting on this server right now\./);
+  assert.equal(launches.length, 0);
   assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });
 

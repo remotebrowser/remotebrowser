@@ -26,7 +26,8 @@ import {
   clearBrowserProxy,
   useBrowserKeyboard,
   useBrowserMouse,
-  readBrowserMouse
+  readBrowserMouse,
+  maxBrowserStarts
 } from '../../vms.js';
 import {
   BROWSER_APPS,
@@ -188,7 +189,8 @@ routes.post('/', async (c) => {
     browserName: settings.name ?? generateBrowserName(),
     browserDescription: settings.description ?? '',
     config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
-    os
+    os,
+    maxStarting: maxBrowserStarts()
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
