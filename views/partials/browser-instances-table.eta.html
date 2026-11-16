@@ -1,6 +1,9 @@
-<% if (it.browsers.length === 0) { %>
-<p>No browsers yet.</p>
+<% if (it.browsers.length === 0) { %> <% if (it.statusFilter && it.statusFilter !== 'active' && it.statusFilter !==
+'all') { %>
+<p>No <%= it.statusFilter %> browsers.</p>
 <% } else { %>
+<p>No browsers yet.</p>
+<% } %> <% } else { %>
 <table class="roster-table">
   <thead>
     <tr>

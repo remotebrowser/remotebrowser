@@ -4,6 +4,7 @@ import { createCsrfToken } from '../../auth/csrf.js';
 import { requireUser } from '../../middleware/auth.js';
 import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } from '../../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
+import { STATUS_FILTERS, readStatusFilter, matchesStatusFilter, statusFilterQuery } from './status-filter.js';
 
 export const routes = new Hono();
 
@@ -22,7 +23,10 @@ const renderBrowsers = async (c) => {
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const instances = listResult.error ? [] : listResult.data;
-  const browsers = instances.filter((instance) => instance.status !== 'terminated').map(summarizeBrowserInstance);
+  const statusFilter = readStatusFilter(c);
+  const browsers = instances
+    .filter((instance) => matchesStatusFilter(statusFilter, instance.status))
+    .map(summarizeBrowserInstance);
   return eta.render('browsers/index', {
     email: user.email,
     csrfToken: createCsrfToken(c),
@@ -30,6 +34,9 @@ const renderBrowsers = async (c) => {
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBreadcrumbs(workspace, 'Browsers'),
     browsers,
+    statusFilter,
+    statusFilters: STATUS_FILTERS,
+    statusQuery: statusFilterQuery(statusFilter),
     view: 'list',
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce')

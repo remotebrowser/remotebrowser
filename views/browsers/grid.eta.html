@@ -6,10 +6,19 @@ include('/partials/breadcrumbs', it) %>
   <article>
     <%~ include('/partials/browsers-view-toggle', it) %> <% /* Polls itself, so the view stays right after a toggle
     swaps it. */ %>
-    <div id="browser-view" hx-get="/browsers/grid" hx-trigger="every 3s" hx-select="#browser-view" hx-swap="outerHTML">
-      <% if (it.browsers.length === 0) { %>
-      <p>No browsers yet.</p>
+    <div
+      id="browser-view"
+      hx-get="/browsers/grid<%= it.statusQuery %>"
+      hx-trigger="every 3s"
+      hx-select="#browser-view"
+      hx-swap="outerHTML"
+    >
+      <% if (it.browsers.length === 0) { %> <% if (it.statusFilter && it.statusFilter !== 'active' && it.statusFilter
+      !== 'all') { %>
+      <p>No <%= it.statusFilter %> browsers.</p>
       <% } else { %>
+      <p>No browsers yet.</p>
+      <% } %> <% } else { %>
       <div class="browser-grid">
         <% it.browsers.forEach(function(browser) { %>
         <a class="browser-grid-card" href="/browsers/<%= browser.publicId %>">
