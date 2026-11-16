@@ -1,7 +1,13 @@
 import { consola } from 'consola/basic';
 import { createBrowserMonitor } from './workers/monitor.js';
-import { browserCdpUrl, browserExists } from './vms.js';
-import { updateBrowserInstanceStatus, listProvisionedBrowserInstances } from './models/browsers.js';
+import { browserCdpUrl, browserExists, stopBrowser } from './vms.js';
+import {
+  updateBrowserInstanceStatus,
+  listProvisionedBrowserInstances,
+  listStuckStartingBrowserInstances,
+  deleteBrowserInstance,
+  STARTING_WINDOW_MS
+} from './models/browsers.js';
 
 // Shared browser logic: status transitions and the monitor registry.
 
@@ -226,4 +232,49 @@ const createBrowserMonitors = ({
 
 const browserMonitors = createBrowserMonitors();
 
-export { nextBrowserStatus, browserMonitors, createBrowserMonitors };
+// A start that never finished holds a VM and a 'starting' row forever, so the
+// scheduler removes both. A few per run keeps one run short.
+const STUCK_BROWSERS_PER_RUN = 8;
+
+const removeStuckBrowsers = async ({
+  listStuck = listStuckStartingBrowserInstances,
+  stop = stopBrowser,
+  stopMonitor = ({ internalBrowserId }) => browserMonitors.stopBrowserMonitor({ internalBrowserId }),
+  remove = deleteBrowserInstance,
+  limit = STUCK_BROWSERS_PER_RUN
+} = {}) => {
+  const listed = await listStuck({ limit });
+  if (listed.error) {
+    return { error: listed.error };
+  }
+  let removed = 0;
+  for (const browser of listed.data) {
+    const { workspaceId, browserInstanceId, internalBrowserId, publicId } = browser;
+    consola.error(`Browser ${publicId} has been starting for over ${STARTING_WINDOW_MS / 60000} minutes; removing it`, {
+      'event.domain': 'browser',
+      'workspace.id': workspaceId,
+      'browser.public_id': publicId,
+      'rb.browser_id': internalBrowserId || null
+    });
+    // Keep the row while the VM may still run, so the next run tries again.
+    const stopped = await stop({ browserId: internalBrowserId });
+    if (stopped.error) {
+      consola.error(`Unable to stop the VM of stuck browser ${publicId}: ${stopped.error}`, {
+        'event.domain': 'browser'
+      });
+      continue;
+    }
+    if (internalBrowserId) {
+      await stopMonitor({ internalBrowserId });
+    }
+    const deleted = await remove({ workspaceId, browserInstanceId });
+    if (deleted.error) {
+      consola.error(`Unable to delete stuck browser ${publicId}: ${deleted.error}`, { 'event.domain': 'browser' });
+      continue;
+    }
+    removed += 1;
+  }
+  return { data: removed };
+};
+
+export { nextBrowserStatus, browserMonitors, createBrowserMonitors, removeStuckBrowsers, STUCK_BROWSERS_PER_RUN };

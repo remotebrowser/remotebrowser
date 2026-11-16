@@ -220,6 +220,22 @@ const deleteOldBrowserLaunches = async ({ now = Date.now(), limit = 1000 } = {})
   }
 };
 
+// Browsers whose start never finished, oldest first. A row from before the
+// creation time was kept has no age, so it is left alone.
+const listStuckStartingBrowserInstances = async ({ now = Date.now(), limit = 8 } = {}) => {
+  try {
+    const r = await (
+      await db()
+    ).query(
+      "SELECT * FROM browser_instances WHERE status='starting' AND creation_timestamp <= $1 ORDER BY creation_timestamp LIMIT $2",
+      [now - STARTING_WINDOW_MS, limit]
+    );
+    return { data: r.rows.map((row) => ({ ...map(row), workspaceId: row.workspace_id })) };
+  } catch (e) {
+    return { error: e.message };
+  }
+};
+
 const deleteBrowserInstance = async ({ workspaceId, browserInstanceId }) => {
   const r = await (
     await db()
@@ -281,6 +297,8 @@ const browserIdForHandle = async ({ handle }) => {
 
 export {
   MAX_BROWSER_LAUNCHES_PER_MINUTE,
+  STARTING_WINDOW_MS,
+  listStuckStartingBrowserInstances,
   launchBrowserInstance,
   recordProvisionedBrowser,
   updateBrowserInstanceStatus,
