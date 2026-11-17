@@ -39,7 +39,10 @@ test('parseMouseActions says which action is wrong, and why', () => {
     [[{ action: 'click', button: 'wheel-up' }], /button that is not one of: left, middle, right, back, forward/],
     [[{ action: 'click', count: 4 }], /count from 1 to 3/],
     [[{ action: 'scroll' }], /needs dx or dy/],
-    [[{ action: 'scroll', dy: 21 }], /needs dx or dy/]
+    [[{ action: 'scroll', dy: 21 }], /needs dx or dy/],
+    [[{ action: 'click' }, { action: 'click', pause: -1 }], /Action 1 needs a pause from 0 to 1000/],
+    [[{ action: 'move', x: 1, y: 1, pause: 1.5 }], /whole milliseconds/],
+    [Array(6).fill({ action: 'click', pause: 1000 }), /add up to more than 5000/]
   ]) {
     assert.throws(() => parseMouseActions(actions), error, JSON.stringify(actions));
   }
@@ -153,4 +156,20 @@ test('runMouseActions checks every action before it sends any event', async () =
     /Action 1/
   );
   assert.equal(connected, false);
+});
+
+test('runMouseActions waits for the pause after an action', async () => {
+  const { log, connectQmp } = recorder();
+  assert.deepEqual(parseMouseActions([{ action: 'down', pause: 30 }]), [{ action: 'down', button: 'left', pause: 30 }]);
+  const started = performance.now();
+  await runMouseActions({
+    ...options,
+    connectQmp,
+    actions: [
+      { action: 'down', pause: 30 },
+      { action: 'up', pause: 0 }
+    ]
+  });
+  assert.deepEqual(log, ['+left', '-left']);
+  assert.ok(performance.now() - started >= 25);
 });
