@@ -33,7 +33,7 @@ curl -X POST -H "Authorization: Bearer $API_KEY" http://localhost:3000/api/v1/br
 returns:
 
 ```json
-{ "browser_id": "B5xqk2m", "status": "launched" }
+{ "browser_id": "B5xqk2m", "status": "starting" }
 ```
 
 ### Launch settings

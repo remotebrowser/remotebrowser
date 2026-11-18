@@ -122,7 +122,7 @@ test('POST /api/v1/browsers launches a browser in the key’s workspace', async 
   const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.equal(body.status, 'launched');
+  assert.equal(body.status, 'starting');
   assert.match(body.browser_id, /^B[23456789abcdefghijkmnpqrstuvwxyz]{6}$/);
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId: body.browser_id });
   assert.equal(stored.data.creatorUserId, userId);
