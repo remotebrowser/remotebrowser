@@ -38,6 +38,7 @@ const { setVmClient, createVmClient } = await import('../../vm/index.js');
 // so nothing is ever dialed. It records the options of each launch.
 const fakeVms = ({
   maxStarts,
+  maxBrowsers,
   launchBrowser = async () => ({ browserId: 'foobar' }),
   canLaunchBrowser = async () => true,
   launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : [])
@@ -45,6 +46,7 @@ const fakeVms = ({
   const launches = [];
   setVmClient({
     maxStarts,
+    maxBrowsers,
     canLaunchBrowser,
     launchableOses,
     launchBrowser: async (options) => {
@@ -612,6 +614,19 @@ const postLaunch = (workspaceId, fields) => {
     }).toString()
   });
 };
+
+test('POST /browsers/launch answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
+  const workspaceId = await makeUser();
+  await makeLaunchedInstance({ workspaceId });
+  const launches = fakeVms({ maxBrowsers: 1 });
+  const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
+  const res = await postLaunch(workspaceId, { name: 'calm-otter' });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '60');
+  assert.match(await res.text(), /This server is running as many browsers as it can\. Terminate or suspend a browser/);
+  assert.equal(launches.length, 0);
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
+});
 
 test('GET /browsers/launch renders an enabled form when a VM can be launched', async () => {
   fakeVms();

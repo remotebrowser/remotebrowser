@@ -20,7 +20,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const { createVmClient } = await import('./client.js');
+const { createVmClient, defaultMaxBrowsers } = await import('./client.js');
 const { hostArch } = await import('./qemu.js');
 const { MACHINE_VERSION } = await import('./qemu.js');
 const { fileStamp } = await import('./snapshot.js');
@@ -393,6 +393,19 @@ test('resumeBrowser refuses a VM that is not suspended', async () => {
 test('maxStarts allows one start per 2 x VM_CPUS cores, and at least one', () => {
   assert.equal(client({ cpus: 1 }).maxStarts, Math.max(1, Math.floor(availableParallelism() / 2)));
   assert.equal(client({ cpus: 10_000 }).maxStarts, 1);
+});
+
+test('maxBrowsers is bound by cores and by memory, keeping 2 GiB for the host, and at least one', () => {
+  const GB = 1024 ** 3;
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 16, hostMemory: 64 * GB }), 15);
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 4, hostMemory: 16 * GB }), 3);
+  assert.equal(defaultMaxBrowsers({ memory: '2G', cores: 4, hostMemory: 16 * GB }), 4);
+  assert.equal(defaultMaxBrowsers({ memory: '2048M', cores: 64, hostMemory: 16 * GB }), 7);
+  assert.equal(defaultMaxBrowsers({ memory: '1500M', cores: 64, hostMemory: 16 * GB }), 9);
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 8, hostMemory: 4 * GB }), 1);
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 8, hostMemory: 1 * GB }), 1);
+  assert.equal(client({ maxBrowsers: 7 }).maxBrowsers, 7);
+  assert.ok(client().maxBrowsers >= 1);
 });
 
 // A QMP session that records commands and answers like QEMU would.

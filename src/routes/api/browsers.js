@@ -14,6 +14,7 @@ import {
   launchRefusal,
   launchableOses,
   startBrowser,
+  TOO_MANY_BROWSERS_MESSAGE,
   SCREEN_RESOLUTIONS,
   DEFAULT_SCREEN_RESOLUTION_CHOICE,
   SCREEN_SCALES,
@@ -27,7 +28,8 @@ import {
   useBrowserKeyboard,
   useBrowserMouse,
   readBrowserMouse,
-  maxBrowserStarts
+  maxBrowserStarts,
+  maxBrowserCount
 } from '../../vms.js';
 import {
   BROWSER_APPS,
@@ -190,7 +192,8 @@ routes.post('/', async (c) => {
     browserDescription: settings.description ?? '',
     config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
     os,
-    maxStarting: maxBrowserStarts()
+    maxStarting: maxBrowserStarts(),
+    maxBrowsers: maxBrowserCount()
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
@@ -309,6 +312,10 @@ routes.post('/:browserId/resume', async (c) => {
     );
   }
   if (resumed.error === 'BUSY') return c.json({ error: 'This browser is already being resumed.' }, 409);
+  if (resumed.error === 'TOO_MANY_BROWSERS') {
+    c.header('Retry-After', String(resumed.retryAfterSeconds));
+    return c.json({ error: TOO_MANY_BROWSERS_MESSAGE }, 429);
+  }
   if (resumed.error) return c.json({ error: 'Unable to resume the browser. Please try again.' }, 502);
   logAction(c, 'API browser resumed', browser);
   return c.json({ browser_id: browser.publicId, status: 'running' });

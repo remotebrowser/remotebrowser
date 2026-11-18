@@ -72,6 +72,9 @@ const startBrowser = async ({
 /** How many browsers this host can start at once. Test fakes set none. @returns {number} */
 const maxBrowserStarts = () => vms.maxStarts ?? Infinity;
 
+/** How many browsers this host can run at once. Test fakes set none. @returns {number} */
+const maxBrowserCount = () => vms.maxBrowsers ?? Infinity;
+
 /**
  * Whether a browser can be started now, on any OS. That needs a VM snapshot,
  * which the server saves in the background at startup.
@@ -275,6 +278,7 @@ export {
   startBrowser,
   canStartBrowser,
   maxBrowserStarts,
+  maxBrowserCount,
   listLaunchableOses,
   browserExists,
   browserCdpUrl,

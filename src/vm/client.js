@@ -1,5 +1,5 @@
 import { constants as fsConstants } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
@@ -55,6 +55,18 @@ const SUSPEND_TIMEOUT_MS = 120000;
 // 24 starts at once mostly missed the browser start timeout, and 4 never did.
 const defaultMaxStarts = (cpus) => Math.max(1, Math.floor(availableParallelism() / (cpus * 2)));
 
+const GIB = 1024 ** 3;
+// Left for the system and this app.
+const RESERVED_MEMORY = 2 * GIB;
+
+// config.js checks the format, e.g. 4G or 2048M.
+const memoryBytes = (size) => Number(size.slice(0, -1)) * (size.endsWith('G') ? GIB : 1024 ** 2);
+
+// A test host with more VMs than memory froze for minutes. More VMs than
+// cores make every browser slow.
+const defaultMaxBrowsers = ({ memory, cores = availableParallelism(), hostMemory = totalmem() }) =>
+  Math.max(1, Math.min(cores, Math.floor((hostMemory - RESERVED_MEMORY) / memoryBytes(memory))));
+
 // Everything host-facing is behind this factory so tests can inject fakes; the
 // singleton in index.js is what the app uses.
 const createVmClient = ({
@@ -64,6 +76,7 @@ const createVmClient = ({
   memory = vmConfig.vmMemory,
   cpus = vmConfig.vmCpus,
   maxStarts = defaultMaxStarts(cpus),
+  maxBrowsers = defaultMaxBrowsers({ memory }),
   start = host.start,
   portOpen = host.portOpen,
   freePort = host.freePort,
@@ -712,6 +725,7 @@ const createVmClient = ({
     launchableOses,
     canLaunchBrowser,
     maxStarts,
+    maxBrowsers,
     launchBrowser,
     browserExists,
     browserIsRunning,
@@ -737,4 +751,4 @@ const createVmClient = ({
   };
 };
 
-export { createVmClient };
+export { createVmClient, defaultMaxBrowsers };

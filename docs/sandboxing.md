@@ -17,6 +17,8 @@ Each VM gets `VM_MEMORY` of memory (default `4G`) and `VM_CPUS` virtual CPUs (de
 
 Starting a VM is heavy on the CPU. When many start at once, they slow each other down until none of them start in time. So the server starts at most one browser for every `2 × VM_CPUS` cores at once (4 on 16 cores with the default `VM_CPUS`). A launch over that limit is refused with HTTP 429 and a `Retry-After` header. The count is the browsers in the database that are still starting, so servers that share a database share the limit. A browser that has been starting for over 2 minutes no longer counts, since its start has most likely failed. Resumes are not counted.
 
+The server also limits how many browsers run at once: `min(cores, (memory − 2 GiB) / VM_MEMORY)`, and at least 1. The 2 GiB are for the system and the app. On 4 cores and 16 GB with the default `VM_MEMORY`, the limit is 3. A host with more VMs than memory can freeze for minutes, so the limit never goes over the memory. A launch or a resume over the limit is refused with HTTP 429 and a `Retry-After` header. Browsers that are starting, running, or in error count, because each one still has a VM in memory. Suspended browsers do not count, because their memory is saved to disk. The count comes from the database, so servers that share a database share the limit.
+
 Until a snapshot exists, browsers cannot be launched on its OS, and the app logs why.
 
 ## Isolation

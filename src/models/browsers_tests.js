@@ -18,6 +18,7 @@ const {
   setBrowserInstanceConfig,
   deleteOldBrowserLaunches,
   listStuckStartingBrowserInstances,
+  checkBrowserCapacity,
   MAX_BROWSER_LAUNCHES_PER_MINUTE,
   browserIdForHandle
 } = await import('./browsers.js');
@@ -444,6 +445,57 @@ test('listStuckStartingBrowserInstances lists browsers starting for over 2 minut
     [older.data.browserInstanceId, newer.data.browserInstanceId]
   );
   assert.equal((await listStuckStartingBrowserInstances({ now, limit: 1 })).data.length, 1);
+});
+
+describe('browsers running at once', () => {
+  const launch = (workspaceId, userId, options = {}) =>
+    launchBrowserInstance({ workspaceId, userId, browserName: 'calm-otter', maxBrowsers: 2, ...options });
+  const setStatus = (workspaceId, launched, toStatus) =>
+    updateBrowserInstanceStatus({ workspaceId, browserInstanceId: launched.data.browserInstanceId, toStatus });
+
+  test('refuses a launch once as many browsers as allowed are live, in any workspace', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    const other = await createWorkspace({ name: 'Other', ownerId });
+    await setStatus(workspaceId, await launch(workspaceId, ownerId), 'running');
+    await setStatus(other.data.workspaceId, await launch(other.data.workspaceId, ownerId), 'error');
+    assert.deepEqual(await launch(workspaceId, ownerId), { error: 'TOO_MANY_BROWSERS', retryAfterSeconds: 60 });
+    assert.deepEqual(await checkBrowserCapacity({ maxBrowsers: 2 }), {
+      error: 'TOO_MANY_BROWSERS',
+      retryAfterSeconds: 60
+    });
+    assert.equal(await checkBrowserCapacity({ maxBrowsers: 3 }), null);
+  });
+
+  test('counts a starting browser', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    await launch(workspaceId, ownerId);
+    await launch(workspaceId, ownerId);
+    assert.equal((await launch(workspaceId, ownerId)).error, 'TOO_MANY_BROWSERS');
+  });
+
+  test('does not count a suspended or terminated browser', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    const suspended = await launch(workspaceId, ownerId);
+    await setStatus(workspaceId, suspended, 'running');
+    await transitionBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId: suspended.data.browserInstanceId,
+      fromStatuses: ['running'],
+      toStatus: 'suspended'
+    });
+    await setStatus(workspaceId, await launch(workspaceId, ownerId), 'terminated');
+    assert.equal((await launch(workspaceId, ownerId)).error, undefined);
+    assert.equal((await launch(workspaceId, ownerId)).error, undefined);
+    assert.equal(await checkBrowserCapacity({ maxBrowsers: 3 }), null);
+  });
+
+  test('the starting limit still applies below the cap', async () => {
+    const { workspaceId, ownerId } = await makeWorkspace();
+    await launch(workspaceId, ownerId, { maxStarting: 1, maxBrowsers: 5 });
+    assert.equal((await launch(workspaceId, ownerId, { maxStarting: 1, maxBrowsers: 5 })).error, 'TOO_MANY_STARTING');
+    // Waiting for a start would not help here.
+    assert.equal((await launch(workspaceId, ownerId, { maxStarting: 1, maxBrowsers: 1 })).error, 'TOO_MANY_BROWSERS');
+  });
 });
 
 describe('launch rate', () => {
