@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { nextBrowserStatus, createBrowserMonitors } = await import('./browser.js');
+const { nextBrowserStatus, createBrowserMonitors, removeStuckBrowsers, STUCK_BROWSERS_PER_RUN } =
+  await import('./browser.js');
 const { consola } = await import('consola/basic');
 consola.level = -999;
 
@@ -238,4 +239,52 @@ test('startAllBrowserMonitors reports a failed listing', async () => {
 test('nextBrowserStatus never changes a suspended browser, which is unreachable on purpose', () => {
   assert.equal(nextBrowserStatus({ currentStatus: 'suspended', cdpConnected: false }), null);
   assert.equal(nextBrowserStatus({ currentStatus: 'suspended', cdpConnected: true }), null);
+});
+
+const stuck = (id, internalBrowserId) => ({
+  workspaceId: 1,
+  browserInstanceId: id,
+  publicId: `B${id}`,
+  internalBrowserId
+});
+
+test('removeStuckBrowsers stops the VM and monitor, then deletes the row, 8 at a time', async () => {
+  const calls = [];
+  const result = await removeStuckBrowsers({
+    listStuck: async ({ limit }) => {
+      calls.push(['list', limit]);
+      return { data: [stuck(1, 'vm-1'), stuck(2, '')] };
+    },
+    stop: async ({ browserId }) => (calls.push(['stop', browserId]), { data: true }),
+    stopMonitor: async ({ internalBrowserId }) => calls.push(['monitor', internalBrowserId]),
+    remove: async ({ browserInstanceId }) => (calls.push(['delete', browserInstanceId]), { data: true })
+  });
+  assert.deepEqual(result, { data: 2 });
+  assert.equal(STUCK_BROWSERS_PER_RUN, 8);
+  assert.deepEqual(calls, [
+    ['list', 8],
+    ['stop', 'vm-1'],
+    ['monitor', 'vm-1'],
+    ['delete', 1],
+    ['stop', ''],
+    ['delete', 2]
+  ]);
+});
+
+test('removeStuckBrowsers keeps the row when its VM could not be stopped', async () => {
+  const deleted = [];
+  const result = await removeStuckBrowsers({
+    listStuck: async () => ({ data: [stuck(1, 'vm-1'), stuck(2, 'vm-2')] }),
+    stop: async ({ browserId }) => (browserId === 'vm-1' ? { error: 'QMP timeout' } : { data: true }),
+    stopMonitor: async () => {},
+    remove: async ({ browserInstanceId }) => (deleted.push(browserInstanceId), { data: true })
+  });
+  assert.deepEqual(result, { data: 1 });
+  assert.deepEqual(deleted, [2]);
+});
+
+test('removeStuckBrowsers reports a failed listing', async () => {
+  assert.deepEqual(await removeStuckBrowsers({ listStuck: async () => ({ error: 'db down' }) }), {
+    error: 'db down'
+  });
 });
