@@ -214,7 +214,7 @@ routes.post('/', async (c) => {
     app: settings.browser ?? DEFAULT_BROWSER_APP
   });
   logAction(c, 'API browser launched', launched.data);
-  return c.json({ browser_id: launched.data.publicId, status: 'launched' });
+  return c.json({ browser_id: launched.data.publicId, status: 'starting' });
 });
 
 routes.get('/', async (c) => {

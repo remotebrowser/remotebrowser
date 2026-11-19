@@ -44,7 +44,7 @@ test('the REST API launches, lists, queries, drives over CDP, and terminates a b
   const launched = await request.post('/api/v1/browsers', { headers });
   expect(launched.status()).toBe(200);
   const { browser_id: browserId, status } = await launched.json();
-  expect(status).toBe('launched');
+  expect(status).toBe('starting');
 
   expect(await (await request.get('/api/v1/browsers', { headers })).json()).toContain(browserId);
   expect(await (await request.get(`/api/v1/browsers/${browserId}`, { headers })).json()).toEqual({
