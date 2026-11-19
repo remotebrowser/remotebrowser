@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { parsePauses, sleep } from './pause.js';
 
 // Enough for a drag or a few clicks and scrolls, short enough to finish soon.
 const MAX_MOUSE_ACTIONS = 50;
@@ -19,13 +20,13 @@ const BUTTONS = new Map([
   ['forward', 'extra']
 ]);
 
-// Each action and its fields. Each may have a point to move to first.
+// Each action and its fields. Each may have a point to move to first, and a pause after.
 const FIELDS = {
-  move: ['x', 'y'],
-  down: ['x', 'y', 'button'],
-  up: ['x', 'y', 'button'],
-  click: ['x', 'y', 'button', 'count'],
-  scroll: ['x', 'y', 'dx', 'dy']
+  move: ['x', 'y', 'pause'],
+  down: ['x', 'y', 'button', 'pause'],
+  up: ['x', 'y', 'button', 'pause'],
+  click: ['x', 'y', 'button', 'count', 'pause'],
+  scroll: ['x', 'y', 'dx', 'dy', 'pause']
 };
 
 const wholeIn = (value, low, high) => Number.isInteger(value) && value >= low && value <= high;
@@ -33,7 +34,7 @@ const wholeIn = (value, low, high) => Number.isInteger(value) && value >= low &&
 /**
  * Validates mouse actions and maps buttons to QEMU's names; errors name the index.
  * @param {unknown} actions
- * @returns {{action: string, x?: number, y?: number, button?: string, count?: number, dx?: number, dy?: number}[]}
+ * @returns {{action: string, x?: number, y?: number, button?: string, count?: number, dx?: number, dy?: number, pause?: number}[]}
  */
 const parseMouseActions = (actions) => {
   if (!Array.isArray(actions)) {
@@ -45,7 +46,7 @@ const parseMouseActions = (actions) => {
   if (actions.length > MAX_MOUSE_ACTIONS) {
     throw new Error(`There are more than ${MAX_MOUSE_ACTIONS} actions`);
   }
-  return actions.map((item, index) => {
+  const parsed = actions.map((item, index) => {
     const where = `Action ${index}`;
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       throw new Error(`${where} must be an object`);
@@ -89,6 +90,10 @@ const parseMouseActions = (actions) => {
     }
     return parsed;
   });
+  parsePauses(actions).forEach((pause, index) => {
+    if (pause > 0) parsed[index].pause = pause;
+  });
+  return parsed;
 };
 
 /**
@@ -112,7 +117,7 @@ const wheelSteps = ({ dx, dy }) => [
 ];
 
 /**
- * Sends every event at once; timing and letting go of buttons are up to the caller.
+ * Sends the events in order, waiting only for the pauses; letting go of buttons is up to the caller.
  * @param {{dir: string, actions: unknown, screen: {width: number, height: number}, connectQmp: Function}} params
  */
 const runMouseActions = async ({ dir, actions, screen, connectQmp }) => {
@@ -138,6 +143,9 @@ const runMouseActions = async ({ dir, actions, screen, connectQmp }) => {
         for (const wheel of wheelSteps(action)) {
           await send([btnEvent(wheel, true), btnEvent(wheel, false)]);
         }
+      }
+      if (action.pause) {
+        await sleep(action.pause);
       }
     }
   } finally {

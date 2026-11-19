@@ -39,7 +39,10 @@ test('parseKeyActions says which action is wrong, and why', () => {
     [[{ action: 'press', key: 'a' }], /needs a key/],
     [[{ action: 'press', key: 'Shift' }], /needs a key/],
     [[{ action: 'press', key: 'constructor' }], /needs a key/],
-    [[{ action: 'press', key: 13 }], /needs a key/]
+    [[{ action: 'press', key: 13 }], /needs a key/],
+    [[{ action: 'press', key: 'KeyA', pause: 1001 }], /Action 0 needs a pause from 0 to 1000/],
+    [[{ action: 'press', key: 'KeyA', pause: '30' }], /needs a pause/],
+    [Array(6).fill({ action: 'press', key: 'KeyA', pause: 1000 }), /add up to more than 5000/]
   ]) {
     assert.throws(() => parseKeyActions(actions), error, JSON.stringify(actions));
   }
@@ -131,4 +134,19 @@ test('runKeyActions checks every action before it sends any event', async () => 
     /Action 1/
   );
   assert.equal(connected, false);
+});
+
+test('runKeyActions waits for the pause after an action', async () => {
+  const { log, connectQmp } = recorder();
+  const started = performance.now();
+  await runKeyActions({
+    dir: '/vm',
+    connectQmp,
+    actions: [
+      { action: 'press', key: 'KeyA', pause: 30 },
+      { action: 'press', key: 'KeyB', pause: 0 }
+    ]
+  });
+  assert.deepEqual(log, ['+a', '-a', '+b', '-b']);
+  assert.ok(performance.now() - started >= 25);
 });
