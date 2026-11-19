@@ -72,8 +72,14 @@ const startBrowser = async ({
 /** How many browsers this host can start at once. Test fakes set none. @returns {number} */
 const maxBrowserStarts = () => vms.maxStarts ?? Infinity;
 
-/** How many browsers this host can run at once. Test fakes set none. @returns {number} */
-const maxBrowserCount = () => vms.maxBrowsers ?? Infinity;
+// People end browsers slowly, so a shorter wait would mostly fail again.
+const FULL_RETRY_AFTER_SECONDS = 60;
+
+/** Refuses a launch or a resume while this host runs as many VMs as it can. Test fakes set no limit. */
+const browserCapacityRefusal = async () =>
+  (await (vms.countLiveVms?.() ?? 0)) < (vms.maxBrowsers ?? Infinity)
+    ? null
+    : { error: 'TOO_MANY_BROWSERS', retryAfterSeconds: FULL_RETRY_AFTER_SECONDS };
 
 /**
  * Whether a browser can be started now, on any OS. That needs a VM snapshot,
@@ -278,7 +284,7 @@ export {
   startBrowser,
   canStartBrowser,
   maxBrowserStarts,
-  maxBrowserCount,
+  browserCapacityRefusal,
   listLaunchableOses,
   browserExists,
   browserCdpUrl,

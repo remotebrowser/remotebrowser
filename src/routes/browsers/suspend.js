@@ -10,8 +10,8 @@ import {
   loadWorkspaceSwitcherItems,
   canTerminateBrowser
 } from '../../middleware/workspace.js';
-import { checkBrowserCapacity, transitionBrowserInstanceStatus } from '../../models/browsers.js';
-import { maxBrowserCount, suspendBrowser, resumeBrowser } from '../../vms.js';
+import { transitionBrowserInstanceStatus } from '../../models/browsers.js';
+import { browserCapacityRefusal, suspendBrowser, resumeBrowser } from '../../vms.js';
 import { browserMonitors } from '../../browser.js';
 import { captureAllPages } from '../../screenshots.js';
 import { loadBrowser } from './terminate.js';
@@ -79,7 +79,7 @@ const resumeBrowserInstance = async ({ workspaceId, browser }) => {
   if (busy.has(internalBrowserId)) {
     return { error: 'BUSY' };
   }
-  const refused = await checkBrowserCapacity({ maxBrowsers: maxBrowserCount() });
+  const refused = await browserCapacityRefusal();
   if (refused) {
     return refused;
   }

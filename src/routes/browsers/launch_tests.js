@@ -39,6 +39,7 @@ const { setVmClient, createVmClient } = await import('../../vm/index.js');
 const fakeVms = ({
   maxStarts,
   maxBrowsers,
+  countLiveVms,
   launchBrowser = async () => ({ browserId: 'foobar' }),
   canLaunchBrowser = async () => true,
   launchableOses = async () => ((await canLaunchBrowser()) ? ['debian-13'] : [])
@@ -47,6 +48,7 @@ const fakeVms = ({
   setVmClient({
     maxStarts,
     maxBrowsers,
+    countLiveVms,
     canLaunchBrowser,
     launchableOses,
     launchBrowser: async (options) => {
@@ -617,8 +619,7 @@ const postLaunch = (workspaceId, fields) => {
 
 test('POST /browsers/launch answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
   const workspaceId = await makeUser();
-  await makeLaunchedInstance({ workspaceId });
-  const launches = fakeVms({ maxBrowsers: 1 });
+  const launches = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
   const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
   const res = await postLaunch(workspaceId, { name: 'calm-otter' });
   assert.equal(res.status, 429);

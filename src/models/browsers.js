@@ -78,27 +78,8 @@ const checkStarting = async (tx, { maxStarting, now }) => {
   return { error: 'TOO_MANY_STARTING', retryAfterSeconds: BUSY_RETRY_AFTER_SECONDS };
 };
 
-// The monitor marks a browser 'terminated' once its VM is gone, so an 'error'
-// browser still has a VM.
-const LIVE_STATUSES = ['starting', 'running', 'error'];
-// People end browsers slowly, so a shorter wait would mostly fail again.
-const FULL_RETRY_AFTER_SECONDS = 60;
-
-const checkBrowserCount = async (q, { maxBrowsers }) => {
-  const r = await q.query('SELECT count(*) AS live FROM browser_instances WHERE status = ANY($1::text[])', [
-    LIVE_STATUSES
-  ]);
-  if (Number(r.rows[0].live) < maxBrowsers) {
-    return null;
-  }
-  return { error: 'TOO_MANY_BROWSERS', retryAfterSeconds: FULL_RETRY_AFTER_SECONDS };
-};
-
-// No transaction, so two resumes at once can go one over the cap.
-const checkBrowserCapacity = async ({ maxBrowsers }) => checkBrowserCount(await db(), { maxBrowsers });
-
-// A refused launch returns its error with retryAfterSeconds. generateId,
-// launchesPerMinute, and now are injectable only for tests.
+// A refused launch returns LAUNCH_RATE_LIMITED or TOO_MANY_STARTING, with
+// retryAfterSeconds. generateId, launchesPerMinute, and now are injectable only for tests.
 const launchBrowserInstance = async ({
   workspaceId,
   userId,
@@ -110,7 +91,6 @@ const launchBrowserInstance = async ({
   generateId = generatePublicId,
   launchesPerMinute = MAX_BROWSER_LAUNCHES_PER_MINUTE,
   maxStarting = Infinity,
-  maxBrowsers = Infinity,
   now = Date.now()
 }) => {
   await ensureWorkspaceForRepair(workspaceId, personalWorkspaceRepair);
@@ -122,7 +102,6 @@ const launchBrowserInstance = async ({
         // the rate count below. Launches in other workspaces do not wait.
         await tx.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
         const refused =
-          (await checkBrowserCount(tx, { maxBrowsers })) ??
           (await checkStarting(tx, { maxStarting, now })) ??
           (await checkLaunchRate(tx, { workspaceId, launchesPerMinute, now }));
         if (refused) return refused;
@@ -329,7 +308,6 @@ export {
   deleteOldBrowserLaunches,
   listBrowserInstancesByWorkspace,
   listProvisionedBrowserInstances,
-  checkBrowserCapacity,
   getBrowserInstance,
   getBrowserInstanceByPublicId,
   browserIdForHandle

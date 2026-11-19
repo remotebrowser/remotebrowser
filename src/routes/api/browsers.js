@@ -29,7 +29,7 @@ import {
   useBrowserMouse,
   readBrowserMouse,
   maxBrowserStarts,
-  maxBrowserCount
+  browserCapacityRefusal
 } from '../../vms.js';
 import {
   BROWSER_APPS,
@@ -185,16 +185,17 @@ routes.post('/', async (c) => {
   }
   const user = c.get('user');
   const workspace = c.get('workspace');
-  const launched = await launchBrowserInstance({
-    workspaceId: workspace.id,
-    userId: user.id,
-    browserName: settings.name ?? generateBrowserName(),
-    browserDescription: settings.description ?? '',
-    config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
-    os,
-    maxStarting: maxBrowserStarts(),
-    maxBrowsers: maxBrowserCount()
-  });
+  const launched =
+    (await browserCapacityRefusal()) ??
+    (await launchBrowserInstance({
+      workspaceId: workspace.id,
+      userId: user.id,
+      browserName: settings.name ?? generateBrowserName(),
+      browserDescription: settings.description ?? '',
+      config: settings.proxy ? { proxy: maskProxyUrl(settings.proxy) } : null,
+      os,
+      maxStarting: maxBrowserStarts()
+    }));
   const refusal = launchRefusal(launched);
   if (refusal) {
     c.header('Retry-After', String(refusal.retryAfterSeconds));

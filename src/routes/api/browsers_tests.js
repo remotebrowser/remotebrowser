@@ -270,9 +270,7 @@ test('POST /api/v1/browsers answers 429 with Retry-After while the server starts
 test('POST /api/v1/browsers answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
-  await makeBrowser({ workspaceId, userId });
-  await makeBrowser({ workspaceId, userId, status: 'suspended' });
-  const calls = fakeVms({ maxBrowsers: 1 });
+  const calls = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
   const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
   const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
   assert.equal(res.status, 429);
@@ -306,9 +304,8 @@ test('POST /suspend then /resume moves a browser from running to suspended and b
 test('POST /resume answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
   const { userId, workspaceId } = await makeUser();
   const apiKey = await makeKey({ workspaceId, userId });
-  await makeBrowser({ workspaceId, userId });
   const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended' });
-  const calls = fakeVms({ maxBrowsers: 1 });
+  const calls = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
   const res = await call(setupApp(), `/api/v1/browsers/${suspended}/resume`, { method: 'POST', apiKey });
   assert.equal(res.status, 429);
   assert.equal(res.headers.get('retry-after'), '60');

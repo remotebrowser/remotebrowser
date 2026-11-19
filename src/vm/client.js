@@ -1,6 +1,6 @@
 import { constants as fsConstants } from 'node:fs';
 import { availableParallelism, totalmem } from 'node:os';
-import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
 import sharp from 'sharp';
@@ -450,6 +450,12 @@ const createVmClient = ({
     return pid !== null && isAlive(pid, dir);
   };
 
+  const countLiveVms = async () => {
+    const ids = await readdir(machinesDir).catch(() => []);
+    const alive = await Promise.all(ids.map(browserIsRunning));
+    return alive.filter(Boolean).length;
+  };
+
   // Ends QEMU, then removes the overlay, so nothing of the session survives.
   const stopBrowser = async (browserId) => {
     const dir = vmDir(browserId);
@@ -726,6 +732,7 @@ const createVmClient = ({
     canLaunchBrowser,
     maxStarts,
     maxBrowsers,
+    countLiveVms,
     launchBrowser,
     browserExists,
     browserIsRunning,

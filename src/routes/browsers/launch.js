@@ -15,7 +15,7 @@ import { browserMonitors } from '../../browser.js';
 import {
   canStartBrowser,
   listLaunchableOses,
-  maxBrowserCount,
+  browserCapacityRefusal,
   maxBrowserStarts,
   startBrowser as startBrowserVm
 } from '../../vms.js';
@@ -314,17 +314,18 @@ const handleLaunch = async (c) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
 
-  const launched = await launchBrowserInstance({
-    workspaceId: workspace.id,
-    userId: user.id,
-    browserName: name,
-    browserDescription: description,
-    config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
-    os,
-    maxStarting: maxBrowserStarts(),
-    maxBrowsers: maxBrowserCount(),
-    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
-  });
+  const launched =
+    (await browserCapacityRefusal()) ??
+    (await launchBrowserInstance({
+      workspaceId: workspace.id,
+      userId: user.id,
+      browserName: name,
+      browserDescription: description,
+      config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
+      os,
+      maxStarting: maxBrowserStarts(),
+      personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+    }));
   const refusal = launchRefusal(launched);
   if (refusal) {
     c.header('Retry-After', String(refusal.retryAfterSeconds));
