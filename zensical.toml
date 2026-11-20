@@ -13,6 +13,7 @@ nav = [
     { "Getting Started" = "getting-started.md" },
     { "API" = "api.md" },
     { "SDK" = "sdk.md" },
+    { "CLI" = "cli.md" },
     { "Playground" = "playground.md" },
   ] },
   { "Self-Hosting" = [

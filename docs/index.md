@@ -3,7 +3,7 @@ hide:
   - title
 ---
 
-Remote Browser is an [open-source](https://github.com/remotebrowser/remotebrowser) **browser fleet** for launching, [controlling](api.md), and managing [sandboxed](isolation.md) web browsers. It is well suited to any autonomous, intelligent assistant.
+Remote Browser is an [open-source](https://github.com/remotebrowser/remotebrowser) **browser fleet** for controlling [sandboxed](isolation.md) web browsers through its [API](api.md), [SDKs](sdk.md), and [CLI](cli.md). It is well suited to any autonomous, intelligent assistant.
 
 It's easy to [deploy](self-hosting.md) on your own infrastructure. [Give it a try](getting-started.md)!
 
