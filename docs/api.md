@@ -82,6 +82,7 @@ The other settings apply only when the browser starts, so they cannot be changed
 | 400    | The body is not a JSON object, a setting is unknown, or a value is not allowed. The error says which.                                                      |
 | 429    | The workspace launched too many browsers in the last minute. The `Retry-After` header says how many seconds to wait. The same limit applies to the web UI. |
 | 429    | The server is already starting as many browsers as it can. The `Retry-After` header says how many seconds to wait.                                         |
+| 429    | The server is already running as many browsers as it can. Terminate or suspend a browser, or wait as long as the `Retry-After` header says.                |
 | 503    | Browsers cannot be launched yet, or the chosen `os` is not ready yet. Try again in a few minutes.                                                          |
 
 ## Terminate a browser
@@ -133,6 +134,8 @@ _Example_: `curl -X POST -H "Authorization: Bearer $API_KEY" http://localhost:30
 ```
 
 For both calls, the same people may act as for terminating: the person who launched the browser, or a workspace Admin. A browser that is not in the right state (for example, resuming one that is already running) gets HTTP 409, with its `browser_id` and current `status`.
+
+When the server already runs as many browsers as it can, a resume gets HTTP 429, as a launch does. The `Retry-After` header says how many seconds to wait. See [the limit](sandboxing.md#behind-the-scenes).
 
 ## Configure a browser
 

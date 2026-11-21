@@ -260,6 +260,18 @@ test('a failed resume keeps the browser suspended and shows the error on its pag
   assert.equal(await statusNow(), 'suspended');
 });
 
+test('POST /browsers/:browserId/resume answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
+  const workspaceId = await makeUser();
+  const { publicId, statusNow } = await makeBrowser(workspaceId, { status: 'suspended' });
+  const calls = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
+  const res = await post(setupApp(), `/browsers/${publicId}/resume`, workspaceId);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '60');
+  assert.match(await res.text(), /role="alert" class="danger">This server is running as many browsers as it can\./);
+  assert.equal(await statusNow(), 'suspended');
+  assert.deepEqual(calls, []);
+});
+
 test('POST /browsers/:browserId/resume leaves a browser that is not suspended alone', async () => {
   const workspaceId = await makeUser();
   const { publicId } = await makeBrowser(workspaceId);

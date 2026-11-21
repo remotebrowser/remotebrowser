@@ -11,11 +11,12 @@ import {
   canTerminateBrowser
 } from '../../middleware/workspace.js';
 import { transitionBrowserInstanceStatus } from '../../models/browsers.js';
-import { suspendBrowser, resumeBrowser } from '../../vms.js';
+import { browserCapacityRefusal, suspendBrowser, resumeBrowser } from '../../vms.js';
 import { browserMonitors } from '../../browser.js';
 import { captureAllPages } from '../../screenshots.js';
 import { loadBrowser } from './terminate.js';
 import { renderBrowser } from './show.js';
+import { TOO_MANY_BROWSERS_MESSAGE } from './launch.js';
 
 export const routes = new Hono();
 
@@ -77,6 +78,10 @@ const resumeBrowserInstance = async ({ workspaceId, browser }) => {
   }
   if (busy.has(internalBrowserId)) {
     return { error: 'BUSY' };
+  }
+  const refused = await browserCapacityRefusal();
+  if (refused) {
+    return refused;
   }
   busy.add(internalBrowserId);
   try {
@@ -201,6 +206,10 @@ routes.post('/:browserId/resume', requireUser, requireWorkspaceRole('User'), req
   const resumed = await resumeBrowserInstance({ workspaceId: c.get('workspace').id, browser });
   if (resumed.error === 'BUSY') {
     return c.html(await renderBrowser(c, { error: 'This browser is already being resumed.' }), 409);
+  }
+  if (resumed.error === 'TOO_MANY_BROWSERS') {
+    c.header('Retry-After', String(resumed.retryAfterSeconds));
+    return c.html(await renderBrowser(c, { error: TOO_MANY_BROWSERS_MESSAGE }), 429);
   }
   if (resumed.error) {
     return c.html(await renderBrowser(c, { error: 'Unable to resume the browser. Please try again.' }), 400);

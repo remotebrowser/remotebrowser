@@ -12,7 +12,13 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canStartBrowser, listLaunchableOses, maxBrowserStarts, startBrowser as startBrowserVm } from '../../vms.js';
+import {
+  canStartBrowser,
+  listLaunchableOses,
+  browserCapacityRefusal,
+  maxBrowserStarts,
+  startBrowser as startBrowserVm
+} from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -64,10 +70,16 @@ const browsersReady = async () => {
   return ready.data === true;
 };
 
+const TOO_MANY_BROWSERS_MESSAGE =
+  'This server is running as many browsers as it can. Terminate or suspend a browser, or try again later.';
+
 // What to tell someone whose launch was refused, or null for any other outcome.
 // Shared with the REST API, which answers with the same words.
 const launchRefusal = (launched) => {
   const seconds = launched.retryAfterSeconds;
+  if (launched.error === 'TOO_MANY_BROWSERS') {
+    return { message: TOO_MANY_BROWSERS_MESSAGE, retryAfterSeconds: seconds };
+  }
   if (launched.error === 'TOO_MANY_STARTING') {
     return {
       message: 'Too many browsers are starting on this server right now. Please try again in a few seconds.',
@@ -302,16 +314,18 @@ const handleLaunch = async (c) => {
   const user = c.get('user');
   const workspace = c.get('workspace');
 
-  const launched = await launchBrowserInstance({
-    workspaceId: workspace.id,
-    userId: user.id,
-    browserName: name,
-    browserDescription: description,
-    config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
-    os,
-    maxStarting: maxBrowserStarts(),
-    personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
-  });
+  const launched =
+    (await browserCapacityRefusal()) ??
+    (await launchBrowserInstance({
+      workspaceId: workspace.id,
+      userId: user.id,
+      browserName: name,
+      browserDescription: description,
+      config: proxy ? { proxy: maskProxyUrl(proxy) } : null,
+      os,
+      maxStarting: maxBrowserStarts(),
+      personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
+    }));
   const refusal = launchRefusal(launched);
   if (refusal) {
     c.header('Retry-After', String(refusal.retryAfterSeconds));
@@ -345,6 +359,7 @@ export {
   launchRefusal,
   launchableOses,
   startBrowser,
+  TOO_MANY_BROWSERS_MESSAGE,
   INITIAL_URLS,
   SCREEN_RESOLUTIONS,
   DEFAULT_SCREEN_RESOLUTION_CHOICE,

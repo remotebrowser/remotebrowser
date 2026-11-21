@@ -20,7 +20,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const { createVmClient } = await import('./client.js');
+const { createVmClient, defaultMaxBrowsers } = await import('./client.js');
 const { hostArch } = await import('./qemu.js');
 const { MACHINE_VERSION } = await import('./qemu.js');
 const { fileStamp } = await import('./snapshot.js');
@@ -128,6 +128,16 @@ test('browserIsRunning checks that the QEMU in the pidfile owns this VM', async 
   assert.deepEqual(seen, [[4242, dir]]);
   assert.equal(await client({ dataDir, isAlive: async () => false }).browserIsRunning('Qabc12345'), false);
   assert.equal(await client({ dataDir, isAlive }).browserIsRunning('Qmissing1'), false);
+});
+
+test('countLiveVms counts the VMs whose QEMU is alive', async () => {
+  const dataDir = tempDataDir();
+  assert.equal(await client({ dataDir }).countLiveVms(), 0);
+  fakeVmDir(dataDir, 'Qabc12345', { pid: 4242 });
+  fakeVmDir(dataDir, 'Qdef67890', { pid: 4343 });
+  fakeVmDir(dataDir, 'Qghj23456', { pid: 4444 });
+  const isAlive = async (pid) => pid !== 4343;
+  assert.equal(await client({ dataDir, isAlive }).countLiveVms(), 2);
 });
 
 test('stopBrowser terminates QEMU, escalates to SIGKILL, and removes the overlay', async () => {
@@ -393,6 +403,15 @@ test('resumeBrowser refuses a VM that is not suspended', async () => {
 test('maxStarts allows one start per 2 x VM_CPUS cores, and at least one', () => {
   assert.equal(client({ cpus: 1 }).maxStarts, Math.max(1, Math.floor(availableParallelism() / 2)));
   assert.equal(client({ cpus: 10_000 }).maxStarts, 1);
+});
+
+test('maxBrowsers is bound by cores and by memory, keeping 2 GiB for the host, and at least one', () => {
+  const GB = 1024 ** 3;
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 16, hostMemory: 64 * GB }), 15);
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 4, hostMemory: 16 * GB }), 3);
+  assert.equal(defaultMaxBrowsers({ memory: '2G', cores: 4, hostMemory: 16 * GB }), 4);
+  assert.equal(defaultMaxBrowsers({ memory: '2048M', cores: 64, hostMemory: 16 * GB }), 7);
+  assert.equal(defaultMaxBrowsers({ memory: '4G', cores: 8, hostMemory: 4 * GB }), 1);
 });
 
 // A QMP session that records commands and answers like QEMU would.

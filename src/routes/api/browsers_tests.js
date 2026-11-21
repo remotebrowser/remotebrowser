@@ -267,6 +267,19 @@ test('POST /api/v1/browsers answers 429 with Retry-After while the server starts
   assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
 });
 
+test('POST /api/v1/browsers answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const calls = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
+  const before = (await listBrowserInstancesByWorkspace({ workspaceId })).data.length;
+  const res = await call(setupApp(), '/api/v1/browsers', { method: 'POST', apiKey });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '60');
+  assert.match((await res.json()).error, /^This server is running as many browsers as it can\./);
+  assert.ok(!calls.includes('launchBrowser'));
+  assert.equal((await listBrowserInstancesByWorkspace({ workspaceId })).data.length, before);
+});
+
 const statusOf = async (workspaceId, publicId) =>
   (await getBrowserInstanceByPublicId({ workspaceId, publicId })).data.status;
 
@@ -286,6 +299,19 @@ test('POST /suspend then /resume moves a browser from running to suspended and b
   assert.deepEqual(await resumed.json(), { browser_id: publicId, status: 'running' });
   assert.equal(await statusOf(workspaceId, publicId), 'running');
   assert.ok(calls.includes('suspendBrowser') && calls.includes('resumeBrowser'));
+});
+
+test('POST /resume answers 429 with Retry-After while the server runs as many browsers as it can', async () => {
+  const { userId, workspaceId } = await makeUser();
+  const apiKey = await makeKey({ workspaceId, userId });
+  const suspended = await makeBrowser({ workspaceId, userId, status: 'suspended' });
+  const calls = fakeVms({ maxBrowsers: 1, countLiveVms: async () => 1 });
+  const res = await call(setupApp(), `/api/v1/browsers/${suspended}/resume`, { method: 'POST', apiKey });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '60');
+  assert.match((await res.json()).error, /^This server is running as many browsers as it can\./);
+  assert.equal(await statusOf(workspaceId, suspended), 'suspended');
+  assert.deepEqual(calls, []);
 });
 
 test('POST /suspend and /resume answer 409 for a browser in the wrong state', async () => {
