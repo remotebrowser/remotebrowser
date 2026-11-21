@@ -12,6 +12,7 @@ nav = [
     { "Isolation" = "isolation.md" },
     { "Getting Started" = "getting-started.md" },
     { "API" = "api.md" },
+    { "SDK" = "sdk.md" },
     { "Playground" = "playground.md" },
   ] },
   { "Self-Hosting" = [
