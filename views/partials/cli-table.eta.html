@@ -1,0 +1,43 @@
+<% /* Styled like the API keys table, including its card layout on a phone. */ %>
+<table class="roster-table api-keys-table cli-table" role="table">
+  <thead role="rowgroup">
+    <tr role="row">
+      <th role="columnheader">Name</th>
+      <th role="columnheader">Created</th>
+      <th role="columnheader">Expires</th>
+      <th role="columnheader">Last used</th>
+      <% if (it.showCliSessionCreator) { %>
+      <th role="columnheader">Created by</th>
+      <% } %>
+    </tr>
+  </thead>
+  <tbody role="rowgroup">
+    <% it.cliSessions.forEach(function(cliSession) { %>
+    <tr role="row">
+      <td role="cell" class="api-key-name">
+        <a href="/cli/<%= cliSession.publicId %>"><%= cliSession.name %></a>
+      </td>
+      <td role="cell" data-label="Created">
+        <time datetime="<%= cliSession.createdAt %>" title="<%= cliSession.createdAt %>"
+          ><%= cliSession.createdAgo %></time
+        >
+      </td>
+      <td role="cell" data-label="Expires">
+        <time datetime="<%= cliSession.expiresAt %>" title="<%= cliSession.expiresAt %>"
+          ><%= cliSession.expiresIn %></time
+        >
+      </td>
+      <td role="cell" data-label="Last used">
+        <% if (cliSession.lastUsedAt) { %>
+        <time datetime="<%= cliSession.lastUsedAt %>" title="<%= cliSession.lastUsedAt %>"
+          ><%= cliSession.lastUsedAgo %></time
+        >
+        <% } else { %>Never<% } %>
+      </td>
+      <% if (it.showCliSessionCreator) { %>
+      <td role="cell" data-label="Created by"><%= cliSession.creatorEmail %></td>
+      <% } %>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>

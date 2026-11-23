@@ -64,3 +64,11 @@ Run the build again after you pull a newer `ghcr.io/remotebrowser/remotebrowser`
 ### Windows 11
 
 Windows 11 is offered only when its install ISO is in place, since Remote Browser cannot download it. Put the ISO at `iso/windows-11.iso` in the VM directory, so with the command above, at `.data/vm/iso/windows-11.iso`, or at `$VM_DATA_DIR/iso/windows-11.iso`. Then run the build again. The Windows build needs only KVM, not the Docker socket. See [VM](vm.md#windows) for what else it needs, and for how to get the ISO.
+
+## CLI login
+
+Users log in from a terminal with the [CLI](cli.md), and approve it on `/activate` in their web browser. The CLI gets
+a token that is valid for 30 days, which users can revoke on the workspace page.
+
+The approval link is built from `PUBLIC_ORIGIN`, so set it to the address that users open in their web browser. The
+token is sent in the response body, so serve the app over HTTPS: over plain HTTP, anyone on the network can read it.

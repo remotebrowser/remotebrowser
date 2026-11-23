@@ -1,0 +1,20 @@
+<% layout('/layout', { title: 'Log in to the CLI', bodyClass: 'auth' }) %> <%~ include('/partials/auth-aside') %>
+<main class="signin-main">
+  <div class="auth-head">
+    <h1 class="auth-brand">Remote Browser</h1>
+    <%~ include('/partials/theme-toggle') %>
+  </div>
+  <div class="signin-panel">
+    <% if (it.outcome === 'approved') { %>
+    <h2>CLI login approved</h2>
+    <p class="signin-intro">You can close this tab and go back to your terminal.</p>
+    <% } else if (it.outcome === 'denied') { %>
+    <h2>CLI login denied</h2>
+    <p class="signin-intro">The CLI did not get access. You can close this tab.</p>
+    <% } else { %>
+    <h2>Login expired</h2>
+    <p class="signin-intro">This login has expired or was already used. Run <code>remotebrowser login</code> again.</p>
+    <% } %>
+    <a href="/" class="signin-retry">Go to your workspace</a>
+  </div>
+</main>

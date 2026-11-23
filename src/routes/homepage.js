@@ -7,6 +7,7 @@ import { requireWorkspaceRole, buildBreadcrumbs, loadWorkspaceSwitcherItems } fr
 import { listBrowserInstancesByWorkspace } from '../models/browsers.js';
 import { countApiKeysByUser } from '../models/apikeys.js';
 import { seesAllApiKeys, atApiKeyLimit } from './apikeys/index.js';
+import { loadCliSessions, seesAllCliSessions } from './cli/show.js';
 
 export const routes = new Hono();
 
@@ -48,7 +49,9 @@ const renderDashboard = async (c) => {
     // An Admin with no keys of their own has no link to /api-keys, so they get a button.
     canManageAllApiKeys: seesAllApiKeys(workspace),
     // Offered too when the count failed: the generate page checks again.
-    canGenerateApiKey: Boolean(apiKeyCount.error) || !atApiKeyLimit(workspace, apiKeyCount.data)
+    canGenerateApiKey: Boolean(apiKeyCount.error) || !atApiKeyLimit(workspace, apiKeyCount.data),
+    cliSessions: await loadCliSessions(c),
+    showCliSessionCreator: seesAllCliSessions(workspace)
   });
 };
 

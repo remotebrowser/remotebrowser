@@ -1,0 +1,49 @@
+<% layout('/layout', { title: 'Remote Browser - CLI Session ' + it.cliSession.name }) %> <%~ include('/partials/topnav',
+it) %> <%~ include('/partials/breadcrumbs', it) %>
+<main>
+  <article>
+    <h1><%= it.cliSession.name %></h1>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <dl class="cli-session-details">
+      <dt>Created</dt>
+      <dd>
+        <time datetime="<%= it.cliSession.createdAt %>" title="<%= it.cliSession.createdAt %>"
+          ><%= it.cliSession.createdAgo %></time
+        >
+        by <%= it.cliSession.creatorEmail %>
+      </dd>
+      <dt>Expires</dt>
+      <dd>
+        <time datetime="<%= it.cliSession.expiresAt %>" title="<%= it.cliSession.expiresAt %>"
+          ><%= it.cliSession.expiresIn %></time
+        >
+      </dd>
+      <dt>Last used</dt>
+      <dd>
+        <% if (it.cliSession.lastUsedAt) { %>
+        <time datetime="<%= it.cliSession.lastUsedAt %>" title="<%= it.cliSession.lastUsedAt %>"
+          ><%= it.cliSession.lastUsedAgo %></time
+        >
+        <% } else { %>Never<% } %>
+      </dd>
+      <dt>Device</dt>
+      <dd><%= it.cliSession.deviceName || 'Unknown' %></dd>
+      <dt>IP address at login</dt>
+      <dd><%= it.cliSession.ipAddress || 'Unknown' %></dd>
+      <dt>Client</dt>
+      <dd><%= it.cliSession.userAgent || 'Unknown' %></dd>
+    </dl>
+    <p>
+      Revoking this session stops the CLI on this device at once. To use it again, run <code>remotebrowser login</code>.
+    </p>
+    <form method="post" action="/cli/<%= it.cliSession.publicId %>/revoke">
+      <%~ include('/partials/csrf', it) %> <%~ include('/partials/active-workspace', it) %>
+      <div class="cli-session-actions">
+        <button type="submit" class="btn-danger">Revoke</button>
+        <a href="/" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </article>
+</main>

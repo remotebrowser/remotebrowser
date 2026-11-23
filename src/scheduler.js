@@ -5,6 +5,7 @@ import { getDatabase } from './db/database.js';
 import { cleanupScreenshots } from './screenshots.js';
 import { deleteExpiredSigninCodes } from './models/users.js';
 import { cleanupApiKeys } from './models/apikeys.js';
+import { cleanupCliSessions } from './models/cli.js';
 import { deleteOldBrowserLaunches } from './models/browsers.js';
 import { removeStuckBrowsers } from './browser.js';
 
@@ -53,6 +54,13 @@ const cleanup = async () => {
     consola.error('SCHEDULER could not remove expired API keys', {
       'event.domain': 'scheduler',
       'error.type': String(removedKeys.error)
+    });
+  }
+  const removedCliSessions = await cleanupCliSessions();
+  if (removedCliSessions.error) {
+    consola.error('SCHEDULER could not remove expired CLI sessions', {
+      'event.domain': 'scheduler',
+      'error.type': String(removedCliSessions.error)
     });
   }
   const duration = Math.round(performance.now() - timestamp);

@@ -279,7 +279,7 @@ const logAction = (c, message, browser) => {
     'user.id': c.get('user').id,
     'workspace.id': c.get('workspace').id,
     'browser.public_id': browser.publicId,
-    'rb.api_key': c.get('apiKeyPublicId')
+    ...c.get('credentialLogAttributes')
   });
 };
 

@@ -1,0 +1,54 @@
+<% layout('/layout', { title: 'Log in to the CLI', bodyClass: 'auth' }) %> <%~ include('/partials/auth-aside') %>
+<main class="signin-main">
+  <div class="auth-head">
+    <h1 class="auth-brand">Remote Browser</h1>
+    <%~ include('/partials/theme-toggle') %>
+  </div>
+  <div class="signin-panel">
+    <h2>Log in to the CLI</h2>
+    <% if (it.fromLink) { %>
+    <p class="signin-intro">Check that this code matches the code in your terminal.</p>
+    <% } else { %>
+    <p class="signin-intro">Enter the code shown in your terminal.</p>
+    <% } %> <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <form method="post" action="/activate" class="signin-form">
+      <%~ include('/partials/csrf', it) %> <% /* With a code from the link, focus goes to the button, so the user checks
+      the code instead of typing. */ %> <% if (it.code) { %>
+      <input
+        type="text"
+        id="code"
+        name="code"
+        value="<%= it.code %>"
+        class="user-code-input"
+        placeholder="XXXX-XXXX"
+        aria-label="Code"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        maxlength="20"
+        required
+      />
+      <% } else { %>
+      <input
+        type="text"
+        id="code"
+        name="code"
+        class="user-code-input"
+        placeholder="XXXX-XXXX"
+        aria-label="Code"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        maxlength="20"
+        required
+        autofocus
+      />
+      <% } %> <% /* Only the first autofocus element in the page takes focus. */ %>
+      <button type="submit" class="btn-primary" autofocus>
+        Continue <span class="icon-caret-right" aria-hidden="true">&#9656;</span>
+      </button>
+    </form>
+  </div>
+</main>

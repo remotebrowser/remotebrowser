@@ -195,3 +195,36 @@ test('POST /continue rejects a replayed sign-in link: a nonce is single-use', as
   const second = await postContinue(app, 'b'.repeat(32), { nonce });
   assert.equal(second.status, 401);
 });
+
+test('POST /continue goes back to the page that asked for sign-in', async () => {
+  const { Hono: App } = await import('hono');
+  const { setReturnToCookie } = await import('../auth/session.js');
+  const setter = new App();
+  setter.get('/', (c) => {
+    setReturnToCookie(c, '/activate?code=BCDF-GHJK');
+    return c.text('ok');
+  });
+  const cookie = (await setter.request('/')).headers.getSetCookie()[0].split(';')[0];
+  const nonce = await makeNonce('user@example.com');
+  const res = await postContinue(
+    setupApp(),
+    'a'.repeat(32),
+    { nonce },
+    { cookie: `csrf_id=${'a'.repeat(32)}; ${cookie}` }
+  );
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/activate?code=BCDF-GHJK');
+  assert.ok(res.headers.getSetCookie().some((c) => c.startsWith('return_to=;')));
+});
+
+test('POST /continue ignores a forged return path', async () => {
+  const nonce = await makeNonce('user@example.com');
+  const forged = `${Date.now() + 60_000}.${Buffer.from('//evil.example').toString('base64url')}.bad`;
+  const res = await postContinue(
+    setupApp(),
+    'a'.repeat(32),
+    { nonce },
+    { cookie: `csrf_id=${'a'.repeat(32)}; return_to=${forged}` }
+  );
+  assert.equal(res.headers.get('location'), '/');
+});

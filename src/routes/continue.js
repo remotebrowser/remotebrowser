@@ -3,7 +3,13 @@ import { consola } from 'consola/basic';
 import { eta } from '../render.js';
 import { createCsrfToken, verifyCsrfToken, rotateCsrfId } from '../auth/csrf.js';
 import { signInWithEmailLink } from '../auth/magic.js';
-import { readSigninEmailCookie, clearSigninEmailCookie, setSessionCookie } from '../auth/session.js';
+import {
+  readSigninEmailCookie,
+  clearSigninEmailCookie,
+  setSessionCookie,
+  readReturnToCookie,
+  clearReturnToCookie
+} from '../auth/session.js';
 import { requireGuest } from '../middleware/auth.js';
 import { findOrCreateUser } from '../models/users.js';
 import { claimInvitationsForUser, ensurePersonalWorkspace } from '../models/workspaces.js';
@@ -87,5 +93,8 @@ routes.post('/', async (c) => {
   rotateCsrfId(c);
   setSessionCookie(c, { publicId, email: claimEmail, issuedAt: Date.now(), lastActiveAt: Date.now() });
   consola.info('SIGNIN', { 'event.domain': 'user', 'user.id': id, 'user.email': claimEmail });
-  return c.redirect('/', 303);
+  // Back to the page that asked for sign-in, e.g. the CLI's approval page.
+  const returnTo = readReturnToCookie(c);
+  clearReturnToCookie(c);
+  return c.redirect(returnTo || '/', 303);
 });

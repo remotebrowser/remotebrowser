@@ -827,6 +827,69 @@ a.btn-secondary {
   }
 }
 
+/* Label and value pairs: a CLI session's details, and the CLI login to approve. */
+.cli-session-details,
+.cli-login-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.375rem 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.cli-session-details dt,
+.cli-login-details dt {
+  color: var(--text-muted);
+}
+
+.cli-session-details dd,
+.cli-login-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cli-login-details {
+  max-width: 21rem;
+  margin: 0 auto 2rem;
+}
+
+.user-code,
+.user-code-input {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.1em;
+}
+
+.signin-form .user-code-input {
+  font-size: 1.5rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cli-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cli-login-label {
+  align-self: flex-start;
+  margin-bottom: -0.5rem;
+  text-align: left;
+}
+
+.cli-login-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1.05rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.signin-form .cli-login-warning {
+  margin: 0;
+}
+
 .key-preview {
   font-size: 0.9rem;
   color: var(--text-muted);
