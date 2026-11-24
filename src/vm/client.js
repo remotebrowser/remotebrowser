@@ -51,9 +51,6 @@ const BROWSER_START_TIMEOUT_MS = 30000;
 // Saving or loading a few GB of memory takes a while on a busy host.
 const SUSPEND_TIMEOUT_MS = 120000;
 
-// Starting a VM is CPU-heavy. In a load test on GCE (4 vCPUs, 1 vCPU per VM),
-// 8 starts at once all made the browser start timeout and 10 did not. A faster
-// local CPU did far better, so the slower GCE result sets the limit.
 const defaultMaxStarts = (cpus) => Math.max(1, Math.floor((availableParallelism() * 2) / cpus));
 
 // Everything host-facing is behind this factory so tests can inject fakes; the
