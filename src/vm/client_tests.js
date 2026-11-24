@@ -300,6 +300,7 @@ test('a QMP timeout during a save is undone on a new session', async () => {
   await assert.rejects(vm.suspendBrowser('Qabc12345'), /No reply on/);
   assert.deepEqual(sessions[0].commands, ['stop', 'migrate', 'query-migrate']);
   assert.deepEqual(sessions[1].commands, ['migrate_cancel', 'cont']);
+  assert.equal(sessions[1].timeoutMs, 20000);
   assert.equal(existsSync(path.join(dir, 'suspended.state.part')), false);
 });
 

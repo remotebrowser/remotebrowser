@@ -172,7 +172,7 @@ const takeSnapshot = async ({
     };
     const saveAndQuit = async () => {
       const socket = path.join(dir, 'qmp.sock');
-      const reopen = () => openQmp(socket, { timeoutMs: SLOW_QMP_TIMEOUT_MS });
+      const reopen = (timeoutMs = SLOW_QMP_TIMEOUT_MS) => openQmp(socket, { timeoutMs });
       const qmp = await reopen();
       try {
         await saveState(qmp, path.join(dir, 'vm.state'), saveTimeoutMs, reopen);
