@@ -3,11 +3,9 @@ import path from 'node:path';
 import { delay } from './host.js';
 import { SLOW_QMP_TIMEOUT_MS } from './qmp.js';
 
-const RECOVER_TIMEOUT_MS = 20000;
-
 // Cancel and continue on a new session, as a timeout destroys the old one.
 const recover = async (reopen, partial) => {
-  const qmp = await reopen(RECOVER_TIMEOUT_MS).catch(() => null);
+  const qmp = await reopen().catch(() => null);
   if (qmp) {
     await qmp.execute('migrate_cancel').catch(() => {});
     await qmp.execute('cont').catch(() => {});
@@ -53,7 +51,7 @@ const saveState = async (qmp, file, timeoutMs, reopen) => {
 // The caller waits for QEMU to exit.
 const suspendVm = async ({ dir, connectQmp, timeoutMs }) => {
   const socket = path.join(dir, 'qmp.sock');
-  const reopen = (timeoutMs = SLOW_QMP_TIMEOUT_MS) => connectQmp(socket, { timeoutMs });
+  const reopen = () => connectQmp(socket, { timeoutMs: SLOW_QMP_TIMEOUT_MS });
   const qmp = await reopen();
   try {
     await saveState(qmp, path.join(dir, 'suspended.state'), timeoutMs, reopen);
