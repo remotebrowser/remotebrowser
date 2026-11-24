@@ -870,7 +870,13 @@ test('POST /browsers/launch passes the proxy to the new VM when the box is check
   ]);
   // Kept with the browser, so the REST API can report it, but never with the password.
   const [browser] = (await listBrowserInstancesByWorkspace({ workspaceId })).data;
-  assert.deepEqual(browser.config, { proxy: 'http://u:****@proxy.example.com:8080' });
+  assert.deepEqual(browser.config, {
+    proxy: 'http://u:****@proxy.example.com:8080',
+    browser: 'chromium',
+    screenResolution: { width: 1920, height: 1080 },
+    screenScale: 150,
+    webgl: false
+  });
 });
 
 test('POST /browsers/launch ignores the proxy URL when the box is not checked', async () => {

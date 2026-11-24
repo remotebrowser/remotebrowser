@@ -555,7 +555,13 @@ test('POST /api/v1/browsers with a proxy launches the VM with it, and records it
     ]
   );
   const stored = await getBrowserInstanceByPublicId({ workspaceId, publicId });
-  assert.deepEqual(stored.data.config, { proxy: 'http://u:****@proxy.example.com:8080' });
+  assert.deepEqual(stored.data.config, {
+    proxy: 'http://u:****@proxy.example.com:8080',
+    browser: 'chromium',
+    screenResolution: { width: 1920, height: 1080 },
+    screenScale: 150,
+    webgl: true
+  });
   assert.equal(stored.data.os, 'debian-13');
 });
 
