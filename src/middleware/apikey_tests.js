@@ -124,3 +124,24 @@ test('authenticateApiKey records when a key is used, and only when it is accepte
   }
   assert.equal(await lastUsed(), now);
 });
+
+test('authenticateApiKey accepts a CLI token and acts in its workspace', async () => {
+  const { createDeviceAuthorization, decideDeviceAuthorization, pollDeviceAuthorization } =
+    await import('../models/cli.js');
+  const { userId, personalWorkspaceId } = await makeUser();
+  const started = await createDeviceAuthorization({});
+  await decideDeviceAuthorization({
+    userCode: started.data.userCode,
+    approve: true,
+    userId,
+    workspaceId: personalWorkspaceId
+  });
+  const { token, session } = (await pollDeviceAuthorization({ deviceCode: started.data.deviceCode })).data;
+  const authenticated = await authenticateApiKey(`Bearer ${token}`);
+  assert.equal(authenticated.data.user.id, userId);
+  assert.deepEqual(authenticated.data.workspace, { id: personalWorkspaceId, role: 'Owner', isPersonal: true });
+  assert.deepEqual(authenticated.data.logAttributes, { 'rb.cli_session': session.publicId });
+  const expired = await authenticateApiKey(`Bearer ${token}`, session.expiresTimestamp);
+  assert.deepEqual(expired, { error: 'UNAUTHORIZED', expired: true });
+  assert.deepEqual(await authenticateApiKey('Bearer rb-cli-v1-junk'), { error: 'UNAUTHORIZED' });
+});

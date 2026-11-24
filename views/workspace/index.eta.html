@@ -31,6 +31,10 @@ include('/partials/breadcrumbs', it) %>
     <div class="api-key-summary">
       <a href="/api-keys/generate" class="btn-secondary">New API key</a>
     </div>
+    <% } %>
+    <h2>CLI Sessions</h2>
+    <% if (it.cliSessions.length > 0) { %> <%~ include('/partials/cli-table', it) %> <% } else { %>
+    <p>No active sessions for the <a href="https://remotebrowser.ai/cli/">CLI</a>.</p>
     <% } %> <% if (!it.workspace.isPersonal) { %>
     <h2>Workspace Management</h2>
     <p><a href="/workspace">Manage collaborators</a></p>

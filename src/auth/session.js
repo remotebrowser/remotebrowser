@@ -7,6 +7,7 @@ import { sign, signatureMatches } from './signing.js';
 // Only this module knows the cookie names, so the __Host- prefix rule is applied consistently.
 const SESSION_COOKIE = cookieName('session');
 const SIGNIN_EMAIL_COOKIE = cookieName('signin_email');
+const RETURN_TO_COOKIE = cookieName('return_to');
 
 // Tokens are encrypted with an AES key derived separately from HMAC secret so leaked cookies stay confidential.
 const CIPHER_ALGO = 'aes-256-gcm';
@@ -181,7 +182,42 @@ const readSigninEmailCookie = (c) => {
 
 const clearSigninEmailCookie = (c) => deleteCookie(c, SIGNIN_EMAIL_COOKIE, { path: '/', secure: config.secureCookies });
 
+// Where to go after sign-in, e.g. the CLI's approval page with its code. Only a
+// path on this server is accepted, so sign-in can never send the user to another site.
+const RETURN_TO_TTL_MS = 30 * 60 * 1000;
+const isLocalPath = (value) => typeof value === 'string' && /^\/(?![/\\])/.test(value) && value.length <= 200;
+
+const setReturnToCookie = (c, returnTo) => {
+  if (!isLocalPath(returnTo)) return;
+  const expires = Date.now() + RETURN_TO_TTL_MS;
+  const pathB64 = Buffer.from(returnTo).toString('base64url');
+  const signature = sign(`returnto.${expires}.${pathB64}`);
+  setCookie(c, RETURN_TO_COOKIE, `${expires}.${pathB64}.${signature}`, {
+    httpOnly: true,
+    secure: config.secureCookies,
+    sameSite: 'Lax',
+    path: '/'
+  });
+};
+
+const readReturnToCookie = (c) => {
+  const token = getCookie(c, RETURN_TO_COOKIE);
+  if (typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [expires, pathB64, signature] = parts;
+  if (!/^\d+$/.test(expires) || Number(expires) <= Date.now()) return null;
+  if (!signatureMatches(`returnto.${expires}.${pathB64}`, signature)) return null;
+  const returnTo = Buffer.from(pathB64, 'base64url').toString();
+  return isLocalPath(returnTo) ? returnTo : null;
+};
+
+const clearReturnToCookie = (c) => deleteCookie(c, RETURN_TO_COOKIE, { path: '/', secure: config.secureCookies });
+
 export {
+  setReturnToCookie,
+  readReturnToCookie,
+  clearReturnToCookie,
   createSessionCookie,
   readSessionCookie,
   readSessionCookieFrom,

@@ -20,6 +20,9 @@ const canTerminateBrowser = (browser, workspace, user) =>
 // leaked; anyone else only their own.
 const canManageApiKey = (apiKey, workspace, user) => hasAdminRole(workspace.role) || apiKey.creatorUserId === user.id;
 
+// The same rule for CLI sessions, which also act for their creator.
+const canManageCliSession = canManageApiKey;
+
 const loadActiveWorkspace = async (c) => {
   const user = c.get('user');
   // The session's choice, else the workspace every user has, so a session that
@@ -148,6 +151,7 @@ export {
   hasAdminRole,
   canTerminateBrowser,
   canManageApiKey,
+  canManageCliSession,
   loadActiveWorkspace,
   loadWorkspaceSwitcherItems,
   requireWorkspaceRole,

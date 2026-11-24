@@ -28,7 +28,9 @@ test('migrate creates the application tables once', async () => {
         'api_keys',
         'browser_instances',
         'browser_launches',
+        'cli_sessions',
         'collaborators',
+        'device_authorizations',
         'invitations',
         'schema_migrations',
         'signin_codes',
@@ -52,7 +54,8 @@ test('migrate creates the application tables once', async () => {
         '010_browser_instances_suspended.sql',
         '011_api_keys.sql',
         '012_browser_launches.sql',
-        '013_browser_instances_extra.sql'
+        '013_browser_instances_extra.sql',
+        '014_cli_login.sql'
       ]
     );
   });

@@ -1,0 +1,58 @@
+<% layout('/layout', { title: 'Approve the CLI login', bodyClass: 'auth' }) %> <%~ include('/partials/auth-aside') %>
+<main class="signin-main">
+  <div class="auth-head">
+    <h1 class="auth-brand">Remote Browser</h1>
+    <%~ include('/partials/theme-toggle') %>
+  </div>
+  <div class="signin-panel">
+    <h2>Approve the CLI login?</h2>
+    <% if (it.error) { %>
+    <div role="alert" class="danger"><%= it.error %></div>
+    <% } %>
+    <dl class="cli-login-details">
+      <dt>Code</dt>
+      <dd><code class="user-code"><%= it.code %></code></dd>
+      <dt>Server</dt>
+      <dd><%= it.serverOrigin %></dd>
+      <% if (it.deviceName) { %>
+      <dt>Device</dt>
+      <dd><%= it.deviceName %></dd>
+      <% } %>
+      <dt>Requested</dt>
+      <dd><time datetime="<%= it.requestedAt %>" title="<%= it.requestedAt %>"><%= it.requestedAgo %></time></dd>
+      <% if (it.ipAddress) { %>
+      <dt>From</dt>
+      <dd><%= it.ipAddress %></dd>
+      <% } %>
+      <dt>Account</dt>
+      <dd><%= it.email %></dd>
+    </dl>
+    <form method="post" action="/activate/decide" class="signin-form">
+      <%~ include('/partials/csrf', it) %>
+      <input type="hidden" name="code" value="<%= it.code %>" />
+      <% /* With only their own workspace, there is nothing to choose. */ %> <% if (it.workspaces.length > 1) { %>
+      <label for="workspace" class="cli-login-label">Workspace</label>
+      <select id="workspace" name="workspace" class="cli-login-select">
+        <% it.workspaces.forEach(function(workspace) { %> <% if (workspace.id === it.selectedWorkspaceId) { %>
+        <option value="<%= workspace.id %>" selected><%= workspace.name %></option>
+        <% } else { %>
+        <option value="<%= workspace.id %>"><%= workspace.name %></option>
+        <% } %> <% }) %>
+      </select>
+      <p class="signin-intro cli-login-warning">
+        This gives the Remote Browser CLI full access to the chosen workspace for <strong><%= it.days %> days</strong>.
+      </p>
+      <% } else { %>
+      <input type="hidden" name="workspace" value="<%= it.workspaces[0].id %>" />
+      <p class="signin-intro cli-login-warning">
+        This gives the Remote Browser CLI full access to your workspace for <strong><%= it.days %> days</strong>.
+      </p>
+      <% } %>
+      <p class="signin-intro cli-login-warning">
+        Only approve if you started this login yourself and the code matches your terminal.
+      </p>
+      <button type="submit" name="decision" value="approve" class="btn-primary">Approve</button>
+      <button type="submit" name="decision" value="deny" class="btn-secondary">Deny</button>
+    </form>
+  </div>
+</main>

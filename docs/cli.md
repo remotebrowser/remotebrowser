@@ -2,10 +2,6 @@
 
 `remotebrowser` is a command-line tool for managing browsers.
 
-It requires two environment variables: `REMOTEBROWSER_API_KEY` for your API key, and `REMOTEBROWSER_URL` for the server URL.
-
-## Install
-
 Download a prebuilt binary for Windows, macOS, Linux, or FreeBSD from the [releases page](https://github.com/remotebrowser/cli/releases).
 
 For example, on Linux x86_64:
@@ -18,14 +14,13 @@ tar -xzf $NAME.tar.gz
 sudo install $NAME/remotebrowser /usr/local/bin/
 ```
 
-## Example
-
-Set your API key and the server URL:
+Start with `remotebrowser login <URL>`, where `<URL>` is the server URL. For example:
 
 ```bash
-export REMOTEBROWSER_API_KEY=sk-rb-v1-...
-export REMOTEBROWSER_URL=http://localhost:3000
+remotebrowser login http://localhost:3000
 ```
+
+This opens your web browser and shows a code. Check that the code matches the one in the terminal, then approve it. If you belong to several workspaces, choose the one the CLI may use. The CLI then stays logged in for 30 days.
 
 Launch a browser. With `--wait`, the command blocks until the browser is running, then prints its ID:
 
@@ -45,7 +40,7 @@ Print the [CDP](https://chromedevtools.github.io/devtools-protocol/) WebSocket U
 remotebrowser connect $ID
 ```
 
-To use this with [Playwright](https://playwright.dev/), send the API key in the `Authorization: Bearer` header, as described in [Connect to a browser over CDP](api.md#connect-to-a-browser-over-cdp).
+To use this with [Playwright](https://playwright.dev/), see [Connect to a browser over CDP](api.md#connect-to-a-browser-over-cdp).
 
 When you are done, terminate the browser:
 
