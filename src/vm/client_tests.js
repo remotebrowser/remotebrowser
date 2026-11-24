@@ -278,6 +278,90 @@ test('a failed save leaves the VM running and no state file', async () => {
   assert.equal(await vm.browserIsSuspended('Qabc12345'), false);
 });
 
+test('a QMP timeout during a save is undone on a new session', async () => {
+  const dataDir = tempDataDir();
+  const dir = fakeVmDir(dataDir, 'Qabc12345');
+  const sessions = [];
+  const connectQmp = async (socketPath, options = {}) => {
+    const session = { id: sessions.length, timeoutMs: options.timeoutMs, commands: [] };
+    sessions.push(session);
+    return {
+      execute: async (command) => {
+        session.commands.push(command);
+        if (session.id === 0 && command === 'query-migrate') {
+          throw new Error(`No reply on ${socketPath}`);
+        }
+        return {};
+      },
+      close: () => {}
+    };
+  };
+  const vm = client({ dataDir, connectQmp, isAlive: async () => true });
+  await assert.rejects(vm.suspendBrowser('Qabc12345'), /No reply on/);
+  assert.deepEqual(sessions[0].commands, ['stop', 'migrate', 'query-migrate']);
+  assert.deepEqual(sessions[1].commands, ['migrate_cancel', 'cont']);
+  assert.equal(existsSync(path.join(dir, 'suspended.state.part')), false);
+});
+
+test('suspend and resume wait up to a minute for a QMP reply', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qabc12345');
+  const timeouts = [];
+  let alive = true;
+  const { connectQmp } = fakeQmp({
+    'migrate': ({ uri }) => {
+      writeFileSync(uri.replace(/^file:/, ''), 'state');
+      return {};
+    },
+    'query-migrate': { status: 'completed' },
+    'quit': () => {
+      alive = false;
+      return {};
+    }
+  });
+  const recordingQmp = (socketPath, options = {}) => {
+    timeouts.push(options.timeoutMs);
+    return connectQmp(socketPath, options);
+  };
+  await client({ dataDir, connectQmp: recordingQmp, isAlive: async () => alive }).suspendBrowser('Qabc12345');
+  assert.deepEqual(timeouts, [60000]);
+});
+
+test('suspends run one at a time', async () => {
+  const dataDir = tempDataDir();
+  fakeVmDir(dataDir, 'Qaaaaaaaa');
+  fakeVmDir(dataDir, 'Qbbbbbbbb');
+  const alive = new Set(['Qaaaaaaaa', 'Qbbbbbbbb']);
+  let saving = 0;
+  let most = 0;
+  const connectQmp = async (socketPath) => {
+    const id = path.basename(path.dirname(socketPath));
+    return {
+      execute: async (command, args) => {
+        if (command === 'stop') {
+          saving += 1;
+          most = Math.max(most, saving);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        } else if (command === 'migrate') {
+          writeFileSync(args.uri.replace(/^file:/, ''), 'state');
+        } else if (command === 'query-migrate') {
+          return { status: 'completed' };
+        } else if (command === 'quit') {
+          saving -= 1;
+          alive.delete(id);
+        }
+        return {};
+      },
+      close: () => {}
+    };
+  };
+  const vm = client({ dataDir, connectQmp, isAlive: async (pid, dir) => alive.has(path.basename(dir)) });
+  await Promise.all([vm.suspendBrowser('Qaaaaaaaa'), vm.suspendBrowser('Qbbbbbbbb')]);
+  assert.equal(most, 1);
+  assert.equal(await vm.browserIsSuspended('Qaaaaaaaa'), true);
+  assert.equal(await vm.browserIsSuspended('Qbbbbbbbb'), true);
+});
+
 test('suspendBrowser refuses a VM that is not running', async () => {
   const dataDir = tempDataDir();
   fakeVmDir(dataDir, 'Qabc12345');

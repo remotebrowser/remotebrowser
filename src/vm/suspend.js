@@ -6,6 +6,7 @@ import { checkImage } from './image.js';
 import { continueIncoming, setGuestClock } from './incoming.js';
 import { guestOf, machineOs } from './os.js';
 import { removeSuspendedPreviews, writeSuspendedPreviews } from './previews.js';
+import { SLOW_QMP_TIMEOUT_MS } from './qmp.js';
 import { suspendVm } from './save.js';
 import { isWellFormedBrowserId, readPid, readPort, vmName } from './state.js';
 
@@ -27,6 +28,14 @@ const createSuspender = ({
   suspendTimeoutMs,
   zstd
 }) => {
+  // VMs that save at once share the disk, and then QEMU answers too late.
+  let queue = Promise.resolve();
+  const oneAtATime = (task) => {
+    const run = queue.then(task);
+    queue = run.catch(() => {});
+    return run;
+  };
+
   const browserIsSuspended = async (browserId) => {
     if (!isWellFormedBrowserId(browserId)) {
       return false;
@@ -48,9 +57,11 @@ const createSuspender = ({
     if (pid === null || !(await isAlive(pid, dir))) {
       throw new Error(`${name} is not running`);
     }
-    await suspendVm({ dir, connectQmp, timeoutMs: suspendTimeoutMs });
-    await waitForExit(pid, dir);
-    const compressed = await compressSuspendedState(dir, { binary: zstd });
+    const compressed = await oneAtATime(async () => {
+      await suspendVm({ dir, connectQmp, timeoutMs: suspendTimeoutMs });
+      await waitForExit(pid, dir);
+      return compressSuspendedState(dir, { binary: zstd });
+    });
     // Only nice to have: a browser that is suspended without them still resumes.
     await writeSuspendedPreviews(dir, previews).catch((error) =>
       consola.warn(`Unable to keep the page previews of ${name}: ${error.message}`)
@@ -89,7 +100,7 @@ const createSuspender = ({
       ports: Number.isInteger(ports.cdp) && Number.isInteger(ports.vnc) ? ports : undefined
     });
     try {
-      const qmp = await connectQmp(path.join(dir, 'qmp.sock'));
+      const qmp = await connectQmp(path.join(dir, 'qmp.sock'), { timeoutMs: SLOW_QMP_TIMEOUT_MS });
       try {
         await continueIncoming(qmp, suspendTimeoutMs);
       } finally {
