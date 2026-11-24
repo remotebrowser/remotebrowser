@@ -188,3 +188,7 @@ const page = await context.newPage();
 await page.goto('https://example.com');
 await browser.close();
 ```
+
+## Start a CLI login
+
+`POST /api/v1/auth/device` needs no API key. It allows 10 calls per client address and 300 in total every 10 minutes. Beyond that it returns `429` with a `Retry-After` header.

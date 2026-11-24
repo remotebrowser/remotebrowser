@@ -17,6 +17,10 @@ const CLI_SESSION_MS = CLI_SESSION_DAYS * DAY_MS;
 // How long the user has to approve a login (RFC 8628 suggests 10-15 minutes).
 const DEVICE_CODE_TTL_MS = 15 * MINUTE_MS;
 
+const DEVICE_LIMIT_WINDOW_MS = 10 * MINUTE_MS;
+const DEVICE_LIMIT_PER_IP = 10;
+const DEVICE_LIMIT_TOTAL = 300;
+
 // The polling interval the CLI is told to use, in seconds.
 const POLL_INTERVAL_SECONDS = 5;
 
@@ -71,6 +75,21 @@ const mapAuthorization = (r) => ({
  */
 const createDeviceAuthorization = async ({ deviceName, ipAddress, userAgent, now = Date.now() }) => {
   const database = await db();
+  const countRecent = async (where, params) => {
+    const r = await database.query(
+      `SELECT COUNT(*)::int AS n FROM device_authorizations WHERE created_timestamp > $1 ${where}`,
+      [now - DEVICE_LIMIT_WINDOW_MS, ...params]
+    );
+    return r.rows[0].n;
+  };
+  try {
+    const fromThisIp = ipAddress ? await countRecent('AND ip_address=$2', [clip(ipAddress, 64)]) : 0;
+    if (fromThisIp >= DEVICE_LIMIT_PER_IP || (await countRecent('', [])) >= DEVICE_LIMIT_TOTAL) {
+      return { error: 'DEVICE_RATE_LIMITED' };
+    }
+  } catch (e) {
+    return { error: e.message };
+  }
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const deviceCode = generateDeviceCode();
     const userCode = generateUserCode();
@@ -313,6 +332,8 @@ export {
   DEVICE_CODE_TTL_MS,
   POLL_INTERVAL_SECONDS,
   createDeviceAuthorization,
+  DEVICE_LIMIT_PER_IP,
+  DEVICE_LIMIT_TOTAL,
   findPendingDeviceAuthorization,
   decideDeviceAuthorization,
   pollDeviceAuthorization,

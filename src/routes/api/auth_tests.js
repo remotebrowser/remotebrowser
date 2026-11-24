@@ -133,3 +133,17 @@ test('an expired CLI token gets "Your login has expired."', async () => {
   assert.equal(res.status, 401);
   assert.deepEqual(await res.json(), { error: 'Your login has expired.' });
 });
+
+test('POST /device answers 429 with Retry-After when the limit is reached', async () => {
+  const { createDeviceAuthorization, DEVICE_LIMIT_PER_IP } = await import('../../models/cli.js');
+  for (let i = 0; i < DEVICE_LIMIT_PER_IP; i += 1) await createDeviceAuthorization({ ipAddress: '203.0.113.1' });
+  const app = new Hono();
+  app.use('*', async (c, next) => {
+    c.set('ipAddress', '203.0.113.1');
+    await next();
+  });
+  app.route('/api/v1/auth', routes);
+  const res = await postJson(app, 'http://localhost/api/v1/auth/device', {});
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('Retry-After'), '600');
+});

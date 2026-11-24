@@ -42,6 +42,10 @@ routes.post('/device', async (c) => {
     ipAddress,
     userAgent: c.req.header('User-Agent')
   });
+  if (created.error === 'DEVICE_RATE_LIMITED') {
+    c.header('Retry-After', '600');
+    return c.json({ error: 'Too many login attempts. Please try again in 10 minutes.' }, 429);
+  }
   if (created.error) {
     consola.error('AUTH could not start a CLI login', { 'event.domain': 'auth', 'error.type': String(created.error) });
     return c.json({ error: 'Unable to start the login. Please try again.' }, 503);

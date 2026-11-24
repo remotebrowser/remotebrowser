@@ -180,3 +180,20 @@ test('cleanupCliSessions removes expired logins, and sessions long past expiry',
   assert.equal((await cleanupCliSessions({ now: T0 + 31 * DAY_MS })).data, 0);
   assert.equal((await cleanupCliSessions({ now: T0 + 61 * DAY_MS })).data, 1);
 });
+
+test('createDeviceAuthorization stops one address after DEVICE_LIMIT_PER_IP logins', async () => {
+  const { DEVICE_LIMIT_PER_IP } = await import('./cli.js');
+  for (let i = 0; i < DEVICE_LIMIT_PER_IP; i += 1) {
+    assert.ok((await createDeviceAuthorization({ ipAddress: '203.0.113.1' })).data);
+  }
+  assert.equal((await createDeviceAuthorization({ ipAddress: '203.0.113.1' })).error, 'DEVICE_RATE_LIMITED');
+  assert.ok((await createDeviceAuthorization({ ipAddress: '203.0.113.2' })).data);
+});
+
+test('createDeviceAuthorization stops everyone after DEVICE_LIMIT_TOTAL logins', async () => {
+  const { DEVICE_LIMIT_TOTAL } = await import('./cli.js');
+  for (let i = 0; i < DEVICE_LIMIT_TOTAL; i += 1) {
+    assert.ok((await createDeviceAuthorization({ ipAddress: `10.0.${Math.floor(i / 5)}.${i % 5}` })).data);
+  }
+  assert.equal((await createDeviceAuthorization({ ipAddress: '203.0.113.9' })).error, 'DEVICE_RATE_LIMITED');
+});
