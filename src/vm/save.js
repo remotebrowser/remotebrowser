@@ -3,7 +3,6 @@ import path from 'node:path';
 import { delay } from './host.js';
 import { SLOW_QMP_TIMEOUT_MS } from './qmp.js';
 
-// Short, so a failed save still answers within a client's usual request timeout.
 const RECOVER_TIMEOUT_MS = 20000;
 
 // Cancel and continue on a new session, as a timeout destroys the old one.
@@ -19,8 +18,7 @@ const recover = async (reopen, partial) => {
 
 // Pauses the VM on this QMP session and saves its memory and devices to
 // `file`. QEMU keeps running, paused, so the caller decides whether to quit
-// it. A failed save leaves the VM running as it was, and no file. `reopen`
-// opens a new session to undo the pause.
+// it. A failed save leaves the VM running as it was, and no file.
 const saveState = async (qmp, file, timeoutMs, reopen) => {
   const partial = `${file}.part`;
   try {
