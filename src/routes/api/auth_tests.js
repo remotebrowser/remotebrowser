@@ -6,7 +6,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const { routes } = await import('./auth.js');
 const { routes: browserRoutes } = await import('./browsers.js');
-const { decideDeviceAuthorization, findCliSessionByToken } = await import('../../models/cli.js');
+const { decideDeviceAuthorization, findCliSessionByToken, MAX_STARTS_PER_IP } = await import('../../models/cli.js');
 const { normalizeUserCode } = await import('../../cli.js');
 const { findOrCreateUser } = await import('../../models/users.js');
 const { ensurePersonalWorkspace } = await import('../../models/workspaces.js');
@@ -54,6 +54,21 @@ test('POST /device starts a login with the RFC 8628 fields', async () => {
   assert.equal(body.verification_uri_complete, `http://localhost/activate?code=${body.user_code}`);
   assert.equal(body.expires_in, 900);
   assert.equal(body.interval, 5);
+});
+
+test('POST /device answers 429 with Retry-After once an address starts too many logins', async () => {
+  const app = setupApp();
+  const start = () => postJson(app, 'http://localhost/api/v1/auth/device', { device_name: 'burst' });
+  for (let i = 0; i < MAX_STARTS_PER_IP; i += 1) {
+    assert.equal((await start()).status, 200);
+  }
+  const res = await start();
+  assert.equal(res.status, 429);
+  const retryAfter = Number(res.headers.get('Retry-After'));
+  assert.ok(retryAfter > 0 && retryAfter <= 600);
+  assert.match((await res.json()).error, /Too many/);
+  const rows = await (await getDatabase()).query('SELECT count(*) AS n FROM device_authorizations');
+  assert.equal(Number(rows.rows[0].n), MAX_STARTS_PER_IP);
 });
 
 test('POST /token walks through pending, approval, and a single issue', async () => {

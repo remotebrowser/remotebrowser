@@ -5,6 +5,7 @@ process.env.PGLITE_DATA_DIR = 'memory://';
 
 const {
   CLI_SESSION_DAYS,
+  START_WINDOW_MS,
   createDeviceAuthorization,
   findPendingDeviceAuthorization,
   decideDeviceAuthorization,
@@ -179,4 +180,47 @@ test('cleanupCliSessions removes expired logins, and sessions long past expiry',
   // Kept a while after expiry, so its owner learns why it fails.
   assert.equal((await cleanupCliSessions({ now: T0 + 31 * DAY_MS })).data, 0);
   assert.equal((await cleanupCliSessions({ now: T0 + 61 * DAY_MS })).data, 1);
+});
+
+test('createDeviceAuthorization limits starts per address, with a retry time', async () => {
+  const now = 1_000_000;
+  for (let i = 0; i < 3; i += 1) {
+    const ok = await createDeviceAuthorization({ ipAddress: '10.0.0.1', maxPerIp: 3, now: now + i * 1000 });
+    assert.ok(ok.data);
+  }
+  const refused = await createDeviceAuthorization({ ipAddress: '10.0.0.1', maxPerIp: 3, now: now + 5000 });
+  assert.equal(refused.error, 'DEVICE_RATE_LIMITED');
+  // The oldest start leaves the window at now + WINDOW; the call is 5s later.
+  assert.equal(refused.retryAfterSeconds, START_WINDOW_MS / 1000 - 5);
+  // Another address is not affected.
+  assert.ok((await createDeviceAuthorization({ ipAddress: '10.0.0.2', maxPerIp: 3, now: now + 5000 })).data);
+  // A slot frees up once the oldest start is out of the window.
+  const later = await createDeviceAuthorization({ ipAddress: '10.0.0.1', maxPerIp: 3, now: now + START_WINDOW_MS + 1 });
+  assert.ok(later.data);
+  const rows = await (await getDatabase()).query('SELECT count(*) AS n FROM device_authorizations');
+  assert.equal(Number(rows.rows[0].n), 5);
+});
+
+test('createDeviceAuthorization limits all starts together', async () => {
+  const now = 1_000_000;
+  for (let i = 0; i < 4; i += 1) {
+    assert.ok((await createDeviceAuthorization({ ipAddress: `10.0.0.${i}`, maxTotal: 4, now })).data);
+  }
+  const refused = await createDeviceAuthorization({ ipAddress: '10.0.1.1', maxTotal: 4, now });
+  assert.equal(refused.error, 'DEVICE_RATE_LIMITED');
+  assert.equal(refused.retryAfterSeconds, START_WINDOW_MS / 1000);
+});
+
+test('createDeviceAuthorization counts starts without an address together', async () => {
+  for (let i = 0; i < 2; i += 1) {
+    assert.ok((await createDeviceAuthorization({ ipAddress: null, maxPerIp: 2 })).data);
+  }
+  assert.equal((await createDeviceAuthorization({ ipAddress: null, maxPerIp: 2 })).error, 'DEVICE_RATE_LIMITED');
+});
+
+test('a refused start leaves no row', async () => {
+  await createDeviceAuthorization({ ipAddress: '10.0.0.1', maxPerIp: 1 });
+  await createDeviceAuthorization({ ipAddress: '10.0.0.1', maxPerIp: 1 });
+  const rows = await (await getDatabase()).query('SELECT count(*) AS n FROM device_authorizations');
+  assert.equal(Number(rows.rows[0].n), 1);
 });

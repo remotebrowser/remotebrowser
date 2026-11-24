@@ -66,29 +66,97 @@ const mapAuthorization = (r) => ({
   expiresTimestamp: r.expires_timestamp
 });
 
+// Starting a login needs no sign-in, so anyone can fill the table. A real user
+// starts a login a few times at most. The window must stay shorter than
+// DEVICE_CODE_TTL_MS: clean-up deletes expired rows, and the counts need them.
+const START_WINDOW_MS = 10 * MINUTE_MS;
+// Per client address. Roomy enough for a shared office address (NAT).
+const MAX_STARTS_PER_IP = 10;
+// All addresses together. A botnet can still use this up and block new logins
+// for a while, but the table stays small and existing logins keep working.
+const MAX_STARTS_TOTAL = 300;
+
+// A slot frees up when the oldest start in the window leaves it.
+const retryAfterFor = (timestamps, limit, now) => {
+  const freedAt = Number(timestamps[timestamps.length - limit]) + START_WINDOW_MS;
+  return Math.max(1, Math.ceil((freedAt - now) / 1000));
+};
+
+// Runs inside the insert's transaction, after its lock, so concurrent starts
+// cannot all pass on the same count.
+const checkStartRate = async (tx, { ipAddress, maxPerIp, maxTotal, now }) => {
+  const since = now - START_WINDOW_MS;
+  const all = await tx.query(
+    'SELECT created_timestamp FROM device_authorizations WHERE created_timestamp > $1 ORDER BY created_timestamp',
+    [since]
+  );
+  const mine = await tx.query(
+    `SELECT created_timestamp FROM device_authorizations
+     WHERE created_timestamp > $1 AND ip_address IS NOT DISTINCT FROM $2 ORDER BY created_timestamp`,
+    [since, ipAddress]
+  );
+  const waits = [];
+  if (mine.rows.length >= maxPerIp)
+    waits.push(
+      retryAfterFor(
+        mine.rows.map((r) => r.created_timestamp),
+        maxPerIp,
+        now
+      )
+    );
+  if (all.rows.length >= maxTotal)
+    waits.push(
+      retryAfterFor(
+        all.rows.map((r) => r.created_timestamp),
+        maxTotal,
+        now
+      )
+    );
+  return waits.length ? { error: 'DEVICE_RATE_LIMITED', retryAfterSeconds: Math.max(...waits) } : null;
+};
+
+// An arbitrary number, shared by all server instances.
+const START_LOCK_ID = 4_201_401;
+
 /**
  * Starts a login. Returns the device code once; only its digest is stored.
+ * A refused start returns error DEVICE_RATE_LIMITED with retryAfterSeconds.
+ * The limits and now are injectable only for tests.
  */
-const createDeviceAuthorization = async ({ deviceName, ipAddress, userAgent, now = Date.now() }) => {
+const createDeviceAuthorization = async ({
+  deviceName,
+  ipAddress,
+  userAgent,
+  maxPerIp = MAX_STARTS_PER_IP,
+  maxTotal = MAX_STARTS_TOTAL,
+  now = Date.now()
+}) => {
   const database = await db();
+  // The stored form, so the per-address count compares like with like.
+  const address = clip(ipAddress, 64);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const deviceCode = generateDeviceCode();
     const userCode = generateUserCode();
     try {
-      const r = await database.query(
-        `INSERT INTO device_authorizations(device_code_hash,user_code,device_name,ip_address,user_agent,created_timestamp,expires_timestamp)
-         VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [
-          hashSecret(deviceCode),
-          userCode,
-          clip(deviceName, 64),
-          clip(ipAddress, 64),
-          clip(userAgent, 200),
-          now,
-          now + DEVICE_CODE_TTL_MS
-        ]
-      );
-      return { data: { ...mapAuthorization(r.rows[0]), deviceCode } };
+      return await database.transaction(async (tx) => {
+        await tx.query('SELECT pg_advisory_xact_lock($1)', [START_LOCK_ID]);
+        const refusal = await checkStartRate(tx, { ipAddress: address, maxPerIp, maxTotal, now });
+        if (refusal) return refusal;
+        const r = await tx.query(
+          `INSERT INTO device_authorizations(device_code_hash,user_code,device_name,ip_address,user_agent,created_timestamp,expires_timestamp)
+           VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [
+            hashSecret(deviceCode),
+            userCode,
+            clip(deviceName, 64),
+            address,
+            clip(userAgent, 200),
+            now,
+            now + DEVICE_CODE_TTL_MS
+          ]
+        );
+        return { data: { ...mapAuthorization(r.rows[0]), deviceCode } };
+      });
     } catch (e) {
       // Another pending login has this user code; draw again.
       if (e.code === '23505') continue;
@@ -310,6 +378,8 @@ const cleanupCliSessions = async ({ now = Date.now(), limit = 100 } = {}) => {
 
 export {
   CLI_SESSION_DAYS,
+  START_WINDOW_MS,
+  MAX_STARTS_PER_IP,
   DEVICE_CODE_TTL_MS,
   POLL_INTERVAL_SECONDS,
   createDeviceAuthorization,
