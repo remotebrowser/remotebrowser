@@ -17,6 +17,7 @@ const {
   getBrowserInstanceByPublicId,
   setBrowserInstanceConfig,
   deleteOldBrowserLaunches,
+  listStuckStartingBrowserInstances,
   MAX_BROWSER_LAUNCHES_PER_MINUTE,
   browserIdForHandle
 } = await import('./browsers.js');
@@ -382,6 +383,67 @@ test('a browser starts with the config it was launched with, and setBrowserInsta
     data: true
   });
   assert.deepEqual(await config(), { proxy: null });
+});
+
+describe('browsers starting at once', () => {
+  // Far ahead of every other test's rows, so only this test's rows are recent.
+  let now = 4_000_000_000_000;
+  const launch = (workspaceId, userId, at) =>
+    launchBrowserInstance({ workspaceId, userId, browserName: 'calm-otter', maxStarting: 2, now: at });
+
+  test('refuses a launch while as many browsers as allowed are starting', async () => {
+    now += 10_000_000;
+    const { workspaceId, ownerId } = await makeWorkspace();
+    const other = await createWorkspace({ name: 'Other', ownerId });
+    assert.equal((await launch(workspaceId, ownerId, now)).error, undefined);
+    // The limit is for the whole server, not per workspace.
+    assert.equal((await launch(other.data.workspaceId, ownerId, now)).error, undefined);
+    assert.deepEqual(await launch(workspaceId, ownerId, now), { error: 'TOO_MANY_STARTING', retryAfterSeconds: 15 });
+  });
+
+  test('stops counting a browser once it is running', async () => {
+    now += 10_000_000;
+    const { workspaceId, ownerId } = await makeWorkspace();
+    const first = await launch(workspaceId, ownerId, now);
+    await launch(workspaceId, ownerId, now);
+    await updateBrowserInstanceStatus({
+      workspaceId,
+      browserInstanceId: first.data.browserInstanceId,
+      toStatus: 'running'
+    });
+    assert.equal((await launch(workspaceId, ownerId, now)).error, undefined);
+  });
+
+  test('ignores a browser that has been starting for over 2 minutes', async () => {
+    now += 10_000_000;
+    const { workspaceId, ownerId } = await makeWorkspace();
+    await launch(workspaceId, ownerId, now - 121_000);
+    await launch(workspaceId, ownerId, now - 121_000);
+    assert.equal((await launch(workspaceId, ownerId, now)).error, undefined);
+  });
+});
+
+test('listStuckStartingBrowserInstances lists browsers starting for over 2 minutes, oldest first', async () => {
+  // Far ahead of every other test's rows, so they all count as stuck; only this workspace's are checked.
+  const now = 5_000_000_000_000;
+  const { workspaceId, ownerId } = await makeWorkspace();
+  const launch = (at) => launchBrowserInstance({ workspaceId, userId: ownerId, browserName: 'calm-otter', now: at });
+  const newer = await launch(now - 130_000);
+  const older = await launch(now - 200_000);
+  await launch(now - 60_000);
+  const running = await launch(now - 300_000);
+  await updateBrowserInstanceStatus({
+    workspaceId,
+    browserInstanceId: running.data.browserInstanceId,
+    toStatus: 'running'
+  });
+  const listed = await listStuckStartingBrowserInstances({ now, limit: 100 });
+  const ours = listed.data.filter((browser) => browser.workspaceId === workspaceId);
+  assert.deepEqual(
+    ours.map((browser) => browser.browserInstanceId),
+    [older.data.browserInstanceId, newer.data.browserInstanceId]
+  );
+  assert.equal((await listStuckStartingBrowserInstances({ now, limit: 1 })).data.length, 1);
 });
 
 describe('launch rate', () => {

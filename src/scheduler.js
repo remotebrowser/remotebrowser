@@ -6,6 +6,7 @@ import { cleanupScreenshots } from './screenshots.js';
 import { deleteExpiredSigninCodes } from './models/users.js';
 import { cleanupApiKeys } from './models/apikeys.js';
 import { deleteOldBrowserLaunches } from './models/browsers.js';
+import { removeStuckBrowsers } from './browser.js';
 
 const CLEANUP_QUEUE = 'cleanup';
 const EVERY_MINUTE = '* * * * *';
@@ -38,6 +39,13 @@ const cleanup = async () => {
     consola.error('SCHEDULER could not remove old browser launches', {
       'event.domain': 'scheduler',
       'error.type': String(removedLaunches.error)
+    });
+  }
+  const removedStuck = await removeStuckBrowsers();
+  if (removedStuck.error) {
+    consola.error('SCHEDULER could not remove stuck browsers', {
+      'event.domain': 'scheduler',
+      'error.type': String(removedStuck.error)
     });
   }
   const removedKeys = await cleanupApiKeys();

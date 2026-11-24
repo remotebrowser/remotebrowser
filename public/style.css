@@ -1192,11 +1192,60 @@ a.btn-secondary {
   overflow-wrap: anywhere;
 }
 
+.browser-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+
+.status-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  color: var(--text-muted);
+}
+
+/* Native select arrows differ per OS; draw one so it matches the toggle buttons. */
+.status-filter::after {
+  content: '';
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid var(--text);
+  border-bottom: 1.5px solid var(--text);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.status-filter select {
+  appearance: none;
+  font-family: inherit;
+  font-size: 100%;
+  line-height: 1.15;
+  /* Same height as the toggle buttons, which hold a 16px icon. */
+  min-height: calc(16px + 0.75rem + 2px);
+  padding: 0.375rem 2.25rem 0.375rem 0.875rem;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.status-filter select:hover {
+  background-color: var(--fill-soft);
+}
+
 /* Segmented control: buttons share one outline, only the outer corners round. */
 .view-toggle {
   display: flex;
   width: fit-content;
-  margin: 0 0 0.5rem auto;
 }
 
 .view-toggle button {

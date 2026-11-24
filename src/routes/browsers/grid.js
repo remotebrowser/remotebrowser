@@ -8,6 +8,7 @@ import {
   loadWorkspaceSwitcherItems
 } from '../../middleware/workspace.js';
 import { listBrowserInstancesByWorkspace } from '../../models/browsers.js';
+import { STATUS_FILTERS, readStatusFilter, matchesStatusFilter, statusFilterQuery } from './status-filter.js';
 
 export const routes = new Hono();
 
@@ -32,14 +33,20 @@ const renderGrid = async (c) => {
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const instances = listResult.error ? [] : listResult.data;
+  const statusFilter = readStatusFilter(c);
   return eta.render('browsers/grid', {
     email: user.email,
     csrfToken: createCsrfToken(c),
     workspace,
     workspaces: await loadWorkspaceSwitcherItems(c),
     breadcrumbs: buildBrowsersBreadcrumbs(workspace, 'Grid'),
+    statusFilter,
+    statusFilters: STATUS_FILTERS,
+    statusQuery: statusFilterQuery(statusFilter),
     view: 'grid',
-    browsers: instances.filter((instance) => instance.status !== 'terminated').map(summarizeBrowserInstance),
+    browsers: instances
+      .filter((instance) => matchesStatusFilter(statusFilter, instance.status))
+      .map(summarizeBrowserInstance),
     // Set by secureHeaders first; the inline script reads it back for CSP.
     scriptNonce: c.get('secureHeadersNonce'),
     // A new value every poll so the browser reloads the thumbnail.

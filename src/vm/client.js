@@ -1,4 +1,5 @@
 import { constants as fsConstants } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { consola } from 'consola/basic';
@@ -50,6 +51,10 @@ const BROWSER_START_TIMEOUT_MS = 30000;
 // Saving or loading a few GB of memory takes a while on a busy host.
 const SUSPEND_TIMEOUT_MS = 120000;
 
+// Starting a VM is CPU-heavy. In a load test on 16 cores with 2 vCPUs per VM,
+// 24 starts at once mostly missed the browser start timeout, and 4 never did.
+const defaultMaxStarts = (cpus) => Math.max(1, Math.floor(availableParallelism() / (cpus * 2)));
+
 // Everything host-facing is behind this factory so tests can inject fakes; the
 // singleton in index.js is what the app uses.
 const createVmClient = ({
@@ -58,6 +63,7 @@ const createVmClient = ({
   dataDir = vmConfig.vmDataDir,
   memory = vmConfig.vmMemory,
   cpus = vmConfig.vmCpus,
+  maxStarts = defaultMaxStarts(cpus),
   start = host.start,
   portOpen = host.portOpen,
   freePort = host.freePort,
@@ -705,6 +711,7 @@ const createVmClient = ({
     getAccel,
     launchableOses,
     canLaunchBrowser,
+    maxStarts,
     launchBrowser,
     browserExists,
     browserIsRunning,

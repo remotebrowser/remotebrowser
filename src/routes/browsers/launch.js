@@ -12,7 +12,7 @@ import {
 import { ADJECTIVES, SOLITARY_ANIMALS, randomItem } from '../../wordlist.js';
 import { launchBrowserInstance, recordProvisionedBrowser, updateBrowserInstanceStatus } from '../../models/browsers.js';
 import { browserMonitors } from '../../browser.js';
-import { canStartBrowser, listLaunchableOses, startBrowser as startBrowserVm } from '../../vms.js';
+import { canStartBrowser, listLaunchableOses, maxBrowserStarts, startBrowser as startBrowserVm } from '../../vms.js';
 import {
   BROWSER_APPS,
   DEFAULT_BROWSER_APP,
@@ -72,13 +72,19 @@ const browsersReady = async () => {
   return ready.data === true;
 };
 
-// What to tell someone whose launch was over the workspace's rate, or null for
-// any other outcome. Shared with the REST API, which answers with the same words.
+// What to tell someone whose launch was refused, or null for any other outcome.
+// Shared with the REST API, which answers with the same words.
 const launchRefusal = (launched) => {
+  const seconds = launched.retryAfterSeconds;
+  if (launched.error === 'TOO_MANY_STARTING') {
+    return {
+      message: 'Too many browsers are starting on this server right now. Please try again in a few seconds.',
+      retryAfterSeconds: seconds
+    };
+  }
   if (launched.error !== 'LAUNCH_RATE_LIMITED') {
     return null;
   }
-  const seconds = launched.retryAfterSeconds;
   return {
     // The rate itself is left out on purpose: it is not a promise to anyone.
     message: `This workspace launched too many browsers in the last minute. Please try again in ${seconds} second${seconds === 1 ? '' : 's'}.`,
@@ -312,6 +318,7 @@ const handleLaunch = async (c) => {
     browserDescription: description,
     config: launchConfig({ proxy, screenResolution, screenScale, webgl, app }),
     os,
+    maxStarting: maxBrowserStarts(),
     personalWorkspaceRepair: workspace.isPersonal ? { userId: user.id, email: user.email } : null
   });
   const refusal = launchRefusal(launched);

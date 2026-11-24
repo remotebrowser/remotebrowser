@@ -61,8 +61,25 @@ const checkLaunchRate = async (tx, { workspaceId, launchesPerMinute, now }) => {
   return { error: 'LAUNCH_RATE_LIMITED', retryAfterSeconds: Math.max(1, Math.ceil((freedAt - now) / 1000)) };
 };
 
-// A refused launch returns LAUNCH_RATE_LIMITED with retryAfterSeconds.
-// generateId, launchesPerMinute, and now are injectable only for tests.
+// A failed or interrupted start can stay 'starting' for good, so only recent
+// rows count.
+const STARTING_WINDOW_MS = 2 * 60 * 1000;
+// A start takes about 12s, so a slot is likely free again by then.
+const BUSY_RETRY_AFTER_SECONDS = 15;
+
+const checkStarting = async (tx, { maxStarting, now }) => {
+  const r = await tx.query(
+    "SELECT count(*) AS starting FROM browser_instances WHERE status='starting' AND creation_timestamp > $1",
+    [now - STARTING_WINDOW_MS]
+  );
+  if (Number(r.rows[0].starting) < maxStarting) {
+    return null;
+  }
+  return { error: 'TOO_MANY_STARTING', retryAfterSeconds: BUSY_RETRY_AFTER_SECONDS };
+};
+
+// A refused launch returns LAUNCH_RATE_LIMITED or TOO_MANY_STARTING, with
+// retryAfterSeconds. generateId, launchesPerMinute, and now are injectable only for tests.
 const launchBrowserInstance = async ({
   workspaceId,
   userId,
@@ -73,6 +90,7 @@ const launchBrowserInstance = async ({
   os = DEFAULT_OS,
   generateId = generatePublicId,
   launchesPerMinute = MAX_BROWSER_LAUNCHES_PER_MINUTE,
+  maxStarting = Infinity,
   now = Date.now()
 }) => {
   await ensureWorkspaceForRepair(workspaceId, personalWorkspaceRepair);
@@ -81,9 +99,11 @@ const launchBrowserInstance = async ({
     try {
       return await database.transaction(async (tx) => {
         // Locks the workspace's row, so two launches in it cannot both pass
-        // the count below. Launches in other workspaces do not wait.
+        // the rate count below. Launches in other workspaces do not wait.
         await tx.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
-        const refused = await checkLaunchRate(tx, { workspaceId, launchesPerMinute, now });
+        const refused =
+          (await checkStarting(tx, { maxStarting, now })) ??
+          (await checkLaunchRate(tx, { workspaceId, launchesPerMinute, now }));
         if (refused) return refused;
         // Issued before the insert so the row always names a valid browser.
         const browserHandle = generateBrowserHandle();
@@ -200,6 +220,22 @@ const deleteOldBrowserLaunches = async ({ now = Date.now(), limit = 1000 } = {})
   }
 };
 
+// Browsers whose start never finished, oldest first. A row from before the
+// creation time was kept has no age, so it is left alone.
+const listStuckStartingBrowserInstances = async ({ now = Date.now(), limit = 8 } = {}) => {
+  try {
+    const r = await (
+      await db()
+    ).query(
+      "SELECT * FROM browser_instances WHERE status='starting' AND creation_timestamp <= $1 ORDER BY creation_timestamp LIMIT $2",
+      [now - STARTING_WINDOW_MS, limit]
+    );
+    return { data: r.rows.map((row) => ({ ...map(row), workspaceId: row.workspace_id })) };
+  } catch (e) {
+    return { error: e.message };
+  }
+};
+
 const deleteBrowserInstance = async ({ workspaceId, browserInstanceId }) => {
   const r = await (
     await db()
@@ -261,6 +297,8 @@ const browserIdForHandle = async ({ handle }) => {
 
 export {
   MAX_BROWSER_LAUNCHES_PER_MINUTE,
+  STARTING_WINDOW_MS,
+  listStuckStartingBrowserInstances,
   launchBrowserInstance,
   recordProvisionedBrowser,
   updateBrowserInstanceStatus,

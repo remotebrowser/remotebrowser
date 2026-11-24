@@ -1,22 +1,9 @@
 <script nonce="<%= it.scriptNonce %>">
-  // outerHTML swaps destroy and recreate every element in the swapped
-  // fragment, including each screenshot <img>. A freshly-created <img> has
-  // no decoded bitmap to keep showing while its new src loads, which is
-  // what makes the screenshot flash blank on every poll. Re-assigning .src
-  // on the *same* <img> node instead lets the browser keep painting the old
-  // bitmap until the new one is ready, so this stashes the outgoing
-  // screenshot nodes right before a swap and splices them back in - with
-  // the freshly-swapped-in src - right after.
-  //
-  // Live previews get the same treatment: the outgoing <canvas> goes back in
-  // so its screencast keeps running. A new canvas for a page that showed a
-  // static screenshot starts with that screenshot instead of a blank box.
-  //
-  // The previews arrive out of band with the status line's poll, and htmx
-  // fires separate events for that kind of swap, so both kinds are handled.
-  // One answer fires the after-swap events once for each element it swapped,
-  // so the stash stays until the next swap replaces it, rather than being
-  // cleared by the first event.
+  // A poll's swap recreates each screenshot <img> and screencast <canvas>,
+  // which blanks them. Keep the old nodes instead, and switch an <img> to
+  // its new frame only once decoded, since setting .src blanks it too.
+  // The stash is not cleared after a swap, as htmx fires after-swap once
+  // per swapped element, including out-of-band ones.
   let outgoingScreenshots = new Map();
 
   const stashScreenshots = (target) => {
@@ -25,13 +12,26 @@
     );
   };
 
+  const swapWhenDecoded = (img, src) => {
+    if (img.src === src) return;
+    img.dataset.pendingSrc = src;
+    const next = new Image();
+    next.src = src;
+    next
+      .decode()
+      .then(() => {
+        if (img.dataset.pendingSrc === src) img.src = src;
+      })
+      .catch(() => {});
+  };
+
   const restoreScreenshots = (swapped) => {
     for (const img of swapped.querySelectorAll('img[id^="screenshot-"]')) {
       const outgoing = outgoingScreenshots.get(img.id);
       if (outgoing) {
         // One that fetches its own frames already has a newer one.
         if (!('refreshSelf' in outgoing.dataset)) {
-          outgoing.src = img.src;
+          swapWhenDecoded(outgoing, img.src);
         }
         img.replaceWith(outgoing);
       }
@@ -53,6 +53,5 @@
   document.body.addEventListener('htmx:beforeSwap', (event) => stashScreenshots(event.detail.target));
   document.body.addEventListener('htmx:afterSwap', (event) => restoreScreenshots(event.detail.elt));
   document.body.addEventListener('htmx:oobBeforeSwap', (event) => stashScreenshots(event.detail.target));
-  // Fired on each element the swap put in place.
   document.body.addEventListener('htmx:oobAfterSwap', (event) => restoreScreenshots(event.target));
 </script>

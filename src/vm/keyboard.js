@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { parsePauses, sleep } from './pause.js';
 
 // Enough for a few shortcuts, short enough to finish soon.
 const MAX_KEY_ACTIONS = 50;
@@ -72,7 +73,7 @@ const ACTIONS = ['down', 'up', 'press'];
 /**
  * Validates key actions and maps each key to its QEMU qcode; errors name the index.
  * @param {unknown} actions
- * @returns {{action: string, key: string}[]}
+ * @returns {{action: string, key: string, pause?: number}[]}
  */
 const parseKeyActions = (actions) => {
   if (!Array.isArray(actions)) {
@@ -84,7 +85,7 @@ const parseKeyActions = (actions) => {
   if (actions.length > MAX_KEY_ACTIONS) {
     throw new Error(`There are more than ${MAX_KEY_ACTIONS} actions`);
   }
-  return actions.map((item, index) => {
+  const parsed = actions.map((item, index) => {
     const where = `Action ${index}`;
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       throw new Error(`${where} must be an object`);
@@ -93,7 +94,7 @@ const parseKeyActions = (actions) => {
     if (typeof action !== 'string' || !ACTIONS.includes(action)) {
       throw new Error(`${where} must be one of: ${ACTIONS.join(', ')}`);
     }
-    const unknown = Object.keys(item).find((field) => field !== 'action' && field !== 'key');
+    const unknown = Object.keys(item).find((field) => !['action', 'key', 'pause'].includes(field));
     if (unknown) {
       throw new Error(`${where} has an unknown field: ${unknown}`);
     }
@@ -103,6 +104,10 @@ const parseKeyActions = (actions) => {
     }
     return { action, key: qcode };
   });
+  parsePauses(actions).forEach((pause, index) => {
+    if (pause > 0) parsed[index].pause = pause;
+  });
+  return parsed;
 };
 
 const keyEvent = (qcode, down) => ({ type: 'key', data: { down, key: { type: 'qcode', data: qcode } } });
@@ -120,7 +125,7 @@ const releaseKeys = async ({ qmp, socket, keys, connectQmp }) => {
 };
 
 /**
- * Sends every event at once. Keys still down at the end stay down, for a
+ * Sends the events in order, waiting only for the pauses. Keys still down at the end stay down, for a
  * Ctrl+click with the mouse; the caller lets go of them.
  * @param {{dir: string, actions: unknown, connectQmp: Function}} params
  */
@@ -139,12 +144,15 @@ const runKeyActions = async ({ dir, actions, connectQmp }) => {
     }
   };
   try {
-    for (const { action, key } of parsed) {
+    for (const { action, key, pause } of parsed) {
       if (action === 'down' || action === 'press') {
         await send(key, true);
       }
       if (action === 'up' || action === 'press') {
         await send(key, false);
+      }
+      if (pause) {
+        await sleep(pause);
       }
     }
   } catch (error) {

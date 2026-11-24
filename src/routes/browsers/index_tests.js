@@ -167,7 +167,7 @@ test('GET /browsers polls itself every few seconds to pick up a status change', 
   assert.match(body, /<script src="\/htmx\.min\.js"><\/script>/);
   assert.match(
     body,
-    /<div id="browser-view" hx-get="\/browsers" hx-trigger="every 3s" hx-select="#browser-view" hx-swap="outerHTML">/
+    /<div\s+id="browser-view"\s+hx-get="\/browsers"\s+hx-trigger="every 3s"\s+hx-select="#browser-view"\s+hx-swap="outerHTML"\s*>/
   );
 });
 
@@ -193,4 +193,67 @@ test('GET /browsers renders the active shared workspace with unprefixed links', 
   assert.match(body, /class="breadcrumb-switcher-trigger">Acme Corp</);
   assert.match(body, /aria-current="page">Browsers/);
   assert.match(body, /No browsers yet\./);
+});
+
+const makeBrowser = async (workspaceId, browserName, status) => {
+  const created = await launchBrowserInstance({ workspaceId, userId, browserName, browserDescription: '' });
+  await updateBrowserInstanceStatus({
+    workspaceId,
+    browserInstanceId: created.data.browserInstanceId,
+    toStatus: status
+  });
+};
+
+const makeMixedBrowsers = async () => {
+  const workspaceId = await makeUser();
+  await makeBrowser(workspaceId, 'brave-fox', 'running');
+  await makeBrowser(workspaceId, 'calm-otter', 'suspended');
+  await makeBrowser(workspaceId, 'gone-lynx', 'terminated');
+};
+
+const fetchBrowsers = async (path) => {
+  const res = await setupApp().request(path, { headers: { cookie: `session=${makeSessionCookie()}` } });
+  return res.text();
+};
+
+test('GET /browsers leaves out terminated browsers by default', async () => {
+  await makeMixedBrowsers();
+  const body = await fetchBrowsers('/browsers');
+  assert.match(body, /brave-fox/);
+  assert.match(body, /calm-otter/);
+  assert.doesNotMatch(body, /gone-lynx/);
+  assert.match(body, /<option value="active" selected>Active<\/option>/);
+});
+
+test('GET /browsers?status=all shows every browser, terminated ones included', async () => {
+  await makeMixedBrowsers();
+  const body = await fetchBrowsers('/browsers?status=all');
+  assert.match(body, /brave-fox/);
+  assert.match(body, /calm-otter/);
+  assert.match(body, /gone-lynx/);
+});
+
+test('GET /browsers?status=terminated shows only terminated browsers and keeps the filter', async () => {
+  await makeMixedBrowsers();
+  const body = await fetchBrowsers('/browsers?status=terminated');
+  assert.match(body, /gone-lynx/);
+  assert.doesNotMatch(body, /brave-fox/);
+  assert.doesNotMatch(body, /calm-otter/);
+  assert.match(body, /<option value="terminated" selected>Terminated<\/option>/);
+  assert.match(body, /<div\s+id="browser-view"\s+hx-get="\/browsers\?status=terminated"\s+hx-trigger="every 3s"/);
+  assert.match(body, /hx-get="\/browsers\/grid\?status=terminated"/);
+});
+
+test('GET /browsers with an unknown status falls back to the active filter', async () => {
+  await makeMixedBrowsers();
+  const body = await fetchBrowsers('/browsers?status=bogus');
+  assert.match(body, /brave-fox/);
+  assert.doesNotMatch(body, /gone-lynx/);
+  assert.match(body, /<option value="active" selected>/);
+});
+
+test('GET /browsers says no browsers match when the filter leaves none', async () => {
+  await makeMixedBrowsers();
+  const body = await fetchBrowsers('/browsers?status=error');
+  assert.match(body, /No\s+error\s+browsers\./);
 });

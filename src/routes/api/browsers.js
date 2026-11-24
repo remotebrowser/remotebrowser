@@ -27,7 +27,8 @@ import {
   clearBrowserProxy,
   useBrowserKeyboard,
   useBrowserMouse,
-  readBrowserMouse
+  readBrowserMouse,
+  maxBrowserStarts
 } from '../../vms.js';
 import {
   BROWSER_APPS,
@@ -191,7 +192,8 @@ routes.post('/', async (c) => {
     browserName: settings.name ?? generateBrowserName(),
     browserDescription: settings.description ?? '',
     config: launchConfig({ ...settings, webgl, app }),
-    os
+    os,
+    maxStarting: maxBrowserStarts()
   });
   const refusal = launchRefusal(launched);
   if (refusal) {
@@ -215,7 +217,7 @@ routes.post('/', async (c) => {
     app
   });
   logAction(c, 'API browser launched', launched.data);
-  return c.json({ browser_id: launched.data.publicId, status: 'launched' });
+  return c.json({ browser_id: launched.data.publicId, status: 'starting' });
 });
 
 routes.get('/', async (c) => {
@@ -424,7 +426,7 @@ routes.post('/:browserId/keyboard', async (c) => {
   const loaded = await loadInputBrowser(c, 'Only a running browser can take key presses.');
   if (loaded.response) return loaded.response;
   const { browser } = loaded;
-  // Every event is sent at once, so the caller waits and learns of a failure.
+  // The call waits for every event and pause, so the caller learns of a failure.
   const used = await useBrowserKeyboard(browser.internalBrowserId, actions);
   if (used.error) {
     consola.error('API could not use the keyboard of a browser', {
@@ -450,7 +452,7 @@ routes.post('/:browserId/mouse', async (c) => {
   const loaded = await loadInputBrowser(c, 'Only a running browser can take mouse input.');
   if (loaded.response) return loaded.response;
   const { browser } = loaded;
-  // Every event is sent at once, so the caller waits and learns of a failure.
+  // The call waits for every event and pause, so the caller learns of a failure.
   const used = await useBrowserMouse(browser.internalBrowserId, actions);
   if (used.error) {
     consola.error('API could not use the mouse of a browser', {
