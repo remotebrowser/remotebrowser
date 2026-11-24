@@ -20,6 +20,7 @@ const DEVICE_CODE_TTL_MS = 15 * MINUTE_MS;
 const DEVICE_LIMIT_WINDOW_MS = 10 * MINUTE_MS;
 const DEVICE_LIMIT_PER_IP = 10;
 const DEVICE_LIMIT_TOTAL = 300;
+const DEVICE_LIMIT_LOCK_ID = 7_410_001;
 
 // The polling interval the CLI is told to use, in seconds.
 const POLL_INTERVAL_SECONDS = 5;
@@ -75,39 +76,38 @@ const mapAuthorization = (r) => ({
  */
 const createDeviceAuthorization = async ({ deviceName, ipAddress, userAgent, now = Date.now() }) => {
   const database = await db();
-  const countRecent = async (where, params) => {
-    const r = await database.query(
+  const countRecent = async (tx, where, params) => {
+    const r = await tx.query(
       `SELECT COUNT(*)::int AS n FROM device_authorizations WHERE created_timestamp > $1 ${where}`,
       [now - DEVICE_LIMIT_WINDOW_MS, ...params]
     );
     return r.rows[0].n;
   };
-  try {
-    const fromThisIp = ipAddress ? await countRecent('AND ip_address=$2', [clip(ipAddress, 64)]) : 0;
-    if (fromThisIp >= DEVICE_LIMIT_PER_IP || (await countRecent('', [])) >= DEVICE_LIMIT_TOTAL) {
-      return { error: 'DEVICE_RATE_LIMITED' };
-    }
-  } catch (e) {
-    return { error: e.message };
-  }
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const deviceCode = generateDeviceCode();
     const userCode = generateUserCode();
     try {
-      const r = await database.query(
-        `INSERT INTO device_authorizations(device_code_hash,user_code,device_name,ip_address,user_agent,created_timestamp,expires_timestamp)
+      return await database.transaction(async (tx) => {
+        await tx.query('SELECT pg_advisory_xact_lock($1)', [DEVICE_LIMIT_LOCK_ID]);
+        const fromThisIp = ipAddress ? await countRecent(tx, 'AND ip_address=$2', [clip(ipAddress, 64)]) : 0;
+        if (fromThisIp >= DEVICE_LIMIT_PER_IP || (await countRecent(tx, '', [])) >= DEVICE_LIMIT_TOTAL) {
+          return { error: 'DEVICE_RATE_LIMITED' };
+        }
+        const r = await tx.query(
+          `INSERT INTO device_authorizations(device_code_hash,user_code,device_name,ip_address,user_agent,created_timestamp,expires_timestamp)
          VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [
-          hashSecret(deviceCode),
-          userCode,
-          clip(deviceName, 64),
-          clip(ipAddress, 64),
-          clip(userAgent, 200),
-          now,
-          now + DEVICE_CODE_TTL_MS
-        ]
-      );
-      return { data: { ...mapAuthorization(r.rows[0]), deviceCode } };
+          [
+            hashSecret(deviceCode),
+            userCode,
+            clip(deviceName, 64),
+            clip(ipAddress, 64),
+            clip(userAgent, 200),
+            now,
+            now + DEVICE_CODE_TTL_MS
+          ]
+        );
+        return { data: { ...mapAuthorization(r.rows[0]), deviceCode } };
+      });
     } catch (e) {
       // Another pending login has this user code; draw again.
       if (e.code === '23505') continue;
@@ -332,6 +332,7 @@ export {
   DEVICE_CODE_TTL_MS,
   POLL_INTERVAL_SECONDS,
   createDeviceAuthorization,
+  DEVICE_LIMIT_WINDOW_MS,
   DEVICE_LIMIT_PER_IP,
   DEVICE_LIMIT_TOTAL,
   findPendingDeviceAuthorization,

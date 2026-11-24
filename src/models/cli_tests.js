@@ -197,3 +197,19 @@ test('createDeviceAuthorization stops everyone after DEVICE_LIMIT_TOTAL logins',
   }
   assert.equal((await createDeviceAuthorization({ ipAddress: '203.0.113.9' })).error, 'DEVICE_RATE_LIMITED');
 });
+
+test('createDeviceAuthorization lets exactly DEVICE_LIMIT_PER_IP of parallel starts from one address succeed', async () => {
+  const { DEVICE_LIMIT_PER_IP } = await import('./cli.js');
+  const results = await Promise.all(
+    Array.from({ length: 50 }, () => createDeviceAuthorization({ ipAddress: '203.0.113.1' }))
+  );
+  assert.equal(results.filter((r) => r.data).length, DEVICE_LIMIT_PER_IP);
+});
+
+test('createDeviceAuthorization counts only logins started within the window', async () => {
+  const { DEVICE_LIMIT_PER_IP, DEVICE_LIMIT_WINDOW_MS } = await import('./cli.js');
+  for (let i = 0; i < DEVICE_LIMIT_PER_IP; i += 1)
+    await createDeviceAuthorization({ ipAddress: '203.0.113.1', now: T0 });
+  const later = T0 + DEVICE_LIMIT_WINDOW_MS + 1;
+  assert.ok((await createDeviceAuthorization({ ipAddress: '203.0.113.1', now: later })).data);
+});
