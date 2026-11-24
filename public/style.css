@@ -1289,20 +1289,20 @@ pre {
 }
 
 .browser-config {
-  margin-top: 1.5rem;
+  margin: 1.5rem 0 0;
   font-size: 0.875rem;
 }
 
-.browser-config h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
+.browser-config summary {
+  cursor: pointer;
+  font-weight: 600;
 }
 
 .browser-config dl {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.25rem 1rem;
-  margin: 0;
+  margin: 0.75rem 0 0;
 }
 
 .browser-config dt {

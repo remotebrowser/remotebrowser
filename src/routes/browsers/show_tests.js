@@ -680,7 +680,7 @@ test('GET /browsers/:browserId shows the configuration the browser was launched 
   const cookie = makeSessionCookie();
   const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
   const body = await res.text();
-  const config = body.match(/<section class="browser-config"[\s\S]*?<\/section>/)?.[0] ?? '';
+  const config = body.match(/<details class="browser-panel browser-config">[\s\S]*?<\/details>/)?.[0] ?? '';
   const rows = [...config.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>([^<]*)<\/dd>/g)].map(([, label, value]) => [label, value]);
   assert.deepEqual(rows, [
     ['Operating system', 'Ubuntu 26.04'],
@@ -698,7 +698,7 @@ test('GET /browsers/:browserId shows only the known configuration of an older br
   const cookie = makeSessionCookie();
   const res = await setupApp().request(`/browsers/${browserPublicId}`, { headers: { cookie: `session=${cookie}` } });
   const body = await res.text();
-  const config = body.match(/<section class="browser-config"[\s\S]*?<\/section>/)?.[0] ?? '';
+  const config = body.match(/<details class="browser-panel browser-config">[\s\S]*?<\/details>/)?.[0] ?? '';
   const rows = [...config.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>([^<]*)<\/dd>/g)].map(([, label, value]) => [label, value]);
   assert.deepEqual(rows, [
     ['Operating system', 'Windows 11'],
