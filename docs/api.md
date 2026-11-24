@@ -191,4 +191,4 @@ await browser.close();
 
 ## Start a CLI login
 
-`POST /api/v1/auth/device` needs no API key. It allows 10 calls per client address and 300 in total every 10 minutes. Beyond that it returns `429` with a `Retry-After` header.
+`POST /api/v1/auth/device` needs no API key. It allows 10 calls per client address every 10 minutes; IPv6 addresses in the same `/64` count as one. Beyond that it returns `429` with a `Retry-After` header.

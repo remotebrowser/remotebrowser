@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { getDatabase } from '../db/database.js';
 import { generateShortId } from '../id.js';
 import { generateCliToken, generateDeviceCode, generateUserCode, hashSecret } from '../cli.js';
@@ -17,10 +18,19 @@ const CLI_SESSION_MS = CLI_SESSION_DAYS * DAY_MS;
 // How long the user has to approve a login (RFC 8628 suggests 10-15 minutes).
 const DEVICE_CODE_TTL_MS = 15 * MINUTE_MS;
 
+// Starting a login needs no sign-in, so it is limited per client address.
+// There is no global limit: it would let a few addresses block every login.
 const DEVICE_LIMIT_WINDOW_MS = 10 * MINUTE_MS;
 const DEVICE_LIMIT_PER_IP = 10;
-const DEVICE_LIMIT_TOTAL = 300;
+// Any number no other advisory lock in the app uses.
 const DEVICE_LIMIT_LOCK_ID = 7_410_001;
+
+// One IPv6 user usually holds a whole /64, so it counts as one address.
+const limitNetwork = (ipAddress) => {
+  const family = isIP(ipAddress ?? '');
+  if (family === 6) return `${ipAddress}/64`;
+  return family === 4 ? ipAddress : null;
+};
 
 // The polling interval the CLI is told to use, in seconds.
 const POLL_INTERVAL_SECONDS = 5;
@@ -76,22 +86,20 @@ const mapAuthorization = (r) => ({
  */
 const createDeviceAuthorization = async ({ deviceName, ipAddress, userAgent, now = Date.now() }) => {
   const database = await db();
-  const countRecent = async (tx, where, params) => {
-    const r = await tx.query(
-      `SELECT COUNT(*)::int AS n FROM device_authorizations WHERE created_timestamp > $1 ${where}`,
-      [now - DEVICE_LIMIT_WINDOW_MS, ...params]
-    );
-    return r.rows[0].n;
-  };
+  const network = limitNetwork(ipAddress);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const deviceCode = generateDeviceCode();
     const userCode = generateUserCode();
     try {
       return await database.transaction(async (tx) => {
-        await tx.query('SELECT pg_advisory_xact_lock($1)', [DEVICE_LIMIT_LOCK_ID]);
-        const fromThisIp = ipAddress ? await countRecent(tx, 'AND ip_address=$2', [clip(ipAddress, 64)]) : 0;
-        if (fromThisIp >= DEVICE_LIMIT_PER_IP || (await countRecent(tx, '', [])) >= DEVICE_LIMIT_TOTAL) {
-          return { error: 'DEVICE_RATE_LIMITED' };
+        if (network) {
+          // Without the lock, parallel starts could all count before any inserts.
+          await tx.query('SELECT pg_advisory_xact_lock($1)', [DEVICE_LIMIT_LOCK_ID]);
+          const recent = await tx.query(
+            `SELECT COUNT(*)::int AS n FROM device_authorizations WHERE created_timestamp > $1 AND ip_address::inet <<= $2::inet`,
+            [now - DEVICE_LIMIT_WINDOW_MS, network]
+          );
+          if (recent.rows[0].n >= DEVICE_LIMIT_PER_IP) return { error: 'DEVICE_RATE_LIMITED' };
         }
         const r = await tx.query(
           `INSERT INTO device_authorizations(device_code_hash,user_code,device_name,ip_address,user_agent,created_timestamp,expires_timestamp)
@@ -334,7 +342,6 @@ export {
   createDeviceAuthorization,
   DEVICE_LIMIT_WINDOW_MS,
   DEVICE_LIMIT_PER_IP,
-  DEVICE_LIMIT_TOTAL,
   findPendingDeviceAuthorization,
   decideDeviceAuthorization,
   pollDeviceAuthorization,

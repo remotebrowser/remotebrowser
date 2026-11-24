@@ -72,4 +72,3 @@ a token that is valid for 30 days, which users can revoke on the workspace page.
 
 The approval link is built from `PUBLIC_ORIGIN`, so set it to the address that users open in their web browser. The
 token is sent in the response body, so serve the app over HTTPS: over plain HTTP, anyone on the network can read it.
-Starting a login needs no sign-in, so it is limited by client address; behind a reverse proxy, set `TRUSTED_PROXY_HOPS`, or everyone shares one limit.
