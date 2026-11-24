@@ -16,6 +16,16 @@ The app builds the image of each Linux OS from its Dockerfile with Docker, such 
 - Fedora's tinyproxy unit takes no flags, so its image adds a drop-in in `vm/fedora-44/files`.
 - Each image also has Google Chrome, from Google's own repository.
 
+The table below shows the sizes of one set of builds on x86_64, with the default `VM_MEMORY` of `4G`. It is only an example. The sizes change with each build, as the packages change.
+
+|                              | Debian 13       | Ubuntu 26.04    | Fedora 44       |
+| ---------------------------- | --------------- | --------------- | --------------- |
+| Disk image (qcow2, on disk)  | 855 MiB         | 906 MiB         | 0.98 GiB        |
+| Virtual disk size            | 4.51 GiB        | 4.61 GiB        | 4.99 GiB        |
+| Kernel + initrd              | 11.6 + 35.0 MiB | 16.5 + 43.0 MiB | 18.1 + 33.0 MiB |
+| Snapshot (mostly `vm.state`) | 348 MiB         | 406 MiB         | 377 MiB         |
+| Image + snapshot             | ~1.25 GiB       | ~1.35 GiB       | ~1.45 GiB       |
+
 To change what runs in the VMs, edit the files in `vm/linux/files`, or an OS's own Dockerfile. The app builds the images again at its next start.
 
 ### Services
@@ -39,6 +49,14 @@ The services are all in `vm/linux/files`:
 The browser has a display rather than running headless. It reads its flags from `/etc/remotebrowser/browser.env`, which points it at tinyproxy. The VM has no GPU, so WebGL is off, unless the host enables it at launch. Then the app writes `/etc/drirc`, so the GPU blocklist lets WebGL through, and the browser renders WebGL on the CPU. WebGPU is not available.
 
 Each image has every browser that it offers, and the snapshot runs none of them, so one snapshot serves them all. At launch, before it sets the clock, the app writes the binary of the browser that was picked into `/etc/remotebrowser/app.env`, and `/usr/local/bin/browser` runs it, else Chromium. The browser does not start without `nftables` and `tinyproxy`.
+
+When a browser's VM is suspended, the app saves the VM's memory and devices to `suspended.state` in its dir, stops QEMU, and compresses the file with [zstd](https://facebook.github.io/zstd/) to `suspended.state.zst`. The disk overlay stays next to it. The state is much bigger than the snapshot's, because the snapshot is saved before any browser runs. The table below shows one example, with Debian 13 and the default `VM_MEMORY` of `4G`: a new VM with the browser on `about:blank`, and the same after it loads one Wikipedia page. The state grows as the browser uses more memory, up to `VM_MEMORY` before compression.
+
+|            | Blank  | Wikipedia |
+| ---------- | ------ | --------- |
+| Raw state  | 889 MB | 1006 MB   |
+| Compressed | 222 MB | 242 MB    |
+| Ratio      | 4.0:1  | 4.2:1     |
 
 ### Isolation
 
