@@ -390,8 +390,9 @@ test('resumeBrowser refuses a VM that is not suspended', async () => {
   assert.equal(starts.length, 0);
 });
 
-test('maxStarts allows one start per 2 x VM_CPUS cores, and at least one', () => {
-  assert.equal(client({ cpus: 1 }).maxStarts, Math.max(1, Math.floor(availableParallelism() / 2)));
+test('maxStarts allows two starts per VM_CPUS cores, and at least one', () => {
+  assert.equal(client({ cpus: 1 }).maxStarts, availableParallelism() * 2);
+  assert.equal(client({ cpus: 2 }).maxStarts, availableParallelism());
   assert.equal(client({ cpus: 10_000 }).maxStarts, 1);
 });
 
