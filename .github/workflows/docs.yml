@@ -45,6 +45,9 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v6
 
+      - name: Fetch the CLI install script
+        run: curl -fsSL -o docs/install.sh https://raw.githubusercontent.com/remotebrowser/cli/main/install.sh
+
       - name: Build docs
         run: uv run zensical build --clean
 

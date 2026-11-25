@@ -71,5 +71,7 @@ typings/
 # Documentation (Zensical)
 /site/
 /.venv/
+# Fetched from remotebrowser/cli at deploy time
+/docs/install.sh
 
 /vm/send-fd
