@@ -12,7 +12,7 @@ const VNC_PORT = 5900;
 // buildQemuArgs changes them, or snapshots change how they are kept, so older
 // snapshots are saved again. Version 5 adds a virtual GPU, which QEMU's VNC
 // server shows, in place of Xvnc.
-const MACHINE_VERSION = 5;
+const MACHINE_VERSION = 6;
 
 // Every VM started from a snapshot has the same memory, random number state
 // included. vmgenid tells the guest kernel that it is a new copy, so it
@@ -120,7 +120,7 @@ const linuxDevices = ({ arch, image, overlay, cdpHostPort, vncHostPort }) => {
     '-initrd',
     initrd,
     '-append',
-    `root=/dev/vda rw console=${ARCHES[arch].console} net.ifnames=0 noresume panic=-1`,
+    `root=/dev/vda rw console=${ARCHES[arch].console} net.ifnames=0 noresume panic=-1 init_on_free=1`,
     '-drive',
     `file=${overlay},format=qcow2,if=none,id=root,discard=unmap`,
     '-device',
