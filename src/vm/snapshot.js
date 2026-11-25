@@ -6,7 +6,7 @@ import * as host from './host.js';
 import { ARCHES, MACHINE_VERSION, buildQemuArgs, detectAccel } from './qemu.js';
 import { checkImage, fileStamp } from './image.js';
 import { DEFAULT_OS, machineOs } from './os.js';
-import { openQmp } from './qmp.js';
+import { openQmp, SLOW_QMP_TIMEOUT_MS } from './qmp.js';
 import { saveState } from './save.js';
 import { LOG_ATTRIBUTES, step } from './step.js';
 
@@ -171,9 +171,11 @@ const takeSnapshot = async ({
       }
     };
     const saveAndQuit = async () => {
-      const qmp = await openQmp(path.join(dir, 'qmp.sock'));
+      const socket = path.join(dir, 'qmp.sock');
+      const reopen = () => openQmp(socket, { timeoutMs: SLOW_QMP_TIMEOUT_MS });
+      const qmp = await reopen();
       try {
-        await saveState(qmp, path.join(dir, 'vm.state'), saveTimeoutMs);
+        await saveState(qmp, path.join(dir, 'vm.state'), saveTimeoutMs, reopen);
         await qmp.execute('quit').catch(() => {});
       } finally {
         qmp.close();

@@ -3,6 +3,7 @@ import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 
 const QMP_TIMEOUT_MS = 10000;
+const SLOW_QMP_TIMEOUT_MS = 60000;
 
 // A session on QEMU's QMP socket, or with `agent` on the guest agent's socket,
 // which speaks the same JSON but has no greeting or capabilities step.
@@ -57,4 +58,4 @@ const openQmp = async (socketPath, { agent = false, timeoutMs = QMP_TIMEOUT_MS }
   return { execute, close: () => socket.destroy() };
 };
 
-export { openQmp };
+export { openQmp, SLOW_QMP_TIMEOUT_MS };
