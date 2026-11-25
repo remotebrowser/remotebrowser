@@ -2,9 +2,19 @@
 
 `remotebrowser` is a command-line tool for managing browsers.
 
-Download a prebuilt binary for Windows, macOS, Linux, or FreeBSD from the [releases page](https://github.com/remotebrowser/cli/releases).
+## Install
 
-For example, on Linux x86_64:
+On Linux, macOS, or FreeBSD:
+
+```bash
+curl -fsSL https://remotebrowser.ai/install.sh | bash
+```
+
+The script installs `remotebrowser` to `~/.local/bin`.
+
+Set `REMOTEBROWSER_INSTALL_DIR` to install elsewhere, or `REMOTEBROWSER_VERSION` (such as `0.2.0`) to install a specific version.
+
+Or download a prebuilt binary for Windows, macOS, Linux, or FreeBSD from the [releases page](https://github.com/remotebrowser/cli/releases). For example, on Linux x86_64:
 
 ```bash
 VERSION=0.2.0
@@ -13,6 +23,8 @@ curl -LO https://github.com/remotebrowser/cli/releases/download/v$VERSION/$NAME.
 tar -xzf $NAME.tar.gz
 sudo install $NAME/remotebrowser /usr/local/bin/
 ```
+
+## Usage
 
 Start with `remotebrowser login <URL>`, where `<URL>` is the server URL. For example:
 
